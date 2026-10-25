@@ -541,7 +541,20 @@ class BubbleService : Service() {
             if (accessibilityService == null) {
                 return "Accessibility service not enabled. Please enable 'Capri' in Android Accessibility settings first, choom~"
             }
+
+            // Temporarily hide chat window so we capture the underlying app (gallery, tiktok, etc.) instead of Capri's own chat bubble overlay!
+            withContext(Dispatchers.Main) {
+                chatView?.visibility = View.INVISIBLE
+            }
+            delay(100) // allow window manager to redraw without overlay
+
             val imageBytes = accessibilityService.captureScreenBitmap()
+
+            // Restore chat window visibility
+            withContext(Dispatchers.Main) {
+                chatView?.visibility = View.VISIBLE
+            }
+
             if (imageBytes != null) {
                 val cloudResult = CloudAiClient.generateResponse(this, cmd.prompt.ifBlank { "what is visible on this screen? read any text, identify the photo or tiktok video and describe it thoroughly in character." }, imageBytes)
                 if (cloudResult.isSuccess) {
