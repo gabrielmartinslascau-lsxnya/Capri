@@ -143,7 +143,12 @@ class MainActivity : AppCompatActivity() {
         val debugView = findViewById<TextView>(R.id.debug_triggers_info) ?: return
         val now = System.currentTimeMillis()
         val currentApp = ForegroundAppDetector.currentForegroundApp(this)
-        val engine = BubbleService.instance?.getProactivityEngine() ?: ProactivityEngine(this, {}, { false })
+        val engine = BubbleService.instance?.getProactivityEngine()
+
+        if (engine == null) {
+            debugView.text = "Service not running. Enable bubble first."
+            return
+        }
 
         val builder = StringBuilder("State: ${engine.getEngineState(now)}\n")
         ProactivityEngine.triggersList.forEach { trigger ->

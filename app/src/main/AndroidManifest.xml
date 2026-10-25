@@ -43,11 +43,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".ScreenCaptureActivity"
-            android:excludeFromRecents="true"
-            android:theme="@android:style/Theme.Translucent" />
-
         <service
             android:name=".BubbleService"
             android:enabled="true"

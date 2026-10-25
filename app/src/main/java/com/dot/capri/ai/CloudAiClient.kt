@@ -1,7 +1,6 @@
 package com.dot.capri.ai
 
 import android.content.Context
-import android.util.Base64
 import android.util.Log
 import com.dot.capri.MainActivity
 import com.dot.capri.monitor.AppUsageTotals
@@ -29,7 +28,7 @@ object CloudAiClient {
                 "- To call someone: [ACTION:CALL:contact]\n" +
                 "Example: '[ACTION:OPEN:tiktok] Bypassing ICE and opening TikTok for you, choom~'\n" +
                 "when the user asks to search something, answer it directly and briefly. never tell them to open a browser. never list links unless asked.\n" +
-                "when shown a screenshot, analyze what is visible on the screen and describe it or answer questions about it in character.\n" +
+                "when the user asks what's on screen or what they are looking at, use the current foreground app and usage stats from context to give a witty, in-character commentary.\n" +
                 "you know the current time and the user's app usage from the context block. use it naturally when relevant, never recite it. keep answers short.\n" +
                 "Keep responses punchy, under two sentences, cute, and in character with subtle ~ endings or playful charm. " +
                 "NEVER use any emojis. Use pure text only. Never sound like a generic corporate AI assistant."
@@ -59,19 +58,17 @@ object CloudAiClient {
         }
     }
 
-    fun generateResponse(context: Context, userPrompt: String, imageBytes: ByteArray? = null): Result<String> {
+    fun generateResponse(context: Context, userPrompt: String): Result<String> {
         val apiKey = MainActivity.getApiKey(context)
         if (apiKey.isBlank()) {
             return Result.failure(IllegalStateException("Missing GEMINI_API_KEY"))
         }
 
-        val cacheKey = if (imageBytes == null) userPrompt.lowercase().trim() else userPrompt.lowercase().trim() + "_img"
+        val cacheKey = userPrompt.lowercase().trim()
 
-        if (imageBytes == null) {
-            responseCache[cacheKey]?.let { cachedText ->
-                Log.d(TAG, "Cache HIT for '$cacheKey'")
-                return Result.success(cachedText)
-            }
+        responseCache[cacheKey]?.let { cachedText ->
+            Log.d(TAG, "Cache HIT for '$cacheKey'")
+            return Result.success(cachedText)
         }
 
         checkAndResetCounters()
@@ -95,7 +92,7 @@ object CloudAiClient {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             connection.connectTimeout = 5000
-            connection.readTimeout = 12000
+            connection.readTimeout = 8000
             connection.doOutput = true
 
             val cal = Calendar.getInstance()
@@ -120,25 +117,14 @@ object CloudAiClient {
                     }
                 }
 
-                val partsArray = JSONArray()
-                val promptObj = JSONObject().apply {
-                    put("text", "$systemPromptText\n\nUser: $userPrompt")
-                }
-                partsArray.put(promptObj)
-
-                if (imageBytes != null) {
-                    val base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
-                    val imagePartObj = JSONObject().apply {
-                        put("inline_data", JSONObject().apply {
-                            put("mime_type", "image/jpeg")
-                            put("data", base64Image)
-                        })
-                    }
-                    partsArray.put(imagePartObj)
-                }
-
                 val userContentObj = JSONObject().apply {
                     put("role", "user")
+                    val partsArray = JSONArray().apply {
+                        val promptObj = JSONObject().apply {
+                            put("text", "$systemPromptText\n\nUser: $userPrompt")
+                        }
+                        put(promptObj)
+                    }
                     put("parts", partsArray)
                 }
                 contentsArray.put(userContentObj)
@@ -162,9 +148,7 @@ object CloudAiClient {
                     if (parts != null && parts.length() > 0) {
                         val text = parts.getJSONObject(0).optString("text", "").trim()
                         if (text.isNotEmpty()) {
-                            if (imageBytes == null) {
-                                responseCache[cacheKey] = text
-                            }
+                            responseCache[cacheKey] = text
                             sessionHistory.add(Pair(userPrompt, text))
                             if (sessionHistory.size > 10) {
                                 sessionHistory.removeAt(0)
