@@ -7,6 +7,7 @@ object IntentParser {
     private val openRegex = Regex("^(?:open|launch|start|go to|run)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val conversationalOpenRegex = Regex("^(?:can\\s+i\\s+|i\\s+want\\s+to\\s+|let's\\s+|let\\s+us\\s+)(?:watch|use|view|open|check|go\\s+to)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val searchRegex = Regex("^(?:search|google|look up)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val seeScreenRegex = Regex("^(?:what(?:'s|\\s+is)\\s+(?:on\\s+screen|here|what\\s+am\\s+i\\s+looking\\s+at)|look\\s+at\\s+(?:the\\s+)?screen|search\\s+what(?:'s|\\s+is)\\s+on\\s+screen|analyze\\s+screen|screen\\s+capture)(?:\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val greetingRegex = Regex("^(?:hi|hello|hey|sup|yo|good\\s+(?:morning|afternoon|evening)|how\\s+are\\s+you)(?:\\s+.*)?$", RegexOption.IGNORE_CASE)
 
     private val muteProactivityRegex = Regex("^(?:shut\\s+up|be\\s+quiet|capri\\s+stop|enough|stop\\s+talking)$", RegexOption.IGNORE_CASE)
@@ -32,6 +33,11 @@ object IntentParser {
 
         if (unmuteProactivityRegex.matches(raw) || unmuteProactivityRegex.matches(cleaned)) {
             return Cmd.UnmuteProactivity
+        }
+
+        seeScreenRegex.find(cleaned)?.let { match ->
+            val prompt = match.groups[1]?.value?.trim() ?: "what is on this screen?"
+            return Cmd.SeeScreen(prompt)
         }
 
         playOnRegex.find(cleaned)?.let { match ->

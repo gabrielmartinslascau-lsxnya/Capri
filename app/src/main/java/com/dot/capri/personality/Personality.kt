@@ -39,6 +39,12 @@ object Personality {
         "Looking up '{q}' right away, netrunner~"
     )
 
+    private val seeScreenTemplates = listOf(
+        "Scanning what's on your screen, choom~",
+        "Taking a peek at your display data...",
+        "Reading pixels right now, netrunner~"
+    )
+
     private val chatTemplates = listOf(
         "Sup, choom~ What digital chaos are we starting today?",
         "Oh, you're back~ Did you miss your favorite construct, or are you just bored?",
@@ -87,7 +93,8 @@ object Personality {
     private val thinkingLabels = listOf(
         "Scanning Net...",
         "Hmm...",
-        "Spinning my digital psyches~"
+        "Spinning my digital psyches~",
+        "Analyzing pixels..."
     )
 
     fun respond(cmd: Cmd, success: Boolean): String {
@@ -114,6 +121,9 @@ object Personality {
             }
             is Cmd.Search -> {
                 searchTemplates.map { it.replace("{q}", cmd.query) }
+            }
+            is Cmd.SeeScreen -> {
+                seeScreenTemplates
             }
             is Cmd.Chat -> {
                 chatTemplates

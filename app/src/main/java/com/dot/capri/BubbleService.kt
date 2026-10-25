@@ -40,7 +40,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 import kotlin.math.abs
 
 class BubbleService : Service() {
@@ -508,8 +510,29 @@ class BubbleService : Service() {
             return Personality.respond(cmd, true)
         }
 
+        if (cmd is Cmd.SeeScreen) {
+            val hasKey = MainActivity.getApiKey(this).isNotBlank()
+            val isOnline = NetworkUtils.isOnline(this) && hasKey
+            if (!isOnline) {
+                return "Need api key and internet to see the screen, choom~"
+            }
+            return suspendCancellableCoroutine { continuation ->
+                ScreenCaptureActivity.requestScreenshot(this) { imageBytes ->
+                    if (imageBytes != null) {
+                        val result = CloudAiClient.generateResponse(this, cmd.prompt, imageBytes)
+                        if (result.isSuccess) {
+                            continuation.resume(result.getOrDefault("I see the screen, choom~"))
+                        } else {
+                            continuation.resume("Couldn't analyze screen, choom. My tiny construct brain froze~")
+                        }
+                    } else {
+                        continuation.resume("Screen capture permission denied or cancelled, choom~")
+                    }
+                }
+            }
+        }
+
         if (cmd is Cmd.Search) {
-            // Search routes to Gemini path directly
             val hasKey = MainActivity.getApiKey(this).isNotBlank()
             val isOnline = NetworkUtils.isOnline(this) && hasKey
             if (isOnline) {
