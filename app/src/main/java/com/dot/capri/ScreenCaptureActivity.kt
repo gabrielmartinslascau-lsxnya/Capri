@@ -10,9 +10,9 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Bundle
-import android.util.Base64
 import android.util.DisplayMetrics
 import android.view.WindowManager
+import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -34,7 +34,7 @@ class ScreenCaptureActivity : Activity() {
             } else {
                 pendingCallback = callback
                 val intent = Intent(context, ScreenCaptureActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
                 context.startActivity(intent)
             }
@@ -42,7 +42,7 @@ class ScreenCaptureActivity : Activity() {
 
         private fun captureSilently(context: Context, resultCode: Int, data: Intent, callback: (ByteArray?) -> Unit) {
             try {
-                val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                val projectionManager = context.getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 val mediaProjection = projectionManager.getMediaProjection(resultCode, data)
                 if (mediaProjection != null) {
                     performCapture(context, mediaProjection, callback)
@@ -60,7 +60,7 @@ class ScreenCaptureActivity : Activity() {
         }
 
         private fun performCapture(context: Context, mediaProjection: MediaProjection, callback: (ByteArray?) -> Unit) {
-            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val windowManager = context.getSystemService(WINDOW_SERVICE) as WindowManager
             val metrics = DisplayMetrics()
             @Suppress("DEPRECATION")
             windowManager.defaultDisplay.getRealMetrics(metrics)
@@ -77,7 +77,7 @@ class ScreenCaptureActivity : Activity() {
             )
 
             CoroutineScope(Dispatchers.IO).launch {
-                delay(400)
+                delay(500)
                 var bitmap: Bitmap? = null
                 try {
                     val image = imageReader.acquireLatestImage()
@@ -125,6 +125,7 @@ class ScreenCaptureActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
+            Toast.makeText(this, "Grant screen capture permission for Capri...", Toast.LENGTH_SHORT).show()
             val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CODE_CAPTURE)
         } catch (e: Exception) {
@@ -137,7 +138,7 @@ class ScreenCaptureActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_CODE_CAPTURE && resultCode == Activity.RESULT_OK && data != null) {
+        if (requestCode == REQUEST_CODE_CAPTURE && resultCode == RESULT_OK && data != null) {
             sResultCode = resultCode
             sResultData = data
             val cb = pendingCallback
@@ -147,6 +148,7 @@ class ScreenCaptureActivity : Activity() {
                 captureSilently(this, sResultCode, sResultData!!, cb)
             }
         } else {
+            Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
             pendingCallback?.invoke(null)
             pendingCallback = null
             finish()
