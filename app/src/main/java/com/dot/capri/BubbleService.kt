@@ -32,6 +32,8 @@ import com.dot.capri.ai.OnDeviceAiClient
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentExecutor
 import com.dot.capri.intents.IntentParser
+import com.dot.capri.monitor.AppUsageTotals
+import com.dot.capri.monitor.ForegroundAppDetector
 import com.dot.capri.personality.Personality
 import com.dot.capri.proactivity.ProactivityEngine
 import com.dot.capri.util.NetworkUtils
@@ -40,9 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
 import kotlin.math.abs
 
 class BubbleService : Service() {
@@ -514,22 +514,21 @@ class BubbleService : Service() {
             val hasKey = MainActivity.getApiKey(this).isNotBlank()
             val isOnline = NetworkUtils.isOnline(this) && hasKey
             if (!isOnline) {
-                return "Need api key and internet to see the screen, choom~"
+                return "Need api key and internet to see screen context, choom~"
             }
-            return suspendCancellableCoroutine { continuation ->
-                ScreenCaptureActivity.requestScreenshot(this) { imageBytes ->
-                    if (imageBytes != null) {
-                        val result = CloudAiClient.generateResponse(this, cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe the content." }, imageBytes)
-                        if (result.isSuccess) {
-                            continuation.resume(result.getOrDefault("I see the screen, choom~"))
-                        } else {
-                            continuation.resume("Couldn't analyze screen, choom. My tiny construct brain froze~")
-                        }
-                    } else {
-                        continuation.resume("Screen capture permission denied or failed, choom~")
-                    }
+            val currentPkg = ForegroundAppDetector.currentForegroundApp(this)
+            val appName = currentPkg?.substringAfterLast('.')?.replaceFirstChar { it.uppercase() } ?: "your home screen"
+            val mins = if (currentPkg != null) AppUsageTotals.totalTodayMinutes(this, currentPkg) else 0L
+            val prompt = "the user asked: '${cmd.prompt}'. they are currently viewing app '$appName' (package: ${currentPkg ?: "none"}), with $mins minutes spent in it today. give a witty, deadpan, in-character commentary about what they are doing."
+            
+            val cloudResult = CloudAiClient.generateResponse(this, prompt)
+            if (cloudResult.isSuccess) {
+                val textResponse = cloudResult.getOrNull()
+                if (!textResponse.isNullOrBlank()) {
+                    return executeEmbeddedActionTag(textResponse)
                 }
             }
+            return "you're looking at $appName, choom~ ($mins minutes today)"
         }
 
         if (cmd is Cmd.Search) {
