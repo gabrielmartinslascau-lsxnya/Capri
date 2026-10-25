@@ -11,6 +11,11 @@ object IntentParser {
     private val seeScreenRegex = Regex("^(?:what(?:'s|\\s+is)\\s+(?:on\\s+screen|here|what\\s+am\\s+i\\s+looking\\s+at)|look\\s+at\\s+(?:the\\s+)?screen|search\\s+what(?:'s|\\s+is)\\s+on\\s+screen|analyze\\s+screen|screen\\s+capture)(?:\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val greetingRegex = Regex("^(?:hi|hello|hey|sup|yo|good\\s+(?:morning|afternoon|evening)|how\\s+are\\s+you)(?:\\s+.*)?$", RegexOption.IGNORE_CASE)
 
+    private val setDefaultMusicRegex1 = Regex("^(?:songs?|music)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+(.+?)(?:\\s+by\\s+default)?$", RegexOption.IGNORE_CASE)
+    private val setDefaultMusicRegex2 = Regex("^(?:set|make|use)\\s+(?:default\\s+)?(?:music|songs?|music\\s+player)\\s+(?:to|app\\s+to|player\\s+to|is)?\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val setDefaultReelsRegex1 = Regex("^(?:reels|videos?|vids?)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+(.+?)(?:\\s+by\\s+default)?$", RegexOption.IGNORE_CASE)
+    private val setDefaultReelsRegex2 = Regex("^(?:set|make|use)\\s+(?:default\\s+)?(?:reels|videos?|vids?)\\s+(?:to|app\\s+to|player\\s+to|is)?\\s+(.+)$", RegexOption.IGNORE_CASE)
+
     private val muteProactivityRegex = Regex("^(?:shut\\s+up|be\\s+quiet|capri\\s+stop|enough|stop\\s+talking)$", RegexOption.IGNORE_CASE)
     private val unmuteProactivityRegex = Regex("^(?:come\\s+back|you\\s+can\\s+talk|speak\\s+again|capri\\s+talk)$", RegexOption.IGNORE_CASE)
     private val clearHistoryRegex = Regex("^(?:clear\\s+history|forget\\s+everything|wipe\\s+memory|clear\\s+chat|reset\\s+memory)$", RegexOption.IGNORE_CASE)
@@ -66,6 +71,23 @@ object IntentParser {
 
         if (clearHistoryRegex.matches(raw) || clearHistoryRegex.matches(cleaned)) {
             return Cmd.ClearHistory
+        }
+
+        setDefaultMusicRegex1.find(cleaned)?.let { match ->
+            val app = match.groups[1]?.value?.trim() ?: ""
+            if (app.isNotEmpty()) return Cmd.SetDefaultApp("music", app)
+        }
+        setDefaultMusicRegex2.find(cleaned)?.let { match ->
+            val app = match.groups[1]?.value?.trim() ?: ""
+            if (app.isNotEmpty()) return Cmd.SetDefaultApp("music", app)
+        }
+        setDefaultReelsRegex1.find(cleaned)?.let { match ->
+            val app = match.groups[1]?.value?.trim() ?: ""
+            if (app.isNotEmpty()) return Cmd.SetDefaultApp("reels", app)
+        }
+        setDefaultReelsRegex2.find(cleaned)?.let { match ->
+            val app = match.groups[1]?.value?.trim() ?: ""
+            if (app.isNotEmpty()) return Cmd.SetDefaultApp("reels", app)
         }
 
         seeScreenRegex.find(cleaned)?.let { match ->

@@ -58,9 +58,19 @@ class MainActivity : AppCompatActivity() {
             return prefs.getString(KEY_DEFAULT_MUSIC_PLAYER, "spotify") ?: "spotify"
         }
 
+        fun setDefaultMusicPlayer(context: Context, appName: String) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_DEFAULT_MUSIC_PLAYER, appName.lowercase().trim()).apply()
+        }
+
         fun getDefaultReelsApp(context: Context): String {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             return prefs.getString(KEY_DEFAULT_REELS_APP, "tiktok") ?: "tiktok"
+        }
+
+        fun setDefaultReelsApp(context: Context, appName: String) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_DEFAULT_REELS_APP, appName.lowercase().trim()).apply()
         }
     }
 

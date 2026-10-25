@@ -7,6 +7,7 @@ sealed interface Cmd {
     data class Open(val app: String) : Cmd
     data class Search(val query: String) : Cmd
     data class SeeScreen(val prompt: String) : Cmd
+    data class SetDefaultApp(val category: String, val appName: String) : Cmd
     data class Chat(val text: String) : Cmd
     data class Compliment(val text: String) : Cmd
     data class Mention(val text: String) : Cmd

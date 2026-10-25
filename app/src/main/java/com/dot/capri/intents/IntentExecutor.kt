@@ -33,6 +33,7 @@ object IntentExecutor {
                 is Cmd.Call -> executeCall(context, cmd)
                 is Cmd.Text -> executeText(context, cmd)
                 is Cmd.Open -> executeOpen(context, cmd)
+                is Cmd.SetDefaultApp -> executeSetDefaultApp(context, cmd)
                 is Cmd.Search -> false
                 is Cmd.SeeScreen -> true
                 is Cmd.ClearHistory -> true
@@ -43,6 +44,17 @@ object IntentExecutor {
             e.printStackTrace()
             false
         }
+    }
+
+    private fun executeSetDefaultApp(context: Context, cmd: Cmd.SetDefaultApp): Boolean {
+        if (cmd.category == "music") {
+            MainActivity.setDefaultMusicPlayer(context, cmd.appName)
+            return true
+        } else if (cmd.category == "reels") {
+            MainActivity.setDefaultReelsApp(context, cmd.appName)
+            return true
+        }
+        return false
     }
 
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {

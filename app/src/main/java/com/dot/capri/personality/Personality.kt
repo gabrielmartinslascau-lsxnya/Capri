@@ -32,6 +32,12 @@ object Personality {
         "Opening messaging channel for {c}..."
     )
 
+    private val setDefaultAppTemplates = listOf(
+        "Understood, netrunner~ Default {cat} app set to {app}.",
+        "Configured, choom! {app} is now your default for {cat}.",
+        "Got it! {cat} will route to {app} by default now~"
+    )
+
     private val openSuccessTemplates = listOf(
         "Opening {app} for you, netrunner~ Have fun!",
         "Launching {app}~ Try not to lose your whole day in there, choom.",
@@ -131,6 +137,9 @@ object Personality {
             }
             is Cmd.Text -> {
                 textTemplates.map { it.replace("{c}", cmd.contact) }
+            }
+            is Cmd.SetDefaultApp -> {
+                setDefaultAppTemplates.map { it.replace("{cat}", cmd.category).replace("{app}", cmd.appName) }
             }
             is Cmd.Open -> {
                 openSuccessTemplates.map { it.replace("{app}", cmd.app) }
