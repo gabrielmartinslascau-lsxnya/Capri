@@ -26,6 +26,12 @@ object Personality {
         "Opening audio-channel to {c}... don't make it awkward~"
     )
 
+    private val textTemplates = listOf(
+        "Opening chat line to {c}~ Don't type anything weird, ok?",
+        "Setting up message to {c}, choom~",
+        "Opening messaging channel for {c}..."
+    )
+
     private val openSuccessTemplates = listOf(
         "Opening {app} for you, netrunner~ Have fun!",
         "Launching {app}~ Try not to lose your whole day in there, choom.",
@@ -121,6 +127,9 @@ object Personality {
             }
             is Cmd.Call -> {
                 callTemplates.map { it.replace("{c}", cmd.contact) }
+            }
+            is Cmd.Text -> {
+                textTemplates.map { it.replace("{c}", cmd.contact) }
             }
             is Cmd.Open -> {
                 openSuccessTemplates.map { it.replace("{app}", cmd.app) }

@@ -4,6 +4,7 @@ object IntentParser {
     private val playOnRegex = Regex("^play\\s+(.+?)\\s+on\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val playRegex = Regex("^play\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val callRegex = Regex("^(?:call|phone|dial)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val openRegex = Regex("^(?:open|launch|start|go to|run)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val conversationalOpenRegex = Regex("^(?:can\\s+i\\s+|i\\s+want\\s+to\\s+|let's\\s+|let\\s+us\\s+)(?:watch|use|view|open|check|go\\s+to)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val searchRegex = Regex("^(?:search|google|look up)\\s+(.+)$", RegexOption.IGNORE_CASE)
@@ -61,6 +62,14 @@ object IntentParser {
                 return Cmd.Open(appName.trim().removeSuffix("app").trim())
             }
             return Cmd.Play(query, null)
+        }
+
+        textRegex.find(cleaned)?.let { match ->
+            val contact = match.groups[1]?.value?.trim() ?: ""
+            val msg = match.groups[2]?.value?.trim()
+            if (contact.isNotEmpty()) {
+                return Cmd.Text(contact, msg)
+            }
         }
 
         callRegex.find(cleaned)?.let { match ->

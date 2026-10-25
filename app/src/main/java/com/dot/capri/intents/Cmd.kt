@@ -3,6 +3,7 @@ package com.dot.capri.intents
 sealed interface Cmd {
     data class Play(val query: String, val app: String?) : Cmd
     data class Call(val contact: String) : Cmd
+    data class Text(val contact: String, val message: String?) : Cmd
     data class Open(val app: String) : Cmd
     data class Search(val query: String) : Cmd
     data class SeeScreen(val prompt: String) : Cmd

@@ -3,6 +3,7 @@ package com.dot.capri.intents
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.dot.capri.util.ContactUtils
 import java.net.URLEncoder
 
 object IntentExecutor {
@@ -25,6 +26,7 @@ object IntentExecutor {
             when (cmd) {
                 is Cmd.Play -> executePlay(context, cmd)
                 is Cmd.Call -> executeCall(context, cmd)
+                is Cmd.Text -> executeText(context, cmd)
                 is Cmd.Open -> executeOpen(context, cmd)
                 is Cmd.Search -> false
                 is Cmd.SeeScreen -> true
@@ -61,7 +63,13 @@ object IntentExecutor {
     }
 
     private fun executeCall(context: Context, cmd: Cmd.Call): Boolean {
-        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(cmd.contact)}")).apply {
+        val targetNumber = if (cmd.contact.any { it.isLetter() }) {
+            ContactUtils.findPhoneNumberByName(context, cmd.contact) ?: cmd.contact
+        } else {
+            cmd.contact
+        }
+
+        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(targetNumber)}")).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return try {
@@ -70,6 +78,46 @@ object IntentExecutor {
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    private fun executeText(context: Context, cmd: Cmd.Text): Boolean {
+        val targetNumber = if (cmd.contact.any { it.isLetter() }) {
+            ContactUtils.findPhoneNumberByName(context, cmd.contact) ?: cmd.contact
+        } else {
+            cmd.contact
+        }
+
+        val cleanNum = targetNumber.replace(Regex("[^0-9+]"), "")
+        val encodedMsg = URLEncoder.encode(cmd.message ?: "", "UTF-8")
+
+        val whatsappUri = if (cleanNum.isNotEmpty()) {
+            Uri.parse("https://api.whatsapp.com/send?phone=$cleanNum&text=$encodedMsg")
+        } else {
+            Uri.parse("smsto:${Uri.encode(targetNumber)}")
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW, whatsappUri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(targetNumber)}")).apply {
+                if (!cmd.message.isNullOrBlank()) {
+                    putExtra("sms_body", cmd.message)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(smsIntent)
+                true
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+                false
+            }
         }
     }
 
