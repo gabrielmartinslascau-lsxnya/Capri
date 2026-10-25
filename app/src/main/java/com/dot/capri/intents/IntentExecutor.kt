@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.MediaStore
 import com.dot.capri.MainActivity
 import com.dot.capri.util.ContactUtils
+import com.dot.capri.util.MediaUtils
 import java.net.URLEncoder
 
 object IntentExecutor {
@@ -45,24 +46,60 @@ object IntentExecutor {
     }
 
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
-        val encodedQuery = URLEncoder.encode(cmd.query, "UTF-8")
-        val defaultPlayer = MainActivity.getDefaultMusicPlayer(context)
-        val playerChoice = cmd.app?.lowercase() ?: defaultPlayer.lowercase()
+        val rawQuery = cmd.query.trim().lowercase()
+
+        // Handle short video / reels queries
+        if (rawQuery in setOf("a vid", "a video", "reels", "shorts", "tiktok")) {
+            val reelsApp = MainActivity.getDefaultReelsApp(context)
+            return executeOpen(context, Cmd.Open(reelsApp))
+        }
+
+        // Handle random song queries ("play something", "play a song")
+        val randomTracks = listOf(
+            "Cyberpunk 2077 I Really Want to Stay at Your House",
+            "HOME Resonance",
+            "Kavinsky Nightcall",
+            "Tame Impala The Less I Know The Better",
+            "The Weeknd Blinding Lights",
+            "Daft Punk One More Time"
+        )
+        val finalQuery = if (rawQuery in setOf("something", "a song", "music", "a track", "a tune", "songs")) {
+            randomTracks.random()
+        } else {
+            cmd.query.trim()
+        }
+
+        val encodedQuery = URLEncoder.encode(finalQuery, "UTF-8")
+
+        // Determine player choice: explicitly requested, or check local media, or default player from settings
+        val playerChoice = if (!cmd.app.isNullOrBlank()) {
+            cmd.app.lowercase()
+        } else {
+            if (MediaUtils.isTrackDownloadedLocally(context, finalQuery)) {
+                "local"
+            } else {
+                MainActivity.getDefaultMusicPlayer(context).lowercase()
+            }
+        }
 
         val intent: Intent = when (playerChoice) {
-            "spotify" -> Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:$encodedQuery")).apply {
-                setPackage("com.spotify.music")
+            "spotify" -> {
+                // Direct play on Spotify using MEDIA_PLAY_FROM_SEARCH
+                Intent(MediaStore.INTENT_ACTION_MEDIA_SEARCH).apply {
+                    setPackage("com.spotify.music")
+                    putExtra(SearchManager.QUERY, finalQuery)
+                    putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
+                }
             }
             "ytmusic", "youtube music", "yt music" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$encodedQuery"))
             "apple", "apple music" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://music.apple.com/search?term=$encodedQuery"))
             "soundcloud" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://soundcloud.com/search?q=$encodedQuery"))
             "deezer" -> Intent(Intent.ACTION_VIEW, Uri.parse("deezer://www.deezer.com/search/$encodedQuery"))
             "local", "offline", "vlc", "poweramp", "musicolet", "music player" -> Intent(MediaStore.INTENT_ACTION_MEDIA_SEARCH).apply {
-                putExtra(SearchManager.QUERY, cmd.query)
+                putExtra(SearchManager.QUERY, finalQuery)
                 putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
             }
             else -> {
-                // If playerChoice matches an installed app on the device (like Mornye, Tidal, Anghami, etc.), launch that app directly
                 if (cmd.app != null && executeOpen(context, Cmd.Open(playerChoice))) {
                     return true
                 }

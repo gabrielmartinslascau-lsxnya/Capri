@@ -27,6 +27,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_DEV_DISABLE_QUIET_HOURS = "dev_disable_quiet_hours"
         const val KEY_QUICK_MODE = "quick_mode"
         const val KEY_DEFAULT_MUSIC_PLAYER = "default_music_player"
+        const val KEY_DEFAULT_REELS_APP = "default_reels_app"
 
         fun getApiKey(context: Context): String {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -54,7 +55,12 @@ class MainActivity : AppCompatActivity() {
 
         fun getDefaultMusicPlayer(context: Context): String {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            return prefs.getString(KEY_DEFAULT_MUSIC_PLAYER, "youtube") ?: "youtube"
+            return prefs.getString(KEY_DEFAULT_MUSIC_PLAYER, "spotify") ?: "spotify"
+        }
+
+        fun getDefaultReelsApp(context: Context): String {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getString(KEY_DEFAULT_REELS_APP, "tiktok") ?: "tiktok"
         }
     }
 
