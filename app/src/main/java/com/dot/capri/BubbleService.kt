@@ -32,8 +32,6 @@ import com.dot.capri.ai.OnDeviceAiClient
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentExecutor
 import com.dot.capri.intents.IntentParser
-import com.dot.capri.monitor.AppUsageTotals
-import com.dot.capri.monitor.ForegroundAppDetector
 import com.dot.capri.personality.Personality
 import com.dot.capri.proactivity.ProactivityEngine
 import com.dot.capri.util.NetworkUtils
@@ -514,21 +512,25 @@ class BubbleService : Service() {
             val hasKey = MainActivity.getApiKey(this).isNotBlank()
             val isOnline = NetworkUtils.isOnline(this) && hasKey
             if (!isOnline) {
-                return "Need api key and internet to see screen context, choom~"
+                return "Need api key and internet to see screen pixels, choom~"
             }
-            val currentPkg = ForegroundAppDetector.currentForegroundApp(this)
-            val appName = currentPkg?.substringAfterLast('.')?.replaceFirstChar { it.uppercase() } ?: "your home screen"
-            val mins = if (currentPkg != null) AppUsageTotals.totalTodayMinutes(this, currentPkg) else 0L
-            val prompt = "the user asked: '${cmd.prompt}'. they are currently viewing app '$appName' (package: ${currentPkg ?: "none"}), with $mins minutes spent in it today. give a witty, deadpan, in-character commentary about what they are doing."
-            
-            val cloudResult = CloudAiClient.generateResponse(this, prompt)
-            if (cloudResult.isSuccess) {
-                val textResponse = cloudResult.getOrNull()
-                if (!textResponse.isNullOrBlank()) {
-                    return executeEmbeddedActionTag(textResponse)
+            val accessibilityService = CapriAccessibilityService.instance
+            if (accessibilityService == null) {
+                return "Accessibility service not enabled. Please enable 'Capri' in Android Accessibility settings first, choom~"
+            }
+            val imageBytes = accessibilityService.captureScreenBitmap()
+            if (imageBytes != null) {
+                val cloudResult = CloudAiClient.generateResponse(this, cmd.prompt.ifBlank { "what is visible on this screen? read any text, identify the photo or tiktok video and describe it in character." }, imageBytes)
+                if (cloudResult.isSuccess) {
+                    val textResponse = cloudResult.getOrNull()
+                    if (!textResponse.isNullOrBlank()) {
+                        return executeEmbeddedActionTag(textResponse)
+                    }
                 }
+                return "Couldn't analyze the screenshot bytes, choom~"
+            } else {
+                return "Failed to take screenshot via accessibility service, choom~"
             }
-            return "you're looking at $appName, choom~ ($mins minutes today)"
         }
 
         if (cmd is Cmd.Search) {

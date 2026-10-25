@@ -22,4 +22,5 @@
     <string name="dev_reset_cooldowns">Reset cooldowns</string>
     <string name="dev_reset_fire_counts">Reset fire counts</string>
     <string name="dev_test_popup">Test Proactive Popup Now</string>
+    <string name="accessibility_service_desc">Capri Screen Reader service to see screen text and visual content.</string>
 </resources>
