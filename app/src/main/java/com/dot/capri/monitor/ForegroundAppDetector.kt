@@ -13,6 +13,13 @@ object ForegroundAppDetector {
 
     private const val TAG = "CAPRI_WATCH"
 
+    private val LAUNCHER_SIGNATURES = listOf("launcher", "home", "nexuslauncher", "pixellauncher", "sec.android.app.launcher", "miui.home")
+
+    private fun isLauncherPackage(packageName: String): Boolean {
+        val lower = packageName.lowercase()
+        return LAUNCHER_SIGNATURES.any { lower.contains(it) }
+    }
+
     @Suppress("DEPRECATION")
     fun hasUsageStatsPermission(context: Context): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
@@ -64,6 +71,9 @@ object ForegroundAppDetector {
             }
 
             if (currentApp != null) {
+                if (isLauncherPackage(currentApp)) {
+                    return null
+                }
                 Log.d(TAG, "Foreground app: $currentApp")
                 return currentApp
             }
@@ -76,8 +86,12 @@ object ForegroundAppDetector {
             if (!stats.isNullOrEmpty()) {
                 val mostRecent = stats.maxByOrNull { it.lastTimeUsed }
                 if (mostRecent != null) {
-                    Log.d(TAG, "Foreground app (stats): ${mostRecent.packageName}")
-                    return mostRecent.packageName
+                    val pkg = mostRecent.packageName
+                    if (isLauncherPackage(pkg)) {
+                        return null
+                    }
+                    Log.d(TAG, "Foreground app (stats): $pkg")
+                    return pkg
                 }
             }
         } catch (e: Exception) {

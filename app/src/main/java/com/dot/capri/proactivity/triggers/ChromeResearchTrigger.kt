@@ -9,7 +9,7 @@ class ChromeResearchTrigger : Trigger {
     override val id: String = "ChromeResearch"
 
     companion object {
-        private const val CHROME_PKG = "com.android.chrome"
+        private val RESEARCH_PACKAGES = setOf("com.android.chrome", "com.google.android.googlequicksearchbox")
         private const val NORMAL_THRESHOLD_MS = 30 * 60 * 1000L
         private const val FAST_THRESHOLD_MS = 3 * 60 * 1000L
         private const val RESET_ABSENCE_MS = 60 * 1000L
@@ -26,37 +26,40 @@ class ChromeResearchTrigger : Trigger {
         )
     }
 
-    private var chromeForegroundStart: Long = 0L
-    private var lastTimeInChrome: Long = 0L
+    private var researchForegroundStart: Long = 0L
+    private var lastTimeInResearch: Long = 0L
     private var fireCountToday: Int = 0
     private var poolIndex: Int = 0
 
     override fun evaluate(context: Context, currentApp: String?, now: Long, fastMode: Boolean): CommentEvent? {
         val threshold = if (fastMode) FAST_THRESHOLD_MS else NORMAL_THRESHOLD_MS
+        val isResearchApp = currentApp != null && RESEARCH_PACKAGES.contains(currentApp)
 
-        if (currentApp == CHROME_PKG) {
-            if (chromeForegroundStart == 0L) {
-                chromeForegroundStart = now
-            } else if (now - lastTimeInChrome > RESET_ABSENCE_MS) {
-                chromeForegroundStart = now
+        if (isResearchApp) {
+            if (researchForegroundStart == 0L) {
+                researchForegroundStart = now
+            } else if (now - lastTimeInResearch > RESET_ABSENCE_MS) {
+                researchForegroundStart = now
             }
-            lastTimeInChrome = now
+            lastTimeInResearch = now
 
-            if (now - chromeForegroundStart >= threshold) {
+            if (now - researchForegroundStart >= threshold) {
                 val comment = COMMENTS[poolIndex % COMMENTS.size]
                 poolIndex = (poolIndex + 1) % COMMENTS.size
                 fireCountToday++
-                chromeForegroundStart = now // rollover
-                return CommentEvent(comment, CHROME_PKG)
+                researchForegroundStart = now // rollover
+                return CommentEvent(comment, currentApp)
             }
         } else {
-            if (now - lastTimeInChrome > RESET_ABSENCE_MS) {
-                chromeForegroundStart = 0L
+            if (now - lastTimeInResearch > RESET_ABSENCE_MS) {
+                researchForegroundStart = newResearchForegroundStart()
             }
         }
 
         return null
     }
+
+    private fun newResearchForegroundStart(): Long = 0L
 
     override fun getFireCountToday(): Int = fireCountToday
 
@@ -65,12 +68,13 @@ class ChromeResearchTrigger : Trigger {
     }
 
     override fun resetCooldown() {
-        chromeForegroundStart = 0L
+        researchForegroundStart = 0L
         poolIndex = 0
     }
 
     override fun getDetailedStatus(context: Context, currentApp: String?, now: Long, fastMode: Boolean): String {
-        if (currentApp != CHROME_PKG) return "Idle"
+        val isResearchApp = currentApp != null && RESEARCH_PACKAGES.contains(currentApp)
+        if (!isResearchApp) return "Idle"
         return "Ready"
     }
 }
