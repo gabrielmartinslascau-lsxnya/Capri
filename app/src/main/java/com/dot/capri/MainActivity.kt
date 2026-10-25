@@ -26,6 +26,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_PROACTIVITY_ENABLED = "proactivity_enabled"
         const val KEY_DEV_DISABLE_QUIET_HOURS = "dev_disable_quiet_hours"
         const val KEY_QUICK_MODE = "quick_mode"
+        const val KEY_DEFAULT_MUSIC_PLAYER = "default_music_player"
 
         fun getApiKey(context: Context): String {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -49,6 +50,11 @@ class MainActivity : AppCompatActivity() {
         fun isQuickMode(context: Context): Boolean {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             return prefs.getBoolean(KEY_QUICK_MODE, true)
+        }
+
+        fun getDefaultMusicPlayer(context: Context): String {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getString(KEY_DEFAULT_MUSIC_PLAYER, "youtube") ?: "youtube"
         }
     }
 

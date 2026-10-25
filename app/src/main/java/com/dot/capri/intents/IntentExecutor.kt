@@ -1,8 +1,11 @@
 package com.dot.capri.intents
 
+import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
+import com.dot.capri.MainActivity
 import com.dot.capri.util.ContactUtils
 import java.net.URLEncoder
 
@@ -12,6 +15,7 @@ object IntentExecutor {
         "spotify" to "com.spotify.music",
         "youtube" to "com.google.android.youtube",
         "yt" to "com.google.android.youtube",
+        "ytmusic" to "com.google.android.apps.youtube.music",
         "tiktok" to "com.zhiliaoapp.musically",
         "settings" to "com.android.settings",
         "chrome" to "com.android.chrome",
@@ -42,23 +46,40 @@ object IntentExecutor {
 
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
         val encodedQuery = URLEncoder.encode(cmd.query, "UTF-8")
-        val appLower = cmd.app?.lowercase()
+        val defaultPlayer = MainActivity.getDefaultMusicPlayer(context)
+        val playerChoice = cmd.app?.lowercase() ?: defaultPlayer.lowercase()
 
-        val uriString = when (appLower) {
-            "spotify" -> "spotify:search:$encodedQuery"
-            "youtube", "yt" -> "https://www.youtube.com/results?search_query=$encodedQuery"
-            else -> "https://www.youtube.com/results?search_query=$encodedQuery"
+        val intent: Intent = when (playerChoice) {
+            "spotify" -> Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:$encodedQuery")).apply {
+                setPackage("com.spotify.music")
+            }
+            "ytmusic", "youtube music", "yt music" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$encodedQuery"))
+            "apple", "apple music" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://music.apple.com/search?term=$encodedQuery"))
+            "soundcloud" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://soundcloud.com/search?q=$encodedQuery"))
+            "deezer" -> Intent(Intent.ACTION_VIEW, Uri.parse("deezer://www.deezer.com/search/$encodedQuery"))
+            "local", "offline", "vlc", "poweramp", "musicolet", "music player" -> Intent(MediaStore.INTENT_ACTION_MEDIA_SEARCH).apply {
+                putExtra(SearchManager.QUERY, cmd.query)
+                putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
+            }
+            else -> Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery"))
         }
 
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
         return try {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            e.printStackTrace()
-            false
+            val fallbackIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(fallbackIntent)
+                true
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+                false
+            }
         }
     }
 
