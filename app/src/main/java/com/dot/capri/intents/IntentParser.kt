@@ -24,7 +24,6 @@ object IntentParser {
     private fun cleanPlayQuery(rawQuery: String): String {
         var q = rawQuery
             .replace(Regex("\\s+(?:rq|real\\s+quick|pls|please|for\\s+me|bro|choom|now)$", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^(?:some|a|any)\\s+", RegexOption.IGNORE_CASE), "")
             .trim()
 
         val genericQueries = setOf("song", "music", "something", "video", "track", "tune", "tunes", "a song")

@@ -42,7 +42,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 import kotlin.math.abs
 
 class BubbleService : Service() {
@@ -75,6 +77,7 @@ class BubbleService : Service() {
     fun getProactivityEngine(): ProactivityEngine? = proactivityEngine
 
     private fun resolveBubbleAsset(state: BubbleState): Int {
+        // PLACEHOLDER: per-state gif/png/sprite here.
         return when (state) {
             BubbleState.IDLE -> R.drawable.bg_bubble_circle
             BubbleState.THINKING -> R.drawable.bg_bubble_circle
@@ -85,6 +88,7 @@ class BubbleService : Service() {
     }
 
     private fun resolveChatBackgroundAsset(): Int {
+        // PLACEHOLDER: animated or image chat background here.
         return R.drawable.bg_chat_window
     }
 
@@ -527,7 +531,6 @@ class BubbleService : Service() {
             persistentChatHistory.add(Pair("Capri", response))
             addMessageView(themedContext, historyContainer, "Capri", response)
 
-            // Auto expand chat slightly after a reply arrives
             chatScroll?.layoutParams?.height = dpToPx(240)
             chatScroll?.requestLayout()
 
@@ -544,15 +547,30 @@ class BubbleService : Service() {
 
     private fun executeEmbeddedActionTag(response: String): String {
         var cleanResponse = response
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|SEARCH):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH):([^]]+)\\]", RegexOption.IGNORE_CASE)
         val match = actionRegex.find(response)
         if (match != null) {
-            val (actionType, target) = match.destructured
+            val (actionType, rawTarget) = match.destructured
             val cmd = when (actionType.uppercase()) {
-                "OPEN" -> Cmd.Open(target.trim())
-                "PLAY" -> Cmd.Play(target.trim(), null)
-                "CALL" -> Cmd.Call(target.trim())
-                "SEARCH" -> Cmd.Search(target.trim())
+                "OPEN" -> Cmd.Open(rawTarget.trim())
+                "PLAY" -> {
+                    val parts = rawTarget.split(":")
+                    if (parts.size >= 2) {
+                        Cmd.Play(parts[0].trim(), parts[1].trim())
+                    } else {
+                        Cmd.Play(rawTarget.trim(), null)
+                    }
+                }
+                "CALL" -> Cmd.Call(rawTarget.trim())
+                "TEXT" -> {
+                    val parts = rawTarget.split(":")
+                    if (parts.size >= 2) {
+                        Cmd.Text(parts[0].trim(), parts[1].trim())
+                    } else {
+                        Cmd.Text(rawTarget.trim(), null)
+                    }
+                }
+                "SEARCH" -> Cmd.Search(rawTarget.trim())
                 else -> null
             }
             if (cmd != null) {
@@ -593,11 +611,10 @@ class BubbleService : Service() {
                 return "Accessibility service not enabled. Please enable 'Capri' in Android Accessibility settings first, choom~"
             }
 
-            // Temporarily hide chat window so accessibility service captures the underlying app (gallery GDA, tiktok, etc.) instead of Capri's chat overlay!
             withContext(Dispatchers.Main) {
-                chatView?.visibility = View.GONE
+                chatView?.visibility = View.INVISIBLE
             }
-            delay(250) // allow window manager to fully redraw without chat overlay
+            delay(250)
 
             val imageBytes = accessibilityService.captureScreenBitmap()
 
