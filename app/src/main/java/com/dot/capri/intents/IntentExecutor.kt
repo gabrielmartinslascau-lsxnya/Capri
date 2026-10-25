@@ -57,23 +57,56 @@ object IntentExecutor {
     }
 
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
-        val finalQuery = cmd.query.trim()
+        val rawQuery = cmd.query.trim().lowercase()
+
+        // Handle short video / reels queries
+        if (rawQuery in setOf("a vid", "a video", "reels", "shorts", "tiktok")) {
+            val reelsApp = MainActivity.getDefaultReelsApp(context)
+            return executeOpen(context, Cmd.Open(reelsApp))
+        }
+
+        // Handle random song queries ("play something", "play a song")
+        val randomTracks = listOf(
+            "Cyberpunk 2077 I Really Want to Stay at Your House",
+            "HOME Resonance",
+            "Kavinsky Nightcall",
+            "Tame Impala The Less I Know The Better",
+            "The Weeknd Blinding Lights",
+            "Daft Punk One More Time"
+        )
+        val finalQuery = if (rawQuery in setOf("something", "a song", "music", "a track", "a tune", "songs")) {
+            randomTracks.random()
+        } else {
+            cmd.query.trim()
+        }
+
         val encodedQuery = URLEncoder.encode(finalQuery, "UTF-8")
 
-        val playerChoice = if (!cmd.app.isNullOrBlank()) {
+        val rawChoice = if (!cmd.app.isNullOrBlank()) {
             cmd.app.lowercase().trim()
         } else {
             MainActivity.getDefaultMusicPlayer(context).lowercase().trim()
+        }
+
+        val playerChoice = when {
+            rawChoice.contains("spotify") -> "spotify"
+            rawChoice.contains("ytmusic") || rawChoice.contains("youtube music") || rawChoice.contains("yt music") -> "ytmusic"
+            rawChoice.contains("apple") -> "apple"
+            rawChoice.contains("soundcloud") -> "soundcloud"
+            rawChoice.contains("deezer") -> "deezer"
+            rawChoice.contains("local") || rawChoice.contains("offline") -> "local"
+            rawChoice.contains("youtube") -> "youtube"
+            else -> rawChoice
         }
 
         val intent: Intent = when (playerChoice) {
             "spotify" -> {
                 Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:$encodedQuery"))
             }
-            "ytmusic", "youtube music", "yt music" -> {
+            "ytmusic" -> {
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$encodedQuery"))
             }
-            "apple", "apple music" -> {
+            "apple" -> {
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://music.apple.com/search?term=$encodedQuery"))
             }
             "soundcloud" -> {
@@ -82,14 +115,14 @@ object IntentExecutor {
             "deezer" -> {
                 Intent(Intent.ACTION_VIEW, Uri.parse("deezer://www.deezer.com/search/$encodedQuery"))
             }
-            "local", "offline" -> {
+            "local" -> {
                 Intent(MediaStore.INTENT_ACTION_MEDIA_SEARCH).apply {
                     putExtra(SearchManager.QUERY, finalQuery)
                     putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
                 }
             }
             else -> {
-                if (!cmd.app.isNullOrBlank() && executeOpen(context, Cmd.Open(playerChoice))) {
+                if (executeOpen(context, Cmd.Open(playerChoice))) {
                     return true
                 }
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery"))

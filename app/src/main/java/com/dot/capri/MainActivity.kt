@@ -76,6 +76,15 @@ class MainActivity : AppCompatActivity() {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit().putString(KEY_DEFAULT_REELS_APP, appName.lowercase().trim()).apply()
         }
+
+        fun isAppInstalled(context: Context, packageName: String): Boolean {
+            return try {
+                context.packageManager.getPackageInfo(packageName, 0)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,37 +123,69 @@ class MainActivity : AppCompatActivity() {
             apiKeyInput.setText(savedKey)
         }
 
-        // Music Spinner setup
-        val musicOptions = listOf("Spotify", "YouTube", "YouTube Music", "Apple Music", "SoundCloud", "Local Player", "Mornye")
-        val musicAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, musicOptions).apply {
+        val candidateMusicApps = listOf(
+            "Spotify" to "com.spotify.music",
+            "YouTube" to "com.google.android.youtube",
+            "YouTube Music" to "com.google.android.apps.youtube.music",
+            "Apple Music" to "com.apple.android.music",
+            "SoundCloud" to "com.soundcloud.android",
+            "Deezer" to "deezer.android.app",
+            "Local Player" to ""
+        )
+
+        val availableMusicApps = candidateMusicApps.filter { (_, pkg) ->
+            pkg.isEmpty() || isAppInstalled(this, pkg)
+        }.map { it.first }.toMutableList()
+
+        val pm = packageManager
+        val launcherIntent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+        val installedApps = pm.queryIntentActivities(launcherIntent, 0)
+        for (info in installedApps) {
+            val label = info.loadLabel(pm).toString()
+            if (label.contains("Mornye", ignoreCase = true) || label.contains("Poweramp", ignoreCase = true) || label.contains("VLC", ignoreCase = true)) {
+                if (!availableMusicApps.contains(label)) {
+                    availableMusicApps.add(label)
+                }
+            }
+        }
+
+        val musicAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, availableMusicApps).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
         musicSpinner.adapter = musicAdapter
         val currentMusic = getDefaultMusicPlayer(this)
-        val currentMusicIndex = musicOptions.indexOfFirst { it.equals(currentMusic, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+        val currentMusicIndex = availableMusicApps.indexOfFirst { it.contains(currentMusic, ignoreCase = true) }.let { if (it >= 0) it else 0 }
         musicSpinner.setSelection(currentMusicIndex)
 
         musicSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selected = musicOptions[position]
+                val selected = availableMusicApps[position]
                 setDefaultMusicPlayer(this@MainActivity, selected)
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        // Reels Spinner setup
-        val reelsOptions = listOf("TikTok", "Instagram", "YouTube")
-        val reelsAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, reelsOptions).apply {
+        val candidateReelsApps = listOf(
+            "TikTok" to "com.zhiliaoapp.musically",
+            "Instagram" to "com.instagram.android",
+            "YouTube" to "com.google.android.youtube"
+        )
+
+        val availableReelsApps = candidateReelsApps.filter { (_, pkg) ->
+            isAppInstalled(this, pkg)
+        }.map { it.first }.ifEmpty { listOf("YouTube") }
+
+        val reelsAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, availableReelsApps).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
         reelsSpinner.adapter = reelsAdapter
         val currentReels = getDefaultReelsApp(this)
-        val currentReelsIndex = reelsOptions.indexOfFirst { it.equals(currentReels, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+        val currentReelsIndex = availableReelsApps.indexOfFirst { it.contains(currentReels, ignoreCase = true) }.let { if (it >= 0) it else 0 }
         reelsSpinner.setSelection(currentReelsIndex)
 
         reelsSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selected = reelsOptions[position]
+                val selected = availableReelsApps[position]
                 setDefaultReelsApp(this@MainActivity, selected)
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
