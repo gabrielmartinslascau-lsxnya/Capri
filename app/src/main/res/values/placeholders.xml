@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PLACEHOLDER: per-state gif/png/sprite here -->
+    <item type="drawable" name="bubble_idle_asset">@drawable/bg_bubble_circle</item>
+    <item type="drawable" name="bubble_thinking_asset">@drawable/bg_bubble_circle</item>
+    <item type="drawable" name="bubble_speaking_asset">@drawable/bg_bubble_circle</item>
+    <item type="drawable" name="bubble_dragging_asset">@drawable/bg_bubble_circle</item>
+    <item type="drawable" name="bubble_commenting_asset">@drawable/bg_bubble_circle</item>
+
+    <!-- PLACEHOLDER: animated or image chat background here -->
+    <item type="drawable" name="chat_bg_asset">@drawable/bg_chat_window</item>
+</resources>

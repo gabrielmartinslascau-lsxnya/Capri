@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">Capri</string>
+    <string name="enable_bubble">Enable Capri</string>
+    <string name="overlay_permission_title">Overlay Permission Required</string>
+    <string name="overlay_permission_desc">Capri needs Display Over Other Apps permission to float on your screen.</string>
+    <string name="notification_channel_name">Capri Service</string>
+    <string name="notification_channel_desc">Active floating assistant for Capri</string>
+    <string name="notification_title">Capri is Active</string>
+    <string name="notification_text">Tap floating icon on screen to open chat</string>
+    <string name="type_a_command">Type a command…</string>
+    <string name="send">Send</string>
+    <string name="close">Close</string>
+    <string name="status_awake">Awake</string>
+    <string name="status_snoozing">Snoozing</string>
+    <string name="api_key_hint">Gemini API Key (Optional for Cloud AI)</string>
+    <string name="enable_usage_stats">Enable App Watching</string>
+    <string name="usage_stats_enabled">App Watching: Active</string>
+    <string name="proactivity_label">Proactivity Engine</string>
+    <string name="dev_overrides_header">Developer Overrides</string>
+    <string name="dev_disable_quiet_hours">Force disable quiet hours</string>
+    <string name="dev_reduce_thresholds">Reduce all thresholds to 1 minute</string>
+    <string name="dev_reset_cooldowns">Reset cooldowns</string>
+    <string name="dev_reset_fire_counts">Reset fire counts</string>
+    <string name="dev_test_popup">Test Proactive Popup Now</string>
+</resources>
