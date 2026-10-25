@@ -39,29 +39,35 @@ class CapriAccessibilityService : AccessibilityService() {
             return null
         }
         return suspendCancellableCoroutine { continuation ->
-            takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
-                override fun onSuccess(screenshot: AccessibilityService.ScreenshotResult) {
-                    try {
-                        val hardwareBitmap = Bitmap.wrapHardwareBuffer(screenshot.hardwareBuffer, screenshot.colorSpace)
-                        val bitmap = hardwareBitmap?.copy(Bitmap.Config.ARGB_8888, true)
-                        screenshot.hardwareBuffer.close()
-                        if (bitmap != null) {
-                            val stream = ByteArrayOutputStream()
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-                            continuation.resume(stream.toByteArray())
-                        } else {
+            try {
+                takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        try {
+                            val hwBuffer = screenshot.hardwareBuffer
+                            val bitmap = Bitmap.wrapHardwareBuffer(hwBuffer, screenshot.colorSpace)
+                            val mutableBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                            hwBuffer.close()
+                            if (mutableBitmap != null) {
+                                val stream = ByteArrayOutputStream()
+                                mutableBitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+                                continuation.resume(stream.toByteArray())
+                            } else {
+                                continuation.resume(null)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                             continuation.resume(null)
                         }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+                    }
+
+                    override fun onFailure(errorCode: Int) {
                         continuation.resume(null)
                     }
-                }
-
-                override fun onFailure(errorCode: Int) {
-                    continuation.resume(null)
-                }
-            })
+                })
+            } catch (e: Exception) {
+                e.printStackTrace()
+                continuation.resume(null)
+            }
         }
     }
 }

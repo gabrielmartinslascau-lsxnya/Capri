@@ -20,7 +20,6 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -57,7 +56,6 @@ class BubbleService : Service() {
         const val NOTIFICATION_ID = 1001
         var instance: BubbleService? = null
 
-        // Persistent chat history across close/open events
         private val persistentChatHistory = mutableListOf<Pair<String, String>>()
     }
 
@@ -77,7 +75,6 @@ class BubbleService : Service() {
     fun getProactivityEngine(): ProactivityEngine? = proactivityEngine
 
     private fun resolveBubbleAsset(state: BubbleState): Int {
-        // PLACEHOLDER: per-state gif/png/sprite here.
         return when (state) {
             BubbleState.IDLE -> R.drawable.bg_bubble_circle
             BubbleState.THINKING -> R.drawable.bg_bubble_circle
@@ -88,7 +85,6 @@ class BubbleService : Service() {
     }
 
     private fun resolveChatBackgroundAsset(): Int {
-        // PLACEHOLDER: animated or image chat background here.
         return R.drawable.bg_chat_window
     }
 
@@ -396,10 +392,18 @@ class BubbleService : Service() {
 
         val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
         val chatScroll = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
+        val expandBtn = chatView?.findViewById<TextView>(R.id.btn_expand)
 
-        // Initial small height when opened
-        chatScroll?.layoutParams?.height = dpToPx(80)
+        var isExpanded = false
+        chatScroll?.layoutParams?.height = dpToPx(120)
         chatScroll?.requestLayout()
+
+        expandBtn?.setOnClickListener {
+            isExpanded = !isExpanded
+            chatScroll?.layoutParams?.height = dpToPx(if (isExpanded) 280 else 120)
+            chatScroll?.requestLayout()
+            expandBtn.text = if (isExpanded) "[ - ]" else "[ + ]"
+        }
 
         historyContainer?.removeAllViews()
         if (persistentChatHistory.isEmpty()) {
@@ -523,8 +527,8 @@ class BubbleService : Service() {
             persistentChatHistory.add(Pair("Capri", response))
             addMessageView(themedContext, historyContainer, "Capri", response)
 
-            // After a reply arrives, make the chat scroll view larger (e.g. 200dp)
-            chatScroll?.layoutParams?.height = dpToPx(200)
+            // Auto expand chat slightly after a reply arrives
+            chatScroll?.layoutParams?.height = dpToPx(240)
             chatScroll?.requestLayout()
 
             chatScroll?.post {
@@ -589,10 +593,11 @@ class BubbleService : Service() {
                 return "Accessibility service not enabled. Please enable 'Capri' in Android Accessibility settings first, choom~"
             }
 
+            // Temporarily hide chat window so accessibility service captures the underlying app (gallery GDA, tiktok, etc.) instead of Capri's chat overlay!
             withContext(Dispatchers.Main) {
-                chatView?.visibility = View.INVISIBLE
+                chatView?.visibility = View.GONE
             }
-            delay(100)
+            delay(250) // allow window manager to fully redraw without chat overlay
 
             val imageBytes = accessibilityService.captureScreenBitmap()
 
