@@ -84,7 +84,7 @@ object CloudAiClient {
         hourlyCallCount++
         dailyRequestCount++
 
-        Log.d(TAG, "Calling Gemini API (model: $MODEL_NAME, prompt: '$userPrompt', hourCount: $hourlyCallCount/10, dayCount: $dailyRequestCount/200)")
+        Log.d(TAG, "Calling Gemini API (model: $MODEL_NAME, prompt: '$userPrompt', hasImage: ${imageBytes != null}, hourCount: $hourlyCallCount/10, dayCount: $dailyRequestCount/200)")
 
         val urlString = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL_NAME:generateContent?key=$apiKey"
 
@@ -95,7 +95,7 @@ object CloudAiClient {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             connection.connectTimeout = 5000
-            connection.readTimeout = 12000
+            connection.readTimeout = 15000
             connection.doOutput = true
 
             val cal = Calendar.getInstance()
@@ -129,8 +129,8 @@ object CloudAiClient {
                 if (imageBytes != null) {
                     val base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
                     val imagePartObj = JSONObject().apply {
-                        put("inline_data", JSONObject().apply {
-                            put("mime_type", "image/jpeg")
+                        put("inlineData", JSONObject().apply {
+                            put("mimeType", "image/jpeg")
                             put("data", base64Image)
                         })
                     }
