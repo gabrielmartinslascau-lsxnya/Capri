@@ -61,7 +61,13 @@ object IntentExecutor {
                 putExtra(SearchManager.QUERY, cmd.query)
                 putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
             }
-            else -> Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery"))
+            else -> {
+                // If playerChoice matches an installed app on the device (like Mornye, Tidal, Anghami, etc.), launch that app directly
+                if (cmd.app != null && executeOpen(context, Cmd.Open(playerChoice))) {
+                    return true
+                }
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery"))
+            }
         }
 
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

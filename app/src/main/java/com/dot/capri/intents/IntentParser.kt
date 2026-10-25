@@ -1,7 +1,7 @@
 package com.dot.capri.intents
 
 object IntentParser {
-    private val playOnRegex = Regex("^play\\s+(.+?)\\s+on\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val playOnRegex = Regex("^play\\s+(.+?)\\s+(?:on|in|using|via)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val playRegex = Regex("^play\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val callRegex = Regex("^(?:call|phone|dial)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
@@ -18,7 +18,7 @@ object IntentParser {
     private val complimentKeywords = setOf("cute", "smart", "cool", "best", "awesome", "love you", "pretty", "amazing", "good job", "great", "genius", "sweet")
 
     private val knownAppNames = setOf(
-        "tiktok", "spotify", "youtube", "yt", "instagram", "discord", "whatsapp", "settings", "chrome", "maps", "reddit", "twitter", "telegram", "facebook"
+        "tiktok", "spotify", "youtube", "yt", "instagram", "discord", "whatsapp", "settings", "chrome", "maps", "reddit", "twitter", "telegram", "facebook", "mornye"
     )
 
     private fun cleanPlayQuery(rawQuery: String): String {
