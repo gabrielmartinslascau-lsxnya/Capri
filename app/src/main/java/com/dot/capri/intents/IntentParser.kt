@@ -21,6 +21,20 @@ object IntentParser {
         "tiktok", "spotify", "youtube", "yt", "instagram", "discord", "whatsapp", "settings", "chrome", "maps", "reddit", "twitter", "telegram", "facebook"
     )
 
+    private fun cleanContactName(rawContact: String): String {
+        return rawContact
+            .replace(Regex("\\s+(?:on|via|using)\\s+(?:whatsapp|telegram|signal|messages|sms|app)$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+app$", RegexOption.IGNORE_CASE), "")
+            .trim()
+    }
+
+    private fun cleanCallName(rawContact: String): String {
+        return rawContact
+            .replace(Regex("\\s+(?:on|via|using)\\s+(?:phone|whatsapp|cellular|app)$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+app$", RegexOption.IGNORE_CASE), "")
+            .trim()
+    }
+
     fun parse(input: String): Cmd {
         val raw = input.trim()
         if (raw.isEmpty()) {
@@ -65,16 +79,20 @@ object IntentParser {
         }
 
         textRegex.find(cleaned)?.let { match ->
-            val contact = match.groups[1]?.value?.trim() ?: ""
+            val rawContact = match.groups[1]?.value?.trim() ?: ""
             val msg = match.groups[2]?.value?.trim()
+            val contact = cleanContactName(rawContact)
             if (contact.isNotEmpty()) {
                 return Cmd.Text(contact, msg)
             }
         }
 
         callRegex.find(cleaned)?.let { match ->
-            val (contact) = match.destructured
-            return Cmd.Call(contact.trim())
+            val (rawContact) = match.destructured
+            val contact = cleanCallName(rawContact.trim())
+            if (contact.isNotEmpty()) {
+                return Cmd.Call(contact)
+            }
         }
 
         openRegex.find(cleaned)?.let { match ->

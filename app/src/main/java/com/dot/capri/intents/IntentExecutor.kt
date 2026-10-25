@@ -64,7 +64,7 @@ object IntentExecutor {
 
     private fun executeCall(context: Context, cmd: Cmd.Call): Boolean {
         val targetNumber = if (cmd.contact.any { it.isLetter() }) {
-            ContactUtils.findPhoneNumberByName(context, cmd.contact) ?: cmd.contact
+            ContactUtils.findPhoneNumberByName(context, cmd.contact) ?: return false
         } else {
             cmd.contact
         }
@@ -83,7 +83,7 @@ object IntentExecutor {
 
     private fun executeText(context: Context, cmd: Cmd.Text): Boolean {
         val targetNumber = if (cmd.contact.any { it.isLetter() }) {
-            ContactUtils.findPhoneNumberByName(context, cmd.contact) ?: cmd.contact
+            ContactUtils.findPhoneNumberByName(context, cmd.contact) ?: return false
         } else {
             cmd.contact
         }

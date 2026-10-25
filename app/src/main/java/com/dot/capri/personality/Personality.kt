@@ -98,8 +98,9 @@ object Personality {
     )
 
     private val failureTemplates = listOf(
-        "Couldn't do that, choom. My bad. Or yours. Probably yours~",
-        "Subsystem override failed~ Not my fault! (It was totally my fault)."
+        "Couldn't find that contact in your address book, choom! Double check the name?",
+        "Subsystem override failed~ Couldn't find that contact in your list.",
+        "Couldn't do that, netrunner. Contact name not found!"
     )
 
     private val thinkingLabels = listOf(
