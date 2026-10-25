@@ -21,6 +21,20 @@ object IntentParser {
         "tiktok", "spotify", "youtube", "yt", "instagram", "discord", "whatsapp", "settings", "chrome", "maps", "reddit", "twitter", "telegram", "facebook"
     )
 
+    private fun cleanPlayQuery(rawQuery: String): String {
+        var q = rawQuery
+            .replace(Regex("\\s+(?:rq|real\\s+quick|pls|please|for\\s+me|bro|choom|now)$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^(?:some|a|any)\\s+", RegexOption.IGNORE_CASE), "")
+            .trim()
+
+        val genericQueries = setOf("song", "music", "something", "video", "track", "tune", "tunes", "a song")
+        if (q.lowercase() in genericQueries || q.isEmpty()) {
+            val funDefaults = listOf("cyberpunk synthwave", "lofi hip hop beats", "top hit music", "retrowave music")
+            q = funDefaults.random()
+        }
+        return q
+    }
+
     private fun cleanContactName(rawContact: String): String {
         return rawContact
             .replace(Regex("\\s+(?:on|via|using)\\s+(?:whatsapp|telegram|signal|messages|sms|app)$", RegexOption.IGNORE_CASE), "")
@@ -62,7 +76,8 @@ object IntentParser {
 
         playOnRegex.find(cleaned)?.let { match ->
             val (q, app) = match.destructured
-            return Cmd.Play(q.trim(), app.trim().removeSuffix("app").trim())
+            val cleanQ = cleanPlayQuery(q.trim())
+            return Cmd.Play(cleanQ, app.trim().removeSuffix("app").trim())
         }
 
         playRegex.find(cleaned)?.let { match ->
@@ -75,7 +90,8 @@ object IntentParser {
                 val (appName) = openMatch.destructured
                 return Cmd.Open(appName.trim().removeSuffix("app").trim())
             }
-            return Cmd.Play(query, null)
+            val cleanQ = cleanPlayQuery(query)
+            return Cmd.Play(cleanQ, null)
         }
 
         textRegex.find(cleaned)?.let { match ->
