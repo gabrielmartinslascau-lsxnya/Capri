@@ -24,6 +24,8 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -451,22 +453,43 @@ class BubbleService : Service() {
         if (command.isEmpty()) return
 
         val sendButton = chatView?.findViewById<ImageButton>(R.id.send)
-        val responseText = chatView?.findViewById<TextView>(R.id.response_text)
+        val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
+        val chatScroll = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
         val thinkingContainer = chatView?.findViewById<View>(R.id.thinking_container)
         val thinkingText = chatView?.findViewById<TextView>(R.id.thinking_text)
+
+        val themedContext = ContextThemeWrapper(this, R.style.Theme_Capri)
+
+        val userTv = TextView(themedContext).apply {
+            text = "You: $command"
+            setTextColor(ContextCompat.getColor(this@BubbleService, R.color.text_primary))
+            textSize = 14f
+            setPadding(0, 6, 0, 6)
+        }
+        historyContainer?.addView(userTv)
 
         inputText.isEnabled = false
         sendButton?.isEnabled = false
         thinkingText?.text = Personality.thinking()
         thinkingContainer?.visibility = View.VISIBLE
-        responseText?.text = ""
 
         serviceScope.launch {
             val response = withContext(Dispatchers.IO) {
                 processCommand(command)
             }
             thinkingContainer?.visibility = View.GONE
-            responseText?.text = response
+
+            val capriTv = TextView(themedContext).apply {
+                text = "Capri: $response"
+                setTextColor(ContextCompat.getColor(this@BubbleService, R.color.accent_red_pink))
+                textSize = 15f
+                setPadding(0, 6, 0, 10)
+            }
+            historyContainer?.addView(capriTv)
+            chatScroll?.post {
+                chatScroll.fullScroll(ScrollView.FOCUS_DOWN)
+            }
+
             triggerSpeakingDoublePulse()
             inputText.isEnabled = true
             sendButton?.isEnabled = true
@@ -520,7 +543,7 @@ class BubbleService : Service() {
             }
             val imageBytes = accessibilityService.captureScreenBitmap()
             if (imageBytes != null) {
-                val cloudResult = CloudAiClient.generateResponse(this, cmd.prompt.ifBlank { "what is visible on this screen? read any text, identify the photo or tiktok video and describe it in character." }, imageBytes)
+                val cloudResult = CloudAiClient.generateResponse(this, cmd.prompt.ifBlank { "what is visible on this screen? read any text, identify the photo or tiktok video and describe it thoroughly in character." }, imageBytes)
                 if (cloudResult.isSuccess) {
                     val textResponse = cloudResult.getOrNull()
                     if (!textResponse.isNullOrBlank()) {
