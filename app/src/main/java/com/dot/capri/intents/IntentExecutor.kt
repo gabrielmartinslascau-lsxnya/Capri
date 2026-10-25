@@ -59,8 +59,8 @@ object IntentExecutor {
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
         val rawQuery = cmd.query.trim().lowercase()
 
-        // Handle short video / reels queries
-        if (rawQuery in setOf("a vid", "a video", "reels", "shorts", "tiktok")) {
+        // Handle short video / reels queries ("play video", "play a vid", "reels")
+        if (rawQuery in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid")) {
             val reelsApp = MainActivity.getDefaultReelsApp(context)
             return executeOpen(context, Cmd.Open(reelsApp))
         }
@@ -116,13 +116,30 @@ object IntentExecutor {
                 Intent(Intent.ACTION_VIEW, Uri.parse("deezer://www.deezer.com/search/$encodedQuery"))
             }
             "local" -> {
-                Intent(MediaStore.INTENT_ACTION_MEDIA_SEARCH).apply {
-                    putExtra(SearchManager.QUERY, finalQuery)
-                    putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
+                val localMusicIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_APP_MUSIC)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                return try {
+                    context.startActivity(localMusicIntent)
+                    true
+                } catch (e: Exception) {
+                    val mediaSearchIntent = Intent(MediaStore.INTENT_ACTION_MEDIA_SEARCH).apply {
+                        putExtra(SearchManager.QUERY, finalQuery)
+                        putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(mediaSearchIntent)
+                        true
+                    } catch (ex: Exception) {
+                        ex.printStackTrace()
+                        false
+                    }
                 }
             }
             else -> {
-                if (executeOpen(context, Cmd.Open(playerChoice))) {
+                if (!cmd.app.isNullOrBlank() && executeOpen(context, Cmd.Open(playerChoice))) {
                     return true
                 }
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery"))

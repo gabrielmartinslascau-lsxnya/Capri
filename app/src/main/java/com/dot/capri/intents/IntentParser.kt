@@ -2,6 +2,7 @@ package com.dot.capri.intents
 
 object IntentParser {
     private val playOnRegex = Regex("^play\\s+(.+?)\\s+(?:on|in|using|via)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val videoPlayRegex = Regex("^play\\s+(?:a\\s+)?(?:video|vid|reels?|shorts?)$", RegexOption.IGNORE_CASE)
     private val playRegex = Regex("^play\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val callRegex = Regex("^(?:call|phone|dial)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
@@ -31,7 +32,7 @@ object IntentParser {
             .replace(Regex("\\s+(?:rq|real\\s+quick|pls|please|for\\s+me|bro|choom|now)$", RegexOption.IGNORE_CASE), "")
             .trim()
 
-        val genericQueries = setOf("song", "music", "something", "video", "track", "tune", "tunes", "a song")
+        val genericQueries = setOf("song", "music", "something", "video", "track", "tune", "tunes", "a song", "a video", "a vid")
         if (q.lowercase() in genericQueries || q.isEmpty()) {
             val funDefaults = listOf("cyberpunk synthwave", "lofi hip hop beats", "top hit music", "retrowave music")
             q = funDefaults.random()
@@ -110,6 +111,9 @@ object IntentParser {
             openRegex.find(query)?.let { openMatch ->
                 val (appName) = openMatch.destructured
                 return Cmd.Open(appName.trim().removeSuffix("app").trim())
+            }
+            if (videoPlayRegex.matches(cleaned) || videoPlayRegex.matches(raw)) {
+                return Cmd.Play("reels", null)
             }
             val cleanQ = cleanPlayQuery(query)
             return Cmd.Play(cleanQ, null)
