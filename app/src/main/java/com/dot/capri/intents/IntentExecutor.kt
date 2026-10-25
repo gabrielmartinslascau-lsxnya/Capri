@@ -35,6 +35,8 @@ object IntentExecutor {
             when (cmd) {
                 is Cmd.Play -> executePlay(context, cmd)
                 is Cmd.MediaControl -> executeMediaControl(context, cmd)
+                is Cmd.Volume -> executeVolume(context, cmd)
+                is Cmd.TypeText -> executeTypeText(cmd)
                 is Cmd.Call -> executeCall(context, cmd)
                 is Cmd.Text -> executeText(context, cmd)
                 is Cmd.Open -> executeOpen(context, cmd)
@@ -50,6 +52,23 @@ object IntentExecutor {
             e.printStackTrace()
             false
         }
+    }
+
+    private fun executeVolume(context: Context, cmd: Cmd.Volume): Boolean {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        val direction = when (cmd.direction) {
+            VolumeDirection.UP -> AudioManager.ADJUST_RAISE
+            VolumeDirection.DOWN -> AudioManager.ADJUST_LOWER
+            VolumeDirection.MUTE -> AudioManager.ADJUST_MUTE
+            VolumeDirection.UNMUTE -> AudioManager.ADJUST_UNMUTE
+        }
+        audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+        return true
+    }
+
+    private fun executeTypeText(cmd: Cmd.TypeText): Boolean {
+        val accessibilityService = CapriAccessibilityService.instance ?: return false
+        return accessibilityService.typeTextIntoFocusedField(cmd.text)
     }
 
     private fun executeMediaControl(context: Context, cmd: Cmd.MediaControl): Boolean {

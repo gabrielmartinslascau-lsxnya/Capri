@@ -17,6 +17,12 @@ object IntentParser {
     private val nextRegex = Regex("^(?:next|next\\s+song|skip|skip\\s+song|next\\s+track)$", RegexOption.IGNORE_CASE)
     private val prevRegex = Regex("^(?:previous|prev|previous\\s+song|last\\s+song|back\\s+a\\s+song)$", RegexOption.IGNORE_CASE)
 
+    private val volUpRegex = Regex("^(?:volume\\s+up|louder|turn\\s+it\\s+up|increase\\s+volume|make\\s+it\\s+louder)$", RegexOption.IGNORE_CASE)
+    private val volDownRegex = Regex("^(?:volume\\s+down|quieter|turn\\s+it\\s+down|decrease\\s+volume|lower\\s+volume)$", RegexOption.IGNORE_CASE)
+    private val volMuteRegex = Regex("^(?:mute|mute\\s+volume|mute\\s+audio|silence)$", RegexOption.IGNORE_CASE)
+    private val volUnmuteRegex = Regex("^(?:unmute|unmute\\s+volume|unmute\\s+audio)$", RegexOption.IGNORE_CASE)
+    private val typeRegex = Regex("^(?:type|type\\s+out|enter|write)\\s+(.+)$", RegexOption.IGNORE_CASE)
+
     private val setDefaultMusicRegex1 = Regex("^(?:songs?|music)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+(.+?)(?:\\s+by\\s+default)?$", RegexOption.IGNORE_CASE)
     private val setDefaultMusicRegex2 = Regex("^(?:set|make|use)\\s+(?:default\\s+)?(?:music|songs?|music\\s+player)\\s+(?:to|app\\s+to|player\\s+to|is)?\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val setDefaultReelsRegex1 = Regex("^(?:reels|videos?|vids?)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+(.+?)(?:\\s+by\\s+default)?$", RegexOption.IGNORE_CASE)
@@ -82,6 +88,26 @@ object IntentParser {
 
         if (goHomeRegex.matches(raw) || goHomeRegex.matches(cleaned)) {
             return Cmd.GoHome
+        }
+
+        if (volUpRegex.matches(raw) || volUpRegex.matches(cleaned)) {
+            return Cmd.Volume(VolumeDirection.UP)
+        }
+        if (volDownRegex.matches(raw) || volDownRegex.matches(cleaned)) {
+            return Cmd.Volume(VolumeDirection.DOWN)
+        }
+        if (volMuteRegex.matches(raw) || volMuteRegex.matches(cleaned)) {
+            return Cmd.Volume(VolumeDirection.MUTE)
+        }
+        if (volUnmuteRegex.matches(raw) || volUnmuteRegex.matches(cleaned)) {
+            return Cmd.Volume(VolumeDirection.UNMUTE)
+        }
+
+        typeRegex.find(cleaned)?.let { match ->
+            val textToType = match.groups[1]?.value?.trim() ?: ""
+            if (textToType.isNotEmpty()) {
+                return Cmd.TypeText(textToType)
+            }
         }
 
         if (resumeRegex.matches(raw) || resumeRegex.matches(cleaned)) {

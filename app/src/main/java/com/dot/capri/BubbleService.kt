@@ -34,6 +34,7 @@ import com.dot.capri.ai.OnDeviceAiClient
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentExecutor
 import com.dot.capri.intents.IntentParser
+import com.dot.capri.intents.VolumeDirection
 import com.dot.capri.personality.Personality
 import com.dot.capri.proactivity.ProactivityEngine
 import com.dot.capri.util.NetworkUtils
@@ -42,9 +43,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
 import kotlin.math.abs
 
 class BubbleService : Service() {
@@ -77,7 +76,6 @@ class BubbleService : Service() {
     fun getProactivityEngine(): ProactivityEngine? = proactivityEngine
 
     private fun resolveBubbleAsset(state: BubbleState): Int {
-        // PLACEHOLDER: per-state gif/png/sprite here.
         return when (state) {
             BubbleState.IDLE -> R.drawable.bg_bubble_circle
             BubbleState.THINKING -> R.drawable.bg_bubble_circle
@@ -88,7 +86,6 @@ class BubbleService : Service() {
     }
 
     private fun resolveChatBackgroundAsset(): Int {
-        // PLACEHOLDER: animated or image chat background here.
         return R.drawable.bg_chat_window
     }
 
@@ -547,7 +544,7 @@ class BubbleService : Service() {
 
     private fun executeEmbeddedActionTag(response: String): String {
         var cleanResponse = response
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE):([^]]+)\\]", RegexOption.IGNORE_CASE)
         val match = actionRegex.find(response)
         if (match != null) {
             val (actionType, rawTarget) = match.destructured
@@ -561,6 +558,16 @@ class BubbleService : Service() {
                         Cmd.Play(rawTarget.trim(), null)
                     }
                 }
+                "VOLUME" -> {
+                    val dir = when (rawTarget.trim().uppercase()) {
+                        "UP" -> VolumeDirection.UP
+                        "DOWN" -> VolumeDirection.DOWN
+                        "MUTE" -> VolumeDirection.MUTE
+                        else -> VolumeDirection.UNMUTE
+                    }
+                    Cmd.Volume(dir)
+                }
+                "TYPE" -> Cmd.TypeText(rawTarget.trim())
                 "CALL" -> Cmd.Call(rawTarget.trim())
                 "TEXT" -> {
                     val parts = rawTarget.split(":")

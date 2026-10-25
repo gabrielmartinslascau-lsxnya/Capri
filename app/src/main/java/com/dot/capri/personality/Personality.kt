@@ -26,6 +26,18 @@ object Personality {
         "Handling playback controls for you~"
     )
 
+    private val volumeTemplates = listOf(
+        "Adjusted volume for you, choom~",
+        "Volume levels updated!",
+        "Audio levels shifted, netrunner~"
+    )
+
+    private val typeTextTemplates = listOf(
+        "Typed that right into your text box, choom~",
+        "Bypassed keyboard and typed it in for you!",
+        "Input sent to screen, netrunner~"
+    )
+
     private val callTemplates = listOf(
         "Connecting your com-link to {c}~ Don't say anything w-weird, ok?",
         "Dialing {c}, choom~ Hope they pick up your call... eventually",
@@ -146,6 +158,12 @@ object Personality {
             }
             is Cmd.MediaControl -> {
                 mediaControlTemplates
+            }
+            is Cmd.Volume -> {
+                volumeTemplates
+            }
+            is Cmd.TypeText -> {
+                typeTextTemplates
             }
             is Cmd.Call -> {
                 callTemplates.map { it.replace("{c}", cmd.contact) }

@@ -4,9 +4,15 @@ enum class MediaAction {
     PLAY, PAUSE, PLAY_PAUSE, NEXT, PREVIOUS
 }
 
+enum class VolumeDirection {
+    UP, DOWN, MUTE, UNMUTE
+}
+
 sealed interface Cmd {
     data class Play(val query: String, val app: String?) : Cmd
     data class MediaControl(val action: MediaAction) : Cmd
+    data class Volume(val direction: VolumeDirection) : Cmd
+    data class TypeText(val text: String) : Cmd
     data class Call(val contact: String) : Cmd
     data class Text(val contact: String, val message: String?) : Cmd
     data class Open(val app: String) : Cmd

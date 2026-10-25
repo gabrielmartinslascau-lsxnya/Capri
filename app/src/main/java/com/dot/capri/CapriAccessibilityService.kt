@@ -3,11 +3,13 @@ package com.dot.capri
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.Bundle
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
-import kotlinx.coroutines.suspendCancellableCoroutine
+import android.view.accessibility.AccessibilityNodeInfo
 import java.io.ByteArrayOutputStream
 import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 class CapriAccessibilityService : AccessibilityService() {
 
@@ -22,7 +24,7 @@ class CapriAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Not needed for active screen capture on demand
+        // Not needed for active screen capture or typing on demand
     }
 
     override fun onInterrupt() {
@@ -32,6 +34,20 @@ class CapriAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         instance = null
         super.onDestroy()
+    }
+
+    fun typeTextIntoFocusedField(text: String): Boolean {
+        return try {
+            val root = rootInActiveWindow ?: return false
+            val focusedNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+            val arguments = Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            }
+            focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 
     suspend fun captureScreenBitmap(): ByteArray? {
