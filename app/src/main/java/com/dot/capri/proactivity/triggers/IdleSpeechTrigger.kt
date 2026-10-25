@@ -9,8 +9,9 @@ class IdleSpeechTrigger : Trigger {
     override val id: String = "IdleSpeech"
 
     companion object {
-        private const val NORMAL_INTERVAL_MS = 120 * 60 * 1000L // 2 hours
-        private const val FAST_INTERVAL_MS = 30 * 60 * 1000L // 30 min
+        private const val NORMAL_COOLDOWN_MS = 120 * 60 * 1000L // 2 hours between fires
+        private const val FAST_COOLDOWN_MS = 30 * 60 * 1000L // 30 min between fires
+        private const val CUMULATIVE_IDLE_THRESHOLD_MS = 15 * 1000L // 15 seconds cumulative on wallpaper
 
         private val COMMENTS = listOf(
             "boriiinggg",
@@ -20,27 +21,32 @@ class IdleSpeechTrigger : Trigger {
         )
     }
 
+    private var cumulativeIdleMs: Long = 0L
+    private var lastCheckTime: Long = System.currentTimeMillis()
     private var lastFiredTime: Long = 0L
     private var fireCountToday: Int = 0
     private var poolIndex: Int = 0
 
     override fun evaluate(context: Context, currentApp: String?, now: Long, fastMode: Boolean): CommentEvent? {
-        val interval = if (fastMode) FAST_INTERVAL_MS else NORMAL_INTERVAL_MS
+        val cooldown = if (fastMode) FAST_COOLDOWN_MS else NORMAL_COOLDOWN_MS
 
-        if (currentApp != null) {
-            return null // Only fire when app is null (device idle / home screen)
-        }
-
-        if (lastFiredTime == 0L) {
-            lastFiredTime = now
+        if (now - lastFiredTime < cooldown) {
             return null
         }
 
-        if (now - lastFiredTime >= interval) {
-            val comment = COMMENTS[poolIndex % COMMENTS.size]
-            poolIndex = (poolIndex + 1) % COMMENTS.size
+        val delta = now - lastCheckTime
+        lastCheckTime = now
+
+        if (currentApp == null) {
+            cumulativeIdleMs += delta
+        }
+
+        if (cumulativeIdleMs >= CUMULATIVE_IDLE_THRESHOLD_MS) {
+            cumulativeIdleMs = 0L
             lastFiredTime = now
             fireCountToday++
+            val comment = COMMENTS[poolIndex % COMMENTS.size]
+            poolIndex = (poolIndex + 1) % COMMENTS.size
             return CommentEvent(comment, "none")
         }
 
@@ -54,12 +60,13 @@ class IdleSpeechTrigger : Trigger {
     }
 
     override fun resetCooldown() {
+        cumulativeIdleMs = 0L
         lastFiredTime = 0L
+        lastCheckTime = System.currentTimeMillis()
         poolIndex = 0
     }
 
     override fun getDetailedStatus(context: Context, currentApp: String?, now: Long, fastMode: Boolean): String {
-        if (currentApp != null) return "Idle"
         return "Ready"
     }
 }
