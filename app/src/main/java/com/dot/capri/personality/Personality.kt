@@ -38,6 +38,12 @@ object Personality {
         "Got it! {cat} will route to {app} by default now~"
     )
 
+    private val goHomeTemplates = listOf(
+        "Going home, choom~",
+        "Minimizing apps and returning to home screen...",
+        "Closing apps for you, netrunner~"
+    )
+
     private val openSuccessTemplates = listOf(
         "Opening {app} for you, netrunner~ Have fun!",
         "Launching {app}~ Try not to lose your whole day in there, choom.",
@@ -140,6 +146,9 @@ object Personality {
             }
             is Cmd.SetDefaultApp -> {
                 setDefaultAppTemplates.map { it.replace("{cat}", cmd.category).replace("{app}", cmd.appName) }
+            }
+            is Cmd.GoHome -> {
+                goHomeTemplates
             }
             is Cmd.Open -> {
                 openSuccessTemplates.map { it.replace("{app}", cmd.app) }

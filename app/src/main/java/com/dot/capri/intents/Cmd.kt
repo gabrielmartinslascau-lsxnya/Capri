@@ -14,5 +14,6 @@ sealed interface Cmd {
     object MuteProactivity : Cmd
     object UnmuteProactivity : Cmd
     object ClearHistory : Cmd
+    object GoHome : Cmd
     data class Unknown(val raw: String) : Cmd
 }

@@ -1,12 +1,15 @@
 package com.dot.capri.intents
 
+import android.accessibilityservice.AccessibilityService
 import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
+import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.MainActivity
 import com.dot.capri.util.ContactUtils
+import com.dot.capri.util.MediaUtils
 import java.net.URLEncoder
 
 object IntentExecutor {
@@ -33,12 +36,31 @@ object IntentExecutor {
                 is Cmd.Text -> executeText(context, cmd)
                 is Cmd.Open -> executeOpen(context, cmd)
                 is Cmd.SetDefaultApp -> executeSetDefaultApp(context, cmd)
+                is Cmd.GoHome -> executeGoHome(context)
                 is Cmd.Search -> false
                 is Cmd.SeeScreen -> true
                 is Cmd.ClearHistory -> true
                 is Cmd.Chat, is Cmd.Compliment, is Cmd.Mention, Cmd.MuteProactivity, Cmd.UnmuteProactivity -> true
                 is Cmd.Unknown -> false
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    private fun executeGoHome(context: Context): Boolean {
+        val accessibilityService = CapriAccessibilityService.instance
+        if (accessibilityService != null) {
+            return accessibilityService.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+        }
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(homeIntent)
+            true
         } catch (e: Exception) {
             e.printStackTrace()
             false
@@ -85,7 +107,11 @@ object IntentExecutor {
         val rawChoice = if (!cmd.app.isNullOrBlank()) {
             cmd.app.lowercase().trim()
         } else {
-            MainActivity.getDefaultMusicPlayer(context).lowercase().trim()
+            if (MediaUtils.isTrackDownloadedLocally(context, finalQuery)) {
+                "local"
+            } else {
+                MainActivity.getDefaultMusicPlayer(context).lowercase().trim()
+            }
         }
 
         val playerChoice = when {
@@ -116,24 +142,29 @@ object IntentExecutor {
                 Intent(Intent.ACTION_VIEW, Uri.parse("deezer://www.deezer.com/search/$encodedQuery"))
             }
             "local" -> {
-                val localMusicIntent = Intent(Intent.ACTION_MAIN).apply {
-                    addCategory(Intent.CATEGORY_APP_MUSIC)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                return try {
-                    context.startActivity(localMusicIntent)
-                    true
-                } catch (e: Exception) {
-                    val mediaSearchIntent = Intent(MediaStore.INTENT_ACTION_MEDIA_SEARCH).apply {
-                        putExtra(SearchManager.QUERY, finalQuery)
-                        putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
+                val audioUri = MediaUtils.findLocalAudioUri(context, finalQuery)
+                if (audioUri != null) {
+                    val playFileIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(audioUri, "audio/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    return try {
+                        context.startActivity(playFileIntent)
+                        true
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        false
+                    }
+                } else {
+                    val localMusicIntent = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_APP_MUSIC)
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    try {
-                        context.startActivity(mediaSearchIntent)
+                    return try {
+                        context.startActivity(localMusicIntent)
                         true
-                    } catch (ex: Exception) {
-                        ex.printStackTrace()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                         false
                     }
                 }
