@@ -20,6 +20,12 @@ object Personality {
         "Playing {q}~ Don't blame me if it's mid!"
     )
 
+    private val mediaControlTemplates = listOf(
+        "Resuming your audio tracks right away, choom~",
+        "Dispatched media signal, netrunner!",
+        "Handling playback controls for you~"
+    )
+
     private val callTemplates = listOf(
         "Connecting your com-link to {c}~ Don't say anything w-weird, ok?",
         "Dialing {c}, choom~ Hope they pick up your call... eventually",
@@ -137,6 +143,9 @@ object Personality {
                     playSuccessTemplates
                 }
                 templates.map { it.replace("{q}", cmd.query).replace("{app}", cmd.app ?: "") }
+            }
+            is Cmd.MediaControl -> {
+                mediaControlTemplates
             }
             is Cmd.Call -> {
                 callTemplates.map { it.replace("{c}", cmd.contact) }

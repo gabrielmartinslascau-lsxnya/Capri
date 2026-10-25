@@ -12,6 +12,11 @@ object IntentParser {
     private val seeScreenRegex = Regex("^(?:what(?:'s|\\s+is)\\s+(?:on\\s+screen|here|what\\s+am\\s+i\\s+looking\\s+at)|look\\s+at\\s+(?:the\\s+)?screen|search\\s+what(?:'s|\\s+is)\\s+on\\s+screen|analyze\\s+screen|screen\\s+capture)(?:\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val greetingRegex = Regex("^(?:hi|hello|hey|sup|yo|good\\s+(?:morning|afternoon|evening)|how\\s+are\\s+you)(?:\\s+.*)?$", RegexOption.IGNORE_CASE)
 
+    private val resumeRegex = Regex("^(?:resume|resume\\s+(?:the\\s+)?(?:music|song|track|playback)|continue|continue\\s+playing|unpause)$", RegexOption.IGNORE_CASE)
+    private val pauseRegex = Regex("^(?:pause|pause\\s+(?:the\\s+)?(?:music|song|track|playback)|stop\\s+music)$", RegexOption.IGNORE_CASE)
+    private val nextRegex = Regex("^(?:next|next\\s+song|skip|skip\\s+song|next\\s+track)$", RegexOption.IGNORE_CASE)
+    private val prevRegex = Regex("^(?:previous|prev|previous\\s+song|last\\s+song|back\\s+a\\s+song)$", RegexOption.IGNORE_CASE)
+
     private val setDefaultMusicRegex1 = Regex("^(?:songs?|music)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+(.+?)(?:\\s+by\\s+default)?$", RegexOption.IGNORE_CASE)
     private val setDefaultMusicRegex2 = Regex("^(?:set|make|use)\\s+(?:default\\s+)?(?:music|songs?|music\\s+player)\\s+(?:to|app\\s+to|player\\s+to|is)?\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val setDefaultReelsRegex1 = Regex("^(?:reels|videos?|vids?)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+(.+?)(?:\\s+by\\s+default)?$", RegexOption.IGNORE_CASE)
@@ -77,6 +82,19 @@ object IntentParser {
 
         if (goHomeRegex.matches(raw) || goHomeRegex.matches(cleaned)) {
             return Cmd.GoHome
+        }
+
+        if (resumeRegex.matches(raw) || resumeRegex.matches(cleaned)) {
+            return Cmd.MediaControl(MediaAction.PLAY)
+        }
+        if (pauseRegex.matches(raw) || pauseRegex.matches(cleaned)) {
+            return Cmd.MediaControl(MediaAction.PAUSE)
+        }
+        if (nextRegex.matches(raw) || nextRegex.matches(cleaned)) {
+            return Cmd.MediaControl(MediaAction.NEXT)
+        }
+        if (prevRegex.matches(raw) || prevRegex.matches(cleaned)) {
+            return Cmd.MediaControl(MediaAction.PREVIOUS)
         }
 
         setDefaultMusicRegex1.find(cleaned)?.let { match ->

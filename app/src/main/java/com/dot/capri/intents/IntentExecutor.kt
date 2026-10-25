@@ -4,8 +4,10 @@ import android.accessibilityservice.AccessibilityService
 import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.provider.MediaStore
+import android.view.KeyEvent
 import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.MainActivity
 import com.dot.capri.util.ContactUtils
@@ -32,6 +34,7 @@ object IntentExecutor {
         return try {
             when (cmd) {
                 is Cmd.Play -> executePlay(context, cmd)
+                is Cmd.MediaControl -> executeMediaControl(context, cmd)
                 is Cmd.Call -> executeCall(context, cmd)
                 is Cmd.Text -> executeText(context, cmd)
                 is Cmd.Open -> executeOpen(context, cmd)
@@ -47,6 +50,21 @@ object IntentExecutor {
             e.printStackTrace()
             false
         }
+    }
+
+    private fun executeMediaControl(context: Context, cmd: Cmd.MediaControl): Boolean {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        val keycode = when (cmd.action) {
+            MediaAction.PLAY -> KeyEvent.KEYCODE_MEDIA_PLAY
+            MediaAction.PAUSE -> KeyEvent.KEYCODE_MEDIA_PAUSE
+            MediaAction.PLAY_PAUSE -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            MediaAction.NEXT -> KeyEvent.KEYCODE_MEDIA_NEXT
+            MediaAction.PREVIOUS -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+        }
+
+        audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keycode))
+        audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keycode))
+        return true
     }
 
     private fun executeGoHome(context: Context): Boolean {
