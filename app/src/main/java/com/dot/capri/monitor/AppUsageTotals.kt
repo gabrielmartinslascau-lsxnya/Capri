@@ -14,6 +14,19 @@ object AppUsageTotals {
         return ms / (60 * 1000L)
     }
 
+    fun getUsageSummaryString(context: Context): String {
+        refreshIfNeeded(context)
+        val sb = StringBuilder()
+        val sorted = usageMap.entries.sortedByDescending { it.value }
+        for ((pkg, ms) in sorted.take(20)) {
+            val mins = ms / (60 * 1000L)
+            if (mins > 0) {
+                sb.append("- $pkg: ${mins}m\n")
+            }
+        }
+        return sb.toString().trim()
+    }
+
     private fun refreshIfNeeded(context: Context) {
         val now = System.currentTimeMillis()
         if (now - lastCacheTime < 60_000L && usageMap.isNotEmpty()) return
@@ -30,12 +43,25 @@ object AppUsageTotals {
                 set(Calendar.MILLISECOND, 0)
             }
             val startOfDay = cal.timeInMillis
-            val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startOfDay, now)
-            if (stats != null) {
-                for (stat in stats) {
-                    val pkg = stat.packageName
-                    val totalMs = stat.totalTimeInForeground
-                    usageMap[pkg] = (usageMap[pkg] ?: 0L) + totalMs
+
+            val aggregateStats = usageStatsManager.queryAndAggregateUsageStats(startOfDay, now)
+            if (aggregateStats != null && aggregateStats.isNotEmpty()) {
+                for ((pkg, stats) in aggregateStats) {
+                    val totalMs = stats.totalTimeInForeground
+                    if (totalMs > 0) {
+                        usageMap[pkg] = totalMs
+                    }
+                }
+            } else {
+                val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startOfDay, now)
+                if (stats != null) {
+                    for (stat in stats) {
+                        val pkg = stat.packageName
+                        val totalMs = stat.totalTimeInForeground
+                        if (totalMs > 0) {
+                            usageMap[pkg] = (usageMap[pkg] ?: 0L) + totalMs
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {

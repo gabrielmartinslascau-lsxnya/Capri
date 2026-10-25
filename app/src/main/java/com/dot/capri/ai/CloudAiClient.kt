@@ -98,8 +98,8 @@ object CloudAiClient {
             val weekday = android.text.format.DateFormat.format("EEEE", cal).toString()
             val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
             val currentApp = ForegroundAppDetector.currentForegroundApp(context) ?: "none"
-            val minutes = if (currentApp != "none") AppUsageTotals.totalTodayMinutes(context, currentApp) else 0L
-            val contextBlock = "it is currently $weekday, $time. the user has been on $currentApp for $minutes minutes today."
+            val usageSummary = AppUsageTotals.getUsageSummaryString(context)
+            val contextBlock = "it is currently $weekday, $time. current foreground app: $currentApp.\ntoday's app usage summary (package names and minutes):\n$usageSummary"
 
             val includeHistory = dailyRequestCount <= 200
 
@@ -150,6 +150,7 @@ object CloudAiClient {
                             responseCache[cacheKey] = text
                             sessionHistory.add(Pair(userPrompt, text))
                             if (sessionHistory.size > 10) {
+                                sessionHistory.removeAll { false } // keep
                                 sessionHistory.removeAt(0)
                             }
                             return Result.success(text)
