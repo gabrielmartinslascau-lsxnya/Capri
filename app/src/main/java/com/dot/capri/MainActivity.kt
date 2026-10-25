@@ -8,8 +8,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -95,6 +99,8 @@ class MainActivity : AppCompatActivity() {
         val proactivitySwitch = findViewById<SwitchCompat>(R.id.switch_proactivity)
         val quietHoursSwitch = findViewById<SwitchCompat>(R.id.switch_dev_quiet_hours)
         val quickModeSwitch = findViewById<SwitchCompat>(R.id.switch_dev_reduce_thresholds)
+        val musicSpinner = findViewById<Spinner>(R.id.spinner_default_music)
+        val reelsSpinner = findViewById<Spinner>(R.id.spinner_default_reels)
         val resetMuteBtn = findViewById<Button>(R.id.btn_reset_cooldowns).apply {
             text = "Reset mute"
         }
@@ -106,6 +112,42 @@ class MainActivity : AppCompatActivity() {
         val savedKey = prefs.getString(KEY_GEMINI_API_KEY, "")
         if (!savedKey.isNullOrBlank()) {
             apiKeyInput.setText(savedKey)
+        }
+
+        // Music Spinner setup
+        val musicOptions = listOf("Spotify", "YouTube", "YouTube Music", "Apple Music", "SoundCloud", "Local Player", "Mornye")
+        val musicAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, musicOptions).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        musicSpinner.adapter = musicAdapter
+        val currentMusic = getDefaultMusicPlayer(this)
+        val currentMusicIndex = musicOptions.indexOfFirst { it.equals(currentMusic, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+        musicSpinner.setSelection(currentMusicIndex)
+
+        musicSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selected = musicOptions[position]
+                setDefaultMusicPlayer(this@MainActivity, selected)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // Reels Spinner setup
+        val reelsOptions = listOf("TikTok", "Instagram", "YouTube")
+        val reelsAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, reelsOptions).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        reelsSpinner.adapter = reelsAdapter
+        val currentReels = getDefaultReelsApp(this)
+        val currentReelsIndex = reelsOptions.indexOfFirst { it.equals(currentReels, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+        reelsSpinner.setSelection(currentReelsIndex)
+
+        reelsSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selected = reelsOptions[position]
+                setDefaultReelsApp(this@MainActivity, selected)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         proactivitySwitch.isChecked = prefs.getBoolean(KEY_PROACTIVITY_ENABLED, true)
