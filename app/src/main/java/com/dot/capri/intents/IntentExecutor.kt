@@ -28,6 +28,7 @@ object IntentExecutor {
                 is Cmd.Open -> executeOpen(context, cmd)
                 is Cmd.Search -> false
                 is Cmd.SeeScreen -> true
+                is Cmd.ClearHistory -> true
                 is Cmd.Chat, is Cmd.Compliment, is Cmd.Mention, Cmd.MuteProactivity, Cmd.UnmuteProactivity -> true
                 is Cmd.Unknown -> false
             }

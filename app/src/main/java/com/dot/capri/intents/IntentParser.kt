@@ -12,6 +12,7 @@ object IntentParser {
 
     private val muteProactivityRegex = Regex("^(?:shut\\s+up|be\\s+quiet|capri\\s+stop|enough|stop\\s+talking)$", RegexOption.IGNORE_CASE)
     private val unmuteProactivityRegex = Regex("^(?:come\\s+back|you\\s+can\\s+talk|speak\\s+again|capri\\s+talk)$", RegexOption.IGNORE_CASE)
+    private val clearHistoryRegex = Regex("^(?:clear\\s+history|forget\\s+everything|wipe\\s+memory|clear\\s+chat|reset\\s+memory)$", RegexOption.IGNORE_CASE)
 
     private val complimentKeywords = setOf("cute", "smart", "cool", "best", "awesome", "love you", "pretty", "amazing", "good job", "great", "genius", "sweet")
 
@@ -33,6 +34,10 @@ object IntentParser {
 
         if (unmuteProactivityRegex.matches(raw) || unmuteProactivityRegex.matches(cleaned)) {
             return Cmd.UnmuteProactivity
+        }
+
+        if (clearHistoryRegex.matches(raw) || clearHistoryRegex.matches(cleaned)) {
+            return Cmd.ClearHistory
         }
 
         seeScreenRegex.find(cleaned)?.let { match ->

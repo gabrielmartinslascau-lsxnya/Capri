@@ -43,6 +43,11 @@ object CloudAiClient {
     private var dailyRequestCount = 0
     private var lastDayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
 
+    fun clearHistory() {
+        sessionHistory.clear()
+        responseCache.clear()
+    }
+
     @Synchronized
     private fun checkAndResetCounters() {
         val now = System.currentTimeMillis()

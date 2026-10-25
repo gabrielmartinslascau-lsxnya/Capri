@@ -11,5 +11,6 @@ sealed interface Cmd {
     data class Mention(val text: String) : Cmd
     object MuteProactivity : Cmd
     object UnmuteProactivity : Cmd
+    object ClearHistory : Cmd
     data class Unknown(val raw: String) : Cmd
 }

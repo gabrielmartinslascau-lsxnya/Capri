@@ -20,6 +20,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -55,6 +56,9 @@ class BubbleService : Service() {
         const val CHANNEL_ID = "bubble_service"
         const val NOTIFICATION_ID = 1001
         var instance: BubbleService? = null
+
+        // Persistent chat history across close/open events
+        private val persistentChatHistory = mutableListOf<Pair<String, String>>()
     }
 
     private var windowManager: WindowManager? = null
@@ -390,6 +394,28 @@ class BubbleService : Service() {
 
         updateStatusIndicator()
 
+        val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
+        val chatScroll = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
+
+        // Initial small height when opened
+        chatScroll?.layoutParams?.height = dpToPx(80)
+        chatScroll?.requestLayout()
+
+        historyContainer?.removeAllViews()
+        if (persistentChatHistory.isEmpty()) {
+            val greeting = "Sup, choom~ What digital chaos are we starting today?"
+            persistentChatHistory.add(Pair("Capri", greeting))
+            addMessageView(themedContext, historyContainer, "Capri", greeting)
+        } else {
+            for ((speaker, msg) in persistentChatHistory) {
+                addMessageView(themedContext, historyContainer, speaker, msg)
+            }
+        }
+
+        chatScroll?.post {
+            chatScroll.fullScroll(ScrollView.FOCUS_DOWN)
+        }
+
         val inputText = chatView?.findViewById<EditText>(R.id.input_text)
         val sendButton = chatView?.findViewById<ImageButton>(R.id.send)
         val closeButton = chatView?.findViewById<ImageButton>(R.id.close)
@@ -414,6 +440,26 @@ class BubbleService : Service() {
         }
 
         windowManager?.addView(chatView, params)
+    }
+
+    private fun addMessageView(context: Context, container: LinearLayout?, speaker: String, text: String) {
+        val tv = TextView(context).apply {
+            val prefix = if (speaker == "You") "You: " else "Capri: "
+            this.text = prefix + text
+            setTextColor(
+                if (speaker == "You")
+                    ContextCompat.getColor(context, R.color.text_primary)
+                else
+                    ContextCompat.getColor(context, R.color.accent_red_pink)
+            )
+            textSize = if (speaker == "You") 14f else 15f
+            setPadding(0, 4, 0, if (speaker == "You") 4 else 8)
+        }
+        container?.addView(tv)
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
     }
 
     private fun updateStatusIndicator() {
@@ -460,13 +506,8 @@ class BubbleService : Service() {
 
         val themedContext = ContextThemeWrapper(this, R.style.Theme_Capri)
 
-        val userTv = TextView(themedContext).apply {
-            text = "You: $command"
-            setTextColor(ContextCompat.getColor(this@BubbleService, R.color.text_primary))
-            textSize = 14f
-            setPadding(0, 6, 0, 6)
-        }
-        historyContainer?.addView(userTv)
+        persistentChatHistory.add(Pair("You", command))
+        addMessageView(themedContext, historyContainer, "You", command)
 
         inputText.isEnabled = false
         sendButton?.isEnabled = false
@@ -479,13 +520,13 @@ class BubbleService : Service() {
             }
             thinkingContainer?.visibility = View.GONE
 
-            val capriTv = TextView(themedContext).apply {
-                text = "Capri: $response"
-                setTextColor(ContextCompat.getColor(this@BubbleService, R.color.accent_red_pink))
-                textSize = 15f
-                setPadding(0, 6, 0, 10)
-            }
-            historyContainer?.addView(capriTv)
+            persistentChatHistory.add(Pair("Capri", response))
+            addMessageView(themedContext, historyContainer, "Capri", response)
+
+            // After a reply arrives, make the chat scroll view larger (e.g. 200dp)
+            chatScroll?.layoutParams?.height = dpToPx(200)
+            chatScroll?.requestLayout()
+
             chatScroll?.post {
                 chatScroll.fullScroll(ScrollView.FOCUS_DOWN)
             }
@@ -531,6 +572,12 @@ class BubbleService : Service() {
             return Personality.respond(cmd, true)
         }
 
+        if (cmd is Cmd.ClearHistory) {
+            persistentChatHistory.clear()
+            CloudAiClient.clearHistory()
+            return Personality.respond(cmd, true)
+        }
+
         if (cmd is Cmd.SeeScreen) {
             val hasKey = MainActivity.getApiKey(this).isNotBlank()
             val isOnline = NetworkUtils.isOnline(this) && hasKey
@@ -542,15 +589,13 @@ class BubbleService : Service() {
                 return "Accessibility service not enabled. Please enable 'Capri' in Android Accessibility settings first, choom~"
             }
 
-            // Temporarily hide chat window so we capture the underlying app (gallery, tiktok, etc.) instead of Capri's own chat bubble overlay!
             withContext(Dispatchers.Main) {
                 chatView?.visibility = View.INVISIBLE
             }
-            delay(100) // allow window manager to redraw without overlay
+            delay(100)
 
             val imageBytes = accessibilityService.captureScreenBitmap()
 
-            // Restore chat window visibility
             withContext(Dispatchers.Main) {
                 chatView?.visibility = View.VISIBLE
             }

@@ -45,6 +45,12 @@ object Personality {
         "Reading pixels right now, netrunner~"
     )
 
+    private val clearHistoryTemplates = listOf(
+        "memory wiped, choom~ starting fresh.",
+        "brain cells formatted. what's next?",
+        "history cleared, netrunner~ back to zero."
+    )
+
     private val chatTemplates = listOf(
         "Sup, choom~ What digital chaos are we starting today?",
         "Oh, you're back~ Did you miss your favorite construct, or are you just bored?",
@@ -124,6 +130,9 @@ object Personality {
             }
             is Cmd.SeeScreen -> {
                 seeScreenTemplates
+            }
+            is Cmd.ClearHistory -> {
+                clearHistoryTemplates
             }
             is Cmd.Chat -> {
                 chatTemplates
