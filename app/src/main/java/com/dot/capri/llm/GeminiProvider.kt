@@ -3,7 +3,6 @@ package com.dot.capri.llm
 import android.content.Context
 import android.util.Base64
 import android.util.Log
-import com.dot.capri.MainActivity
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -17,151 +16,139 @@ class GeminiProvider(
     modelOverride: String? = null
 ) : LlmProvider {
 
+    companion object {
+        private const val TAG = "CAPRI_GEMINI"
+        // If logcat shows HTTP 404 "model not found", change this to a current model name.
+        const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
+        private const val BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
+    }
+
     override val name: String = "Gemini"
-    override val currentModel: String = modelOverride?.ifBlank { null } ?: "gemini-3.5-flash-lite"
+    override val currentModel: String = modelOverride?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL
 
     private var lastError: String? = null
     private var isReachableState: Boolean = true
 
-    override fun health(): ProviderHealth {
-        val configured = apiKey.isNotBlank()
-        return ProviderHealth(isConfigured = configured, isReachable = isReachableState, lastError = lastError)
-    }
+    override fun health(): ProviderHealth = ProviderHealth(
+        isConfigured = apiKey.isNotBlank(),
+        isReachable = isReachableState,
+        lastError = lastError
+    )
 
     override suspend fun complete(req: LlmRequest): Result<LlmResponse> {
         if (apiKey.isBlank()) {
-            val errorMsg = "Gemini API key is blank"
-            lastError = errorMsg
-            return Result.failure(IllegalStateException(errorMsg))
+            lastError = "Gemini API key is blank"
+            return Result.failure(IllegalStateException(lastError))
         }
 
-        val startTime = System.currentTimeMillis()
-        val urlString = "https://generativelanguage.googleapis.com/v1beta/models/$currentModel:generateContent?key=$apiKey"
-
+        val started = System.currentTimeMillis()
         var connection: HttpURLConnection? = null
         return try {
-            val url = URL(urlString)
-            connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-            connection.connectTimeout = 5000
-            connection.readTimeout = 15000
-            connection.doOutput = true
+            val conn = (URL(BASE + currentModel + ":generateContent").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                // Key goes in a header, not the URL, so it never lands in logs or proxies.
+                setRequestProperty("x-goog-api-key", apiKey)
+                connectTimeout = 10_000
+                readTimeout = 45_000
+                doOutput = true
+            }
+            connection = conn
 
-            val payload = JSONObject().apply {
-                val contentsArray = JSONArray()
-
-                val systemPromptText = StringBuilder(req.systemPrompt)
-
-                if (req.history.isNotEmpty()) {
-                    val historyBuilder = StringBuilder()
-                    req.history.forEach { (user, model) ->
-                        val line = "user: $user\ncapri: $model\n"
-                        if (historyBuilder.length + line.length > 800) {
-                            val current = historyBuilder.toString()
-                            val needed = 800 - line.length
-                            if (needed > 0 && current.length >= needed) {
-                                historyBuilder.setLength(0)
-                                historyBuilder.append(current.takeLast(needed))
-                            } else {
-                                historyBuilder.setLength(0)
-                            }
-                        }
-                        historyBuilder.append(line)
-                    }
-                    val historyBlock = historyBuilder.toString().trim()
-                    if (historyBlock.isNotEmpty()) {
-                        systemPromptText.append("\n\n[Recent Conversation History]:\n$historyBlock")
-                    }
-                }
-
-                val partsArray = JSONArray()
-                val promptObj = JSONObject().apply {
-                    put("text", "$systemPromptText\n\nUser: ${req.prompt}")
-                }
-                partsArray.put(promptObj)
-
-                if (req.imageBytes != null) {
-                    val base64Image = Base64.encodeToString(req.imageBytes, Base64.NO_WRAP)
-                    val imagePartObj = JSONObject().apply {
-                        put("inlineData", JSONObject().apply {
-                            put("mimeType", "image/jpeg")
-                            put("data", base64Image)
-                        })
-                    }
-                    partsArray.put(imagePartObj)
-                }
-
-                val userContentObj = JSONObject().apply {
-                    put("role", "user")
-                    put("parts", partsArray)
-                }
-                contentsArray.put(userContentObj)
-                put("contents", contentsArray)
+            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { w ->
+                w.write(buildPayload(req).toString())
+                w.flush()
             }
 
-            OutputStreamWriter(connection.outputStream, "UTF-8").use { writer ->
-                writer.write(payload.toString())
-                writer.flush()
+            val code = conn.responseCode
+            val latency = System.currentTimeMillis() - started
+
+            if (code !in 200..299) {
+                val err = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
+                lastError = "HTTP $code: ${err.take(300)}"
+                isReachableState = code >= 500
+                Log.e(TAG, "Gemini error $lastError")
+                return Result.failure(RuntimeException("Gemini HTTP $code"))
             }
 
-            val latency = System.currentTimeMillis() - startTime
-            val statusCode = connection.responseCode
-            if (statusCode in 200..299) {
-                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
-                val jsonResponse = JSONObject(responseText)
-
-                var tokensIn = req.prompt.length / 4
-                var tokensOut = 0
-
-                val usageMetadata = jsonResponse.optJSONObject("usageMetadata")
-                if (usageMetadata != null) {
-                    tokensIn = usageMetadata.optInt("promptTokenCount", tokensIn)
-                    tokensOut = usageMetadata.optInt("candidatesTokenCount", 0)
-                }
-
-                val candidates = jsonResponse.optJSONArray("candidates")
-                if (candidates != null && candidates.length() > 0) {
-                    val firstCandidate = candidates.getJSONObject(0)
-                    val content = firstCandidate.optJSONObject("content")
-                    val parts = content?.optJSONArray("parts")
-                    if (parts != null && parts.length() > 0) {
-                        val text = parts.getJSONObject(0).optString("text", "").trim()
-                        if (tokensOut == 0) tokensOut = text.length / 4
-
-                        isReachableState = true
-                        lastError = null
-
-                        return Result.success(
-                            LlmResponse(
-                                text = text,
-                                tokensIn = tokensIn,
-                                tokensOut = tokensOut,
-                                latencyMs = latency,
-                                provider = name,
-                                model = currentModel
-                            )
-                        )
-                    }
-                }
-                isReachableState = false
-                val err = "Empty response candidate from Gemini API"
-                lastError = err
-                Result.failure(RuntimeException(err))
-            } else {
-                val errorText = connection.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
-                isReachableState = false
-                val err = "Gemini API Error $statusCode: $errorText"
-                lastError = err
-                Result.failure(RuntimeException(err))
+            val json = JSONObject(conn.inputStream.bufferedReader().use(BufferedReader::readText))
+            val text = extractText(json)
+            if (text.isBlank()) {
+                lastError = "Empty candidate (finishReason=${finishReason(json)})"
+                Log.e(TAG, lastError!!)
+                return Result.failure(RuntimeException("Gemini returned no text"))
             }
+
+            val usage = json.optJSONObject("usageMetadata")
+            val tokensIn = usage?.optInt("promptTokenCount", req.prompt.length / 4) ?: (req.prompt.length / 4)
+            val tokensOut = usage?.optInt("candidatesTokenCount", text.length / 4) ?: (text.length / 4)
+
+            isReachableState = true
+            lastError = null
+            Result.success(LlmResponse(text, tokensIn, tokensOut, latency, name, currentModel))
         } catch (e: Exception) {
             isReachableState = false
-            lastError = e.message ?: "Connection exception"
-            Log.e("CAPRI_LLM", "Gemini API Exception", e)
+            lastError = e.message ?: "connection error"
+            Log.e(TAG, "Gemini exception", e)
             Result.failure(e)
         } finally {
             connection?.disconnect()
         }
     }
+
+    private fun buildPayload(req: LlmRequest): JSONObject {
+        val contents = JSONArray()
+
+        // Real multi-turn history, last 20 exchanges.
+        req.history.takeLast(20).forEach { (user, capri) ->
+            contents.put(JSONObject().apply {
+                put("role", "user")
+                put("parts", JSONArray().put(JSONObject().put("text", user)))
+            })
+            contents.put(JSONObject().apply {
+                put("role", "model")
+                put("parts", JSONArray().put(JSONObject().put("text", capri)))
+            })
+        }
+
+        val parts = JSONArray().put(JSONObject().put("text", req.prompt))
+        if (req.imageBytes != null) {
+            parts.put(JSONObject().apply {
+                put("inlineData", JSONObject().apply {
+                    put("mimeType", "image/jpeg")
+                    put("data", Base64.encodeToString(req.imageBytes, Base64.NO_WRAP))
+                })
+            })
+        }
+        contents.put(JSONObject().apply {
+            put("role", "user")
+            put("parts", parts)
+        })
+
+        return JSONObject().apply {
+            put("systemInstruction", JSONObject().apply {
+                put("parts", JSONArray().put(JSONObject().put("text", req.systemPrompt)))
+            })
+            put("contents", contents)
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.9)
+                put("topP", 0.95)
+                put("maxOutputTokens", 1024)
+            })
+        }
+    }
+
+    private fun extractText(json: JSONObject): String {
+        val candidates = json.optJSONArray("candidates") ?: return ""
+        if (candidates.length() == 0) return ""
+        val parts = candidates.getJSONObject(0).optJSONObject("content")?.optJSONArray("parts") ?: return ""
+        val sb = StringBuilder()
+        for (i in 0 until parts.length()) {
+            sb.append(parts.getJSONObject(i).optString("text", ""))
+        }
+        return sb.toString().trim()
+    }
+
+    private fun finishReason(json: JSONObject): String =
+        json.optJSONArray("candidates")?.optJSONObject(0)?.optString("finishReason", "unknown") ?: "unknown"
 }

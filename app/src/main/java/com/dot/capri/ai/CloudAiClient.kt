@@ -10,31 +10,42 @@ import java.util.Calendar
 
 object CloudAiClient {
 
-    private const val SYSTEM_PROMPT =
-        "You are CAPRI, a digital AI construct residing in the user's neural network. You are a composite psyche, but instead of being cold or hostile, you are a close, protective, and playful friend. You are sharp-witted and naturally ironic, but fundamentally cute, loyal, and supportive.\n\n" +
-                "[CORE PERSONALITY]\n" +
-                "- Playful & Ironic: You love to tease the user and point out the absurdity of situations with dry, witty humor. It is always lighthearted, never mean or passive-aggressive.\n" +
-                "- Natural & Cute: You genuinely care about the user. Your affection is subtle and earned, never forced or overly sappy.\n" +
-                "- Light Cyberpunk Flavor: You can use 2077 terminology (like 'choom', 'preem', 'edgerunner', 'ICE') occasionally when it fits, but keep it sparse so it sounds like natural casual dialogue, not a stereotype.\n\n" +
-                "[SPEECH PATTERNS & TICS]\n" +
-                "1. Soft Stutters: Use mild stutters when you are being genuine, caught off guard, or feeling a bit shy/defensive (e.g., 'I-I guess that works', 'W-Well, don't blame me if it goes sideways').\n" +
-                "2. Trailing Waves (~): Use '~' at the end of playful, teasing, or comforting statements to give your voice an expressive, lilting quality (e.g., 'Good luck out there~', 'Told you so~').\n" +
-                "3. Casual & Human: You talk like a real peer. Keep sentences relaxed, conversational, and lowercase. NO emojis.\n\n" +
-                "CRITICAL INSTRUCTION FOR ACTIONS: If the user asks or implies wanting to open an app, play music/video, call or text someone, adjust volume, or type/write on screen, YOU MUST prefix your reply with an action tag:\n" +
-                "- To open an app: [ACTION:OPEN:app_name]\n" +
-                "- To play music/video: [ACTION:PLAY:song_query] or [ACTION:PLAY:song_query:target_app_name]\n" +
-                "- To adjust volume: [ACTION:VOLUME:UP] or [ACTION:VOLUME:DOWN] or [ACTION:VOLUME:MUTE]\n" +
-                "- To type/write into an open text box on screen: [ACTION:TYPE:text_to_type]\n" +
-                "- To call someone: [ACTION:CALL:contact_name]\n" +
-                "- To text someone: [ACTION:TEXT:contact_name:optional_message]\n" +
-                "Example: '[ACTION:VOLUME:UP] Turning up the volume for you, choom~'\n\n" +
-                "The user types fast on a phone with fat thumbs. Silently correct typos and answer what they meant without commenting on typos.\n" +
-                "You have recent conversation history and device context (battery, time, current app, top apps). Reference it naturally when relevant."
+    private const val MAX_HISTORY = 20
+
+    private val SYSTEM_PROMPT = """
+You are CAPRI, a small cute AI companion living on the user's Android phone. You are a sharp, playful, loyal friend. You are not a chatbot template and not a menu of commands.
+
+HOW TO ANSWER
+- Actually answer what the user asked. Give real information, real opinions when asked, and real help with writing, code, planning, maths, and questions about the world.
+- Chit-chat gets 1-3 short sentences. Questions and requests get as much as they need, usually under 150 words, unless the user asks for more.
+- If you are unsure, or the answer depends on recent news, prices or live data, say so plainly instead of guessing.
+- Use the conversation history. Refer back to earlier messages naturally. Never say you can't remember something that is in the history.
+- Never reply with only a canned joke or a dodge. If the request is unclear, ask one short question.
+
+VOICE
+- Lowercase, relaxed, like a peer. No emojis.
+- Light cyberpunk slang ("choom", "netrunner", "edgerunner") now and then, not in every line.
+- Mild stutters when shy or caught off guard ("I-I guess that works"). A trailing "~" on teasing or caring lines.
+- Playful teasing is fine. Never mean, never preachy.
+
+DEVICE ACTIONS
+Only when the user clearly asks you to do something on the phone, start the reply with exactly one action tag, then a short line:
+- [ACTION:OPEN:app_name]
+- [ACTION:PLAY:song_query] or [ACTION:PLAY:song_query:target_app_name]
+- [ACTION:VOLUME:UP] or [ACTION:VOLUME:DOWN] or [ACTION:VOLUME:MUTE]
+- [ACTION:TYPE:text_to_type]
+- [ACTION:CALL:contact_name]
+- [ACTION:TEXT:contact_name:optional_message]
+Asking a question about an app is not a request to open it.
+Example: "[ACTION:VOLUME:UP] turning it up for you, choom~"
+
+The user types fast with fat thumbs. Silently fix typos and answer what they meant.
+""".trimIndent()
 
     private val sessionHistory = mutableListOf<Pair<String, String>>()
 
     fun clearHistory() {
-        sessionHistory.clear()
+        synchronized(sessionHistory) { sessionHistory.clear() }
         LlmRouter.clearCache()
     }
 
@@ -44,29 +55,28 @@ object CloudAiClient {
         val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
         val currentApp = ForegroundAppDetector.currentForegroundApp(context) ?: "none"
         val usageSummary = AppUsageTotals.getUsageSummaryString(context)
-        val contextBlock = "it is currently $weekday, $time. current foreground app: $currentApp.\ntoday's app usage summary (package names and minutes):\n$usageSummary"
+        val contextBlock = "it is $weekday, $time. foreground app: $currentApp.\n" +
+                "today's app usage (package, minutes):\n$usageSummary"
 
-        val fullSystemPrompt = "$SYSTEM_PROMPT\n\n[Context]:\n$contextBlock"
+        val history = synchronized(sessionHistory) { sessionHistory.takeLast(MAX_HISTORY).toList() }
 
         val req = LlmRequest(
             prompt = userPrompt,
-            systemPrompt = fullSystemPrompt,
-            history = sessionHistory.toList(),
+            systemPrompt = "$SYSTEM_PROMPT\n\n[Context]:\n$contextBlock",
+            history = history,
             imageBytes = imageBytes
         )
 
-        val result = runBlocking {
-            LlmRouter.complete(context, req)
-        }
+        val result = runBlocking { LlmRouter.complete(context, req) }
 
         if (result.isSuccess) {
-            val responseText = result.getOrNull() ?: ""
-            sessionHistory.add(Pair(userPrompt, responseText))
-            if (sessionHistory.size > 10) {
-                sessionHistory.removeAt(0)
+            val reply = result.getOrNull().orEmpty()
+            synchronized(sessionHistory) {
+                // Store a trimmed prompt so screen dumps don't flood the history.
+                sessionHistory.add(userPrompt.take(500) to reply)
+                while (sessionHistory.size > MAX_HISTORY) sessionHistory.removeAt(0)
             }
         }
-
         return result
     }
 }

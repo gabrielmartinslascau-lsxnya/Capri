@@ -721,6 +721,30 @@ class BubbleService : Service() {
         return cleanResponse
     }
 
+    /**
+     * Sends a prompt to the model. Returns the reply (with action tags executed),
+     * an error line if the call failed while online, or null if no brain is set up.
+     */
+    private suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
+        if (!LlmRouter.hasAnyApiKey(this) || !NetworkUtils.isOnline(this)) return null
+
+        val result = withContext(Dispatchers.IO) {
+            CloudAiClient.generateResponse(this@BubbleService, prompt, imageBytes)
+        }
+
+        return if (result.isSuccess) {
+            result.getOrNull()?.takeIf { it.isNotBlank() }?.let { executeEmbeddedActionTag(it) }
+        } else {
+            val why = result.exceptionOrNull()?.message ?: "unknown"
+            android.util.Log.e("CAPRI_BRAIN", "Brain call failed: $why")
+            if (why.contains("Hourly", ignoreCase = true)) {
+                "hit my hourly chat limit, choom~ give me a bit and try again."
+            } else {
+                "my brain glitched ($why). check logcat for CAPRI_GEMINI, choom~"
+            }
+        }
+    }
+
     private suspend fun processCommand(text: String): String {
         val trimmedInput = text.trim()
 
@@ -741,11 +765,8 @@ class BubbleService : Service() {
 
         if (cmd is Cmd.EasterEgg) {
             val count = easterEggCounts.getOrPut(cmd.response) { 0 }
-            if (count >= 5) {
-                return "that's enough of that."
-            }
+            if (count >= 5) return "that's enough of that."
             easterEggCounts[cmd.response] = count + 1
-            Log.d("CAPRI_EGG", "Easter egg triggered: '${cmd.response}' (uses: ${count + 1})")
             return cmd.response
         }
 
@@ -756,24 +777,19 @@ class BubbleService : Service() {
             if (match != null) {
                 val topic = (match.groups[1]?.value ?: match.groups[2]?.value ?: "").trim()
                 val prompt = "write a short message about: $topic. max 2 sentences. match a casual texting tone. no quotes, no preamble, just the message text."
-                val cloudResult = CloudAiClient.generateResponse(this, prompt)
-                if (cloudResult.isSuccess) {
-                    var draft = cloudResult.getOrNull()?.trim() ?: ""
-                    draft = draft.removeSurrounding("\"").removeSurrounding("'")
-                    if (draft.isNotEmpty()) {
-                        pendingDraftText = draft
-                        return "$draft\n\nwant me to put it in the field?"
-                    }
+                val draft = withContext(Dispatchers.IO) {
+                    CloudAiClient.generateResponse(this@BubbleService, prompt).getOrNull()
+                }?.trim()?.removeSurrounding("\"")?.removeSurrounding("'")
+                if (!draft.isNullOrEmpty()) {
+                    pendingDraftText = draft
+                    return "$draft\n\nwant me to put it in the field?"
                 }
                 return "couldn't write about that."
-            } else {
-                return executeWriteCommand(writeText)
             }
+            return executeWriteCommand(writeText)
         }
 
-        if (cmd is Cmd.ClearField) {
-            return executeClearFieldCommand()
-        }
+        if (cmd is Cmd.ClearField) return executeClearFieldCommand()
 
         if (cmd is Cmd.MuteProactivity) {
             proactivityEngine?.muteFor(4)
@@ -792,89 +808,50 @@ class BubbleService : Service() {
         }
 
         if (cmd is Cmd.SeeScreen) {
-            val hasKey = LlmRouter.hasAnyApiKey(this)
-            val isOnline = NetworkUtils.isOnline(this) && hasKey
-            if (!isOnline) {
+            if (!LlmRouter.hasAnyApiKey(this) || !NetworkUtils.isOnline(this)) {
                 return "need api key and internet to see screen pixels, choom~"
             }
             val accessibilityService = CapriAccessibilityService.instance
-            if (accessibilityService == null) {
-                return "accessibility service not enabled. please enable 'Capri' in Android Accessibility settings first, choom~"
-            }
+                ?: return "accessibility service not enabled. please enable 'Capri' in Android Accessibility settings first, choom~"
 
-            withContext(Dispatchers.Main) {
-                chatView?.visibility = View.INVISIBLE
-            }
+            withContext(Dispatchers.Main) { chatView?.visibility = View.INVISIBLE }
             delay(250)
-
             val imageBytes = accessibilityService.captureScreenBitmap()
             val screenTextTree = accessibilityService.dumpScreenTextTree()
+            withContext(Dispatchers.Main) { chatView?.visibility = View.VISIBLE }
 
-            withContext(Dispatchers.Main) {
-                chatView?.visibility = View.VISIBLE
-            }
-
+            val question = cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }
             val userPrompt = if (screenTextTree.isNotEmpty()) {
-                "${cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }}\n\n[Extracted On-Screen Text/Elements]:\n$screenTextTree"
+                "$question\n\n[Extracted On-Screen Text/Elements]:\n$screenTextTree"
             } else {
-                cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }
+                question
             }
-
-            val cloudResult = CloudAiClient.generateResponse(this, userPrompt, imageBytes)
-            if (cloudResult.isSuccess) {
-                val textResponse = cloudResult.getOrNull()
-                if (!textResponse.isNullOrBlank()) {
-                    return executeEmbeddedActionTag(textResponse)
-                }
-            }
-            return "couldn't analyze what's on screen, choom~"
+            return askBrain(userPrompt, imageBytes) ?: "couldn't analyze what's on screen, choom~"
         }
 
         if (cmd is Cmd.Search) {
-            val hasKey = LlmRouter.hasAnyApiKey(this)
-            val isOnline = NetworkUtils.isOnline(this) && hasKey
-            if (isOnline) {
-                val cloudResult = CloudAiClient.generateResponse(this, text)
-                if (cloudResult.isSuccess) {
-                    val cloudText = cloudResult.getOrNull()
-                    if (!cloudText.isNullOrBlank()) {
-                        return executeEmbeddedActionTag(cloudText)
-                    }
-                }
+            askBrain(text)?.let { return it }
+        }
+
+        // Conversation always goes to the model first. Canned lines are only a last resort.
+        if (cmd is Cmd.Chat || cmd is Cmd.Mention || cmd is Cmd.Compliment || cmd is Cmd.Unknown) {
+            askBrain(text)?.let { return it }
+
+            if (OnDeviceAiClient.isAvailable(this)) {
+                val onDevice = OnDeviceAiClient.generateResponse(this, text)
+                onDevice.getOrNull()?.takeIf { it.isNotBlank() }?.let { return executeEmbeddedActionTag(it) }
             }
+            return Personality.respond(cmd, cmd !is Cmd.Unknown)
         }
 
-        if (cmd !is Cmd.Unknown) {
-            val success = IntentExecutor.execute(this, cmd)
-            delay(300)
-            return Personality.respond(cmd, success)
-        }
-
-        if (OnDeviceAiClient.isAvailable(this)) {
-            val onDeviceResult = OnDeviceAiClient.generateResponse(this, text)
-            if (onDeviceResult.isSuccess) {
-                val aiText = onDeviceResult.getOrNull()
-                if (!aiText.isNullOrBlank()) {
-                    return executeEmbeddedActionTag(aiText)
-                }
-            }
-        }
-
-        val hasKey = LlmRouter.hasAnyApiKey(this)
-        val isOnline = NetworkUtils.isOnline(this) && hasKey
-        if (isOnline) {
-            val cloudResult = CloudAiClient.generateResponse(this, text)
-            if (cloudResult.isSuccess) {
-                val cloudText = cloudResult.getOrNull()
-                if (!cloudText.isNullOrBlank()) {
-                    return executeEmbeddedActionTag(cloudText)
-                }
-            }
-        }
-
+        // Device action (open, play, call, volume...). If it fails, let the model take a go at it,
+        // so "why" doesn't end in a failed "open why" line.
         val success = IntentExecutor.execute(this, cmd)
         delay(300)
-        return Personality.respond(cmd, success)
+        if (success) return Personality.respond(cmd, true)
+
+        askBrain(text)?.let { return it }
+        return Personality.respond(cmd, false)
     }
 
     override fun onDestroy() {
