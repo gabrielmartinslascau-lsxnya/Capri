@@ -596,6 +596,7 @@ class BubbleService : Service() {
 
         persistentChatHistory.add(Pair("You", command))
         addMessageView(themedContext, historyContainer, "You", command)
+        inputText.setText("")
 
         inputText.isEnabled = false
         sendButton?.isEnabled = false
@@ -603,25 +604,25 @@ class BubbleService : Service() {
         thinkingContainer?.visibility = View.VISIBLE
 
         serviceScope.launch {
-            val response = withContext(Dispatchers.IO) {
-                processCommand(command)
+            val response = try {
+                withContext(Dispatchers.IO) { processCommand(command) }
+            } catch (e: Exception) {
+                Log.e("CAPRI_BUBBLE", "processCommand crashed", e)
+                "something glitched on my end, choom~ try that again."
+            } finally {
+                // Always restore the controls, even if the command failed.
+                thinkingContainer?.visibility = View.GONE
+                inputText.isEnabled = true
+                sendButton?.isEnabled = true
             }
-            thinkingContainer?.visibility = View.GONE
 
             persistentChatHistory.add(Pair("Capri", response))
             addMessageView(themedContext, historyContainer, "Capri", response)
 
-            chatScroll?.layoutParams?.height = dpToPx(240)
-            chatScroll?.requestLayout()
-
-            chatScroll?.post {
-                chatScroll.fullScroll(ScrollView.FOCUS_DOWN)
-            }
+            // No fixed height jump here any more. The window stays the size the user chose.
+            chatScroll?.post { chatScroll.fullScroll(ScrollView.FOCUS_DOWN) }
 
             triggerSpeakingDoublePulse()
-            inputText.isEnabled = true
-            sendButton?.isEnabled = true
-            inputText.setText("")
         }
     }
 
