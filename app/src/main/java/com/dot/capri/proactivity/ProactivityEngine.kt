@@ -222,6 +222,26 @@ class ProactivityEngine(
         return trigger.getDetailedStatus(context, currentApp, now, quickMode)
     }
 
+    private var lastCommentAt: Long = 0L
+    private val COMMENT_COOLDOWN_MS = 15 * 60 * 1000L
+    private var lastMoodCommentAt: Long = 0L
+    private val MOOD_QUIET_COOLDOWN_MS = 60 * 60 * 1000L
+
+    // Mood-only comments: she speaks on her own only when nothing app-specific fired,
+    // the global cooldown has passed, and she's been lonely (quiet) for a while.
+    private fun maybeSpeakMood(now: Long) {
+        val mood = getCurrentMood()
+        if (mood != ProactivityGenerator.Mood.LONELY) return
+        if (now - lastMoodCommentAt < MOOD_QUIET_COOLDOWN_MS) return
+        if (now - lastCommentAt < COMMENT_COOLDOWN_MS) return
+
+        val line = ProactivityGenerator.generateComment(mood, "", 0)
+        lastMoodCommentAt = now
+        lastCommentAt = now
+        Log.d(TAG, "FIRED MoodQuiet \"$line\"")
+        onTriggerComment(line)
+    }
+
     private fun evaluate() {
         val now = System.currentTimeMillis()
 
@@ -253,6 +273,7 @@ class ProactivityEngine(
         val notifComment = CapriNotificationListenerService.checkNotificationGatekeeper()
         if (notifComment != null) {
             Log.d(TAG, "FIRED NotificationGatekeeper \"$notifComment\"")
+            lastCommentAt = now
             onTriggerComment(notifComment)
             return
         }
@@ -272,11 +293,13 @@ class ProactivityEngine(
                 val mood = getCurrentMood()
                 val comment = ProactivityGenerator.generateComment(mood, daypart, trigger.getFireCountToday())
                 Log.d(TAG, "FIRED ${trigger.id} \"$comment\"")
+                lastCommentAt = now
                 onTriggerComment(comment)
                 return
             }
         }
 
         Log.d(TAG, "blocked by noTriggerThresholdMet (app: ${currentApp ?: "none"})")
+        maybeSpeakMood(now)
     }
 }

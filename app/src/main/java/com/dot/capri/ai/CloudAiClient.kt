@@ -57,7 +57,17 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
         val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
         val currentApp = ForegroundAppDetector.currentForegroundApp(context) ?: "none"
         val usageSummary = AppUsageTotals.getUsageSummaryString(context)
+        val currentMood = com.dot.capri.BubbleService.instance
+            ?.getProactivityEngine()
+            ?.getCurrentMood()
+            ?.name
+            ?.lowercase()
+            ?: "neutral"
+
         val contextBlock = "it is $weekday, $time. foreground app: $currentApp.\n" +
+                "your current mood is $currentMood. let it color your tone without ever saying the word mood: " +
+                "pleased = warmer and proud of them, judging = teasing them about screen time, " +
+                "lonely = a little clingy, bored = restless and eager, neutral = normal.\n" +
                 "today's app usage (package, minutes):\n$usageSummary"
 
         val history = synchronized(sessionHistory) { sessionHistory.takeLast(MAX_HISTORY).toList() }
