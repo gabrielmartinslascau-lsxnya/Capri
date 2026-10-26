@@ -25,7 +25,7 @@ android {
     defaultConfig {
         applicationId = "com.dot.capri"
         minSdk = 29
-        targetSdk = 37
+        targetSdk = 34
         versionCode = 6
         versionName = "v6.0"
 
