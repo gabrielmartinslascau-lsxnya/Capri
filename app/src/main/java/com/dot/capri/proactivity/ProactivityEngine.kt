@@ -55,6 +55,9 @@ class ProactivityEngine(
     private var appContinuousStartTime: Long = System.currentTimeMillis()
     private var lastUserInteractionTime = System.currentTimeMillis()
     private var commandCountToday = 0
+    private var commandDay: Int = -1
+
+    private fun todayOfYear(): Int = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
 
     // Watchdog disconnect detection
     private var nullRootStartTime: Long = 0L
@@ -62,8 +65,16 @@ class ProactivityEngine(
 
     fun recordUserInteraction() {
         lastUserInteractionTime = System.currentTimeMillis()
+        if (commandDay != todayOfYear()) {
+            commandDay = todayOfYear()
+            commandCountToday = 0
+        }
         commandCountToday++
     }
+
+    private var heldMood: ProactivityGenerator.Mood? = null
+    private var heldSince: Long = 0L
+    private val MOOD_HOLD_MS = 10 * 60 * 1000L
 
     fun getCurrentMood(): ProactivityGenerator.Mood {
         val prefs = context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
@@ -78,10 +89,7 @@ class ProactivityEngine(
                 "lonely" -> ProactivityGenerator.Mood.LONELY
                 else -> null
             }
-            if (forcedMood != null) {
-                Log.d("CAPRI_MOOD", "computedMood=${forcedMood.name} | inputs=forced_mood_override | forced=true")
-                return forcedMood
-            }
+            if (forcedMood != null) return forcedMood
         }
 
         val now = System.currentTimeMillis()
@@ -92,25 +100,23 @@ class ProactivityEngine(
             appContinuousStartTime = now
         }
 
-        val computed: ProactivityGenerator.Mood
-        val reason: String
+        val commandsToday = if (commandDay == todayOfYear()) commandCountToday else 0
 
-        if (commandCountToday >= 3) {
-            computed = ProactivityGenerator.Mood.PLEASED
-            reason = "commandCountToday=$commandCountToday >= 3"
-        } else if (detectedApp != null && (now - appContinuousStartTime >= 20 * 60 * 1000L)) {
-            computed = ProactivityGenerator.Mood.JUDGING
-            reason = "appContinuousTime >= 20m ($detectedApp)"
-        } else if (now - lastUserInteractionTime >= 30 * 60 * 1000L) {
-            computed = ProactivityGenerator.Mood.LONELY
-            reason = "lastInteraction >= 30m"
-        } else {
-            computed = ProactivityGenerator.Mood.NEUTRAL
-            reason = "default_neutral"
+        val computed: ProactivityGenerator.Mood = when {
+            commandsToday >= 3 -> ProactivityGenerator.Mood.PLEASED
+            detectedApp != null && (now - appContinuousStartTime >= 20 * 60 * 1000L) -> ProactivityGenerator.Mood.JUDGING
+            now - lastUserInteractionTime >= 30 * 60 * 1000L -> ProactivityGenerator.Mood.LONELY
+            else -> ProactivityGenerator.Mood.NEUTRAL
         }
 
-        Log.d("CAPRI_MOOD", "computedMood=${computed.name} | inputs=$reason | forced=false")
-        return computed
+        // Hold a mood for at least 10 minutes before switching, so she doesn't flip with every app switch.
+        val held = heldMood
+        if (held == null || (computed != held && now - heldSince >= MOOD_HOLD_MS)) {
+            heldMood = computed
+            heldSince = now
+            Log.d("CAPRI_MOOD", "mood -> ${computed.name} | commandsToday=$commandsToday")
+        }
+        return heldMood ?: computed
     }
 
     private fun runWatchdogCheck(now: Long) {
