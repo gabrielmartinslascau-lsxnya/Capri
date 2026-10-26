@@ -816,10 +816,13 @@ class BubbleService : Service() {
                 ?: return "accessibility service not enabled. please enable 'Capri' in Android Accessibility settings first, choom~"
 
             withContext(Dispatchers.Main) { chatView?.visibility = View.INVISIBLE }
-            delay(250)
-            val imageBytes = accessibilityService.captureScreenBitmap()
-            val screenTextTree = accessibilityService.dumpScreenTextTree()
-            withContext(Dispatchers.Main) { chatView?.visibility = View.VISIBLE }
+            val (imageBytes, screenTextTree) = try {
+                delay(250)
+                accessibilityService.captureScreenBitmap() to accessibilityService.dumpScreenTextTree()
+            } finally {
+                // Runs even if the capture throws, so the chat can never stay hidden.
+                withContext(Dispatchers.Main) { chatView?.visibility = View.VISIBLE }
+            }
 
             val question = cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }
             val userPrompt = if (screenTextTree.isNotEmpty()) {

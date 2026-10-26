@@ -1,10 +1,21 @@
 package com.dot.capri.personality
 
 import com.dot.capri.intents.Cmd
+import java.util.ArrayDeque
 
 object Personality {
 
-    private var lastResponse: String? = null
+    // Remembers the last 6 lines used, so nothing comes back for a while.
+    private val recentlyUsed = ArrayDeque<String>()
+    private const val RECENT_MEMORY = 6
+
+    private fun pick(pool: List<String>): String {
+        val fresh = pool.filter { it !in recentlyUsed }
+        val choice = fresh.ifEmpty { pool }.random()
+        recentlyUsed.addLast(choice)
+        while (recentlyUsed.size > RECENT_MEMORY) recentlyUsed.removeFirst()
+        return choice
+    }
 
     private val noBrainTemplates = listOf(
         "No brain chip installed, choom~ Add an API key in my settings so my neural net can start cooking!",
@@ -160,28 +171,20 @@ object Personality {
     )
 
     fun noBrainInstalled(): String {
-        val choice = noBrainTemplates.filter { it != lastResponse }.randomOrNull() ?: noBrainTemplates.random()
-        lastResponse = choice
-        return choice
+        return pick(noBrainTemplates)
     }
 
     fun budgetWarning(): String {
-        val choice = budgetWarningTemplates.filter { it != lastResponse }.randomOrNull() ?: budgetWarningTemplates.random()
-        lastResponse = choice
-        return choice
+        return pick(budgetWarningTemplates)
     }
 
     fun budgetExhausted(): String {
-        val choice = budgetExhaustedTemplates.filter { it != lastResponse }.randomOrNull() ?: budgetExhaustedTemplates.random()
-        lastResponse = choice
-        return choice
+        return pick(budgetExhaustedTemplates)
     }
 
     fun respond(cmd: Cmd, success: Boolean): String {
         if (!success && cmd !is Cmd.Unknown) {
-            val res = failureTemplates.filter { it != lastResponse }.randomOrNull() ?: failureTemplates.random()
-            lastResponse = res
-            return res
+            return pick(failureTemplates)
         }
 
         val pool = when (cmd) {
@@ -257,10 +260,7 @@ object Personality {
             }
         }
 
-        val filtered = pool.filter { it != lastResponse }
-        val choice = if (filtered.isNotEmpty()) filtered.random() else pool.random()
-        lastResponse = choice
-        return choice
+        return pick(pool)
     }
 
     fun thinking(): String {
