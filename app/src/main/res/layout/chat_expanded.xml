@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/chat_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -132,7 +131,7 @@
             android:layout_marginStart="8dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/send"
-            app:srcCompat="@drawable/ic_send" />
+            android:src="@drawable/ic_send" />
 
         <ImageButton
             android:id="@+id/close"
@@ -141,7 +140,7 @@
             android:layout_marginStart="4dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/close"
-            app:srcCompat="@drawable/ic_close" />
+            android:src="@drawable/ic_close" />
     </LinearLayout>
 
 </LinearLayout>
