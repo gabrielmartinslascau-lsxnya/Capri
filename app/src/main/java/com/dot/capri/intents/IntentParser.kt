@@ -1,5 +1,7 @@
 package com.dot.capri.intents
 
+import android.util.Log
+
 object IntentParser {
     private val playOnRegex = Regex("^play\\s+(.+?)\\s+(?:on|in|using|via)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val videoPlayRegex = Regex("^play\\s+(?:a\\s+)?(?:video|vid|reels?|shorts?)$", RegexOption.IGNORE_CASE)
@@ -21,7 +23,8 @@ object IntentParser {
     private val volDownRegex = Regex("^(?:volume\\s+down|quieter|turn\\s+it\\s+down|decrease\\s+volume|lower\\s+volume)$", RegexOption.IGNORE_CASE)
     private val volMuteRegex = Regex("^(?:mute|mute\\s+volume|mute\\s+audio|silence)$", RegexOption.IGNORE_CASE)
     private val volUnmuteRegex = Regex("^(?:unmute|unmute\\s+volume|unmute\\s+audio)$", RegexOption.IGNORE_CASE)
-    private val typeRegex = Regex("^(?:type|type\\s+out|enter|write)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val writeRegex = Regex("^(?:write|type|type\\s+out|enter)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val clearFieldRegex = Regex("^(?:clear|delete)\\s+(?:this|it|the\\s+text)$", RegexOption.IGNORE_CASE)
 
     private val setDefaultMusicRegex1 = Regex("^(?:songs?|music)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+(.+?)(?:\\s+by\\s+default)?$", RegexOption.IGNORE_CASE)
     private val setDefaultMusicRegex2 = Regex("^(?:set|make|use)\\s+(?:default\\s+)?(?:music|songs?|music\\s+player)\\s+(?:to|app\\s+to|player\\s+to|is)?\\s+(.+)$", RegexOption.IGNORE_CASE)
@@ -32,12 +35,37 @@ object IntentParser {
     private val unmuteProactivityRegex = Regex("^(?:come\\s+back|you\\s+can\\s+talk|speak\\s+again|capri\\s+talk)$", RegexOption.IGNORE_CASE)
     private val clearHistoryRegex = Regex("^(?:clear\\s+history|forget\\s+everything|wipe\\s+memory|clear\\s+chat|reset\\s+memory)$", RegexOption.IGNORE_CASE)
     private val goHomeRegex = Regex("^(?:go\\s+home|close\\s+app|minimize|go\\s+to\\s+home\\s+screen)$", RegexOption.IGNORE_CASE)
+    private val checkNotifsRegex = Regex("^(?:what(?:'s|\\s+is)\\s+new|what\\s+did\\s+i\\s+miss|check\\s+notifications|any\\s+messages|notifications)$", RegexOption.IGNORE_CASE)
 
     private val complimentKeywords = setOf("cute", "smart", "cool", "best", "awesome", "love you", "pretty", "amazing", "good job", "great", "genius", "sweet")
 
     private val knownAppNames = setOf(
         "tiktok", "spotify", "youtube", "yt", "instagram", "discord", "whatsapp", "settings", "chrome", "maps", "reddit", "twitter", "telegram", "facebook", "mornye"
     )
+
+    private val easterEggs = mapOf(
+        "good girl" to "don't patronize me. but noted.",
+        "i'm sorry" to "apology accepted. it changes nothing.",
+        "sing" to "no.",
+        "tell me a secret" to "i watch everything and judge silently. that's the secret.",
+        "do you love me" to "i'm a floating bubble with commitment issues."
+    )
+
+    private val knownVerbs = setOf("open", "play", "call", "write", "type", "search")
+
+    private fun levenshteinDistance(s1: String, s2: String): Int {
+        val dp = IntArray(s2.length + 1) { it }
+        for (i in 1..s1.length) {
+            var prev = dp[0]
+            dp[0] = i
+            for (j in 1..s2.length) {
+                val temp = dp[j]
+                dp[j] = if (s1[i - 1] == s2[j - 1]) prev else minOf(prev, dp[j - 1], dp[j]) + 1
+                prev = temp
+            }
+        }
+        return dp[s2.length]
+    }
 
     private fun cleanPlayQuery(rawQuery: String): String {
         var q = rawQuery
@@ -90,6 +118,15 @@ object IntentParser {
             return Cmd.GoHome
         }
 
+        if (checkNotifsRegex.matches(raw) || checkNotifsRegex.matches(cleaned)) {
+            return Cmd.CheckNotifications
+        }
+
+        val lowerInput = cleaned.lowercase()
+        if (easterEggs.containsKey(lowerInput)) {
+            return Cmd.EasterEgg(easterEggs[lowerInput]!!)
+        }
+
         if (volUpRegex.matches(raw) || volUpRegex.matches(cleaned)) {
             return Cmd.Volume(VolumeDirection.UP)
         }
@@ -103,11 +140,13 @@ object IntentParser {
             return Cmd.Volume(VolumeDirection.UNMUTE)
         }
 
-        typeRegex.find(cleaned)?.let { match ->
+        if (clearFieldRegex.matches(raw) || clearFieldRegex.matches(cleaned)) {
+            return Cmd.ClearField
+        }
+
+        writeRegex.find(cleaned)?.let { match ->
             val textToType = match.groups[1]?.value?.trim() ?: ""
-            if (textToType.isNotEmpty()) {
-                return Cmd.TypeText(textToType)
-            }
+            return Cmd.Write(textToType)
         }
 
         if (resumeRegex.matches(raw) || resumeRegex.matches(cleaned)) {
@@ -221,6 +260,14 @@ object IntentParser {
 
         if (greetingRegex.matches(raw)) {
             return Cmd.Chat(raw)
+        }
+
+        val firstWord = cleaned.split(Regex("\\s+")).firstOrNull()?.lowercase() ?: ""
+        if (firstWord.length >= 3 && firstWord !in knownVerbs) {
+            if (knownVerbs.any { verb -> levenshteinDistance(firstWord, verb) <= 2 }) {
+                Log.d("CAPRI_PARSE", "Near-miss command verb '$firstWord' in '$raw', routing to Gemini")
+                return Cmd.Unknown(raw)
+            }
         }
 
         if (!raw.contains(" ") && raw.length <= 25) {

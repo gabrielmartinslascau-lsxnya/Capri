@@ -19,6 +19,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
+import com.dot.capri.llm.LlmRouter
 import com.dot.capri.monitor.ForegroundAppDetector
 import com.dot.capri.proactivity.ProactivityEngine
 
@@ -30,8 +31,20 @@ class MainActivity : AppCompatActivity() {
         const val KEY_PROACTIVITY_ENABLED = "proactivity_enabled"
         const val KEY_DEV_DISABLE_QUIET_HOURS = "dev_disable_quiet_hours"
         const val KEY_QUICK_MODE = "quick_mode"
+        const val KEY_ALLOW_TYPING = "allow_typing"
+        const val KEY_HIDE_BUBBLE_DOT = "hide_bubble_dot"
         const val KEY_DEFAULT_MUSIC_PLAYER = "default_music_player"
         const val KEY_DEFAULT_REELS_APP = "default_reels_app"
+
+        fun isAllowTyping(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getBoolean(KEY_ALLOW_TYPING, true)
+        }
+
+        fun isHideBubbleDot(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getBoolean(KEY_HIDE_BUBBLE_DOT, false)
+        }
 
         fun getApiKey(context: Context): String {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -112,7 +125,106 @@ class MainActivity : AppCompatActivity() {
             requestPermissions(permissionsToRequest.toTypedArray(), 101)
         }
 
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // New Navigation Buttons
+        findViewById<Button>(R.id.btn_open_ai_usage).setOnClickListener {
+            startActivity(Intent(this, AiUsageActivity::class.java))
+        }
+
+        findViewById<Button>(R.id.btn_open_health).setOnClickListener {
+            startActivity(Intent(this, HealthActivity::class.java))
+        }
+
+        // Provider Options & Key Fields
+        val activeProviderSpinner = findViewById<Spinner>(R.id.spinner_active_provider)
+        val providerList = listOf("Auto (Priority)", "Gemini", "Anthropic", "OpenRouter")
+        val providerAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, providerList).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        activeProviderSpinner.adapter = providerAdapter
+
+        val currentSavedProvider = prefs.getString(LlmRouter.KEY_ACTIVE_PROVIDER, "auto") ?: "auto"
+        val providerIndex = when (currentSavedProvider.lowercase()) {
+            "gemini" -> 1
+            "anthropic" -> 2
+            "openrouter" -> 3
+            else -> 0
+        }
+        activeProviderSpinner.setSelection(providerIndex)
+
+        activeProviderSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selectedKey = when (position) {
+                    1 -> "gemini"
+                    2 -> "anthropic"
+                    3 -> "openrouter"
+                    else -> "auto"
+                }
+                prefs.edit().putString(LlmRouter.KEY_ACTIVE_PROVIDER, selectedKey).apply()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         val apiKeyInput = findViewById<EditText>(R.id.input_api_key)
+        val anthropicKeyInput = findViewById<EditText>(R.id.input_anthropic_key)
+        val openRouterKeyInput = findViewById<EditText>(R.id.input_openrouter_key)
+
+        apiKeyInput.setText(prefs.getString(KEY_GEMINI_API_KEY, ""))
+        anthropicKeyInput.setText(prefs.getString(LlmRouter.KEY_ANTHROPIC_API_KEY, ""))
+        openRouterKeyInput.setText(prefs.getString(LlmRouter.KEY_OPENROUTER_API_KEY, ""))
+
+        apiKeyInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val key = s?.toString()?.trim() ?: ""
+                prefs.edit().putString(KEY_GEMINI_API_KEY, key).apply()
+                android.util.Log.d("CAPRI_KEYS", "Gemini API key updated instantly (length=${key.length}, blank=${key.isBlank()})")
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        anthropicKeyInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val key = s?.toString()?.trim() ?: ""
+                prefs.edit().putString(LlmRouter.KEY_ANTHROPIC_API_KEY, key).apply()
+                android.util.Log.d("CAPRI_KEYS", "Anthropic API key updated instantly (length=${key.length}, blank=${key.isBlank()})")
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        openRouterKeyInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val key = s?.toString()?.trim() ?: ""
+                prefs.edit().putString(LlmRouter.KEY_OPENROUTER_API_KEY, key).apply()
+                android.util.Log.d("CAPRI_KEYS", "OpenRouter API key updated instantly (length=${key.length}, blank=${key.isBlank()})")
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        // Force Mood Spinner
+        val forcedMoodSpinner = findViewById<Spinner>(R.id.spinner_forced_mood)
+        val moodList = listOf("None", "Judging", "Pleased", "Bored", "Neutral", "Lonely")
+        val moodAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, moodList).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        forcedMoodSpinner.adapter = moodAdapter
+
+        val savedForcedMood = prefs.getString("forced_mood", "none") ?: "none"
+        val forcedMoodIndex = moodList.indexOfFirst { it.equals(savedForcedMood, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+        forcedMoodSpinner.setSelection(forcedMoodIndex)
+
+        forcedMoodSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selectedMood = moodList[position].lowercase()
+                prefs.edit().putString("forced_mood", selectedMood).apply()
+                updateDebugTriggersInfo()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         val proactivitySwitch = findViewById<SwitchCompat>(R.id.switch_proactivity)
         val quietHoursSwitch = findViewById<SwitchCompat>(R.id.switch_dev_quiet_hours)
         val quickModeSwitch = findViewById<SwitchCompat>(R.id.switch_dev_reduce_thresholds)
@@ -124,12 +236,6 @@ class MainActivity : AppCompatActivity() {
         val resetFireCountsBtn = findViewById<Button>(R.id.btn_reset_fire_counts)
         val usageStatsBtn = findViewById<Button>(R.id.btn_enable_usage_stats)
         val enableBtn = findViewById<Button>(R.id.btn_enable_bubble)
-
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val savedKey = prefs.getString(KEY_GEMINI_API_KEY, "")
-        if (!savedKey.isNullOrBlank()) {
-            apiKeyInput.setText(savedKey)
-        }
 
         val candidateMusicApps = listOf(
             "Spotify" to "com.spotify.music",
@@ -199,6 +305,19 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
+        val allowTypingSwitch = findViewById<SwitchCompat>(R.id.switch_allow_typing)
+        allowTypingSwitch.isChecked = prefs.getBoolean(KEY_ALLOW_TYPING, true)
+        allowTypingSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(KEY_ALLOW_TYPING, isChecked).apply()
+        }
+
+        val hideBubbleSwitch = findViewById<SwitchCompat>(R.id.switch_hide_bubble)
+        hideBubbleSwitch.isChecked = prefs.getBoolean(KEY_HIDE_BUBBLE_DOT, false)
+        hideBubbleSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(KEY_HIDE_BUBBLE_DOT, isChecked).apply()
+            BubbleService.instance?.refreshBubbleVisibility()
+        }
+
         proactivitySwitch.isChecked = prefs.getBoolean(KEY_PROACTIVITY_ENABLED, true)
         proactivitySwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(KEY_PROACTIVITY_ENABLED, isChecked).apply()
@@ -239,9 +358,34 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val notifAccessBtn = findViewById<Button>(R.id.btn_enable_notif_access)
+        notifAccessBtn.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+
+        val defaultAssistantBtn = findViewById<Button>(R.id.btn_set_default_assistant)
+        defaultAssistantBtn.setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS))
+            } catch (e: Exception) {
+                try {
+                    startActivity(Intent("android.settings.VOICE_INPUT_SETTINGS"))
+                } catch (ex: Exception) {
+                    Toast.makeText(this, "Go to Settings > Apps > Default Apps > Digital Assistant App and select Capri", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
         enableBtn.setOnClickListener {
             val keyEntered = apiKeyInput.text.toString().trim()
-            prefs.edit().putString(KEY_GEMINI_API_KEY, keyEntered).apply()
+            val anthropicEntered = anthropicKeyInput.text.toString().trim()
+            val openRouterEntered = openRouterKeyInput.text.toString().trim()
+
+            prefs.edit()
+                .putString(KEY_GEMINI_API_KEY, keyEntered)
+                .putString(LlmRouter.KEY_ANTHROPIC_API_KEY, anthropicEntered)
+                .putString(LlmRouter.KEY_OPENROUTER_API_KEY, openRouterEntered)
+                .apply()
 
             if (!Settings.canDrawOverlays(this)) {
                 requestOverlayPermission()

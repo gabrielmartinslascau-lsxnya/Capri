@@ -50,4 +50,25 @@ class PersonalityTest {
         val label = Personality.thinking()
         assertTrue(label.isNotEmpty())
     }
+
+    @Test
+    fun testNoBrainInstalled() {
+        val response = Personality.noBrainInstalled()
+        assertTrue(response.isNotEmpty())
+        assertTrue(response.contains("choom") || response.contains("netrunner") || response.contains("brain"))
+    }
+
+    @Test
+    fun testBudgetWarning() {
+        val response = Personality.budgetWarning()
+        assertTrue(response.isNotEmpty())
+        assertTrue(response.contains("choom") || response.contains("netrunner") || response.contains("brain"))
+    }
+
+    @Test
+    fun testBudgetExhausted() {
+        val response = Personality.budgetExhausted()
+        assertTrue(response.isNotEmpty())
+        assertTrue(response.contains("choom") || response.contains("netrunner") || response.contains("brain"))
+    }
 }

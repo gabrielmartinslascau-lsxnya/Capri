@@ -93,4 +93,34 @@ class IntentParserTest {
         val cmd = IntentParser.parse("do a flip")
         assertEquals(Cmd.Unknown("do a flip"), cmd)
     }
+
+    @Test
+    fun testParseWriteAndClear() {
+        val cmd1 = IntentParser.parse("write on my way")
+        assertEquals(Cmd.Write("on my way"), cmd1)
+
+        val cmd2 = IntentParser.parse("type hello world")
+        assertEquals(Cmd.Write("hello world"), cmd2)
+
+        val cmd3 = IntentParser.parse("clear this")
+        assertEquals(Cmd.ClearField, cmd3)
+
+        val cmd4 = IntentParser.parse("delete it")
+        assertEquals(Cmd.ClearField, cmd4)
+
+        val cmd5 = IntentParser.parse("clear the text")
+        assertEquals(Cmd.ClearField, cmd5)
+    }
+
+    @Test
+    fun testParseTypoToleranceNearMissRouting() {
+        val cmd1 = IntentParser.parse("opne spoitfy")
+        assertEquals(Cmd.Unknown("opne spoitfy"), cmd1)
+
+        val cmd2 = IntentParser.parse("serach capybaras")
+        assertEquals(Cmd.Unknown("serach capybaras"), cmd2)
+
+        val cmd3 = IntentParser.parse("writ ehi")
+        assertEquals(Cmd.Unknown("writ ehi"), cmd3)
+    }
 }

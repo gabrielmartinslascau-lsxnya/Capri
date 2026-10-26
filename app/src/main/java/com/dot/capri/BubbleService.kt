@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -29,8 +30,11 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.dot.capri.accessibility.ScreenWriter
+import com.dot.capri.accessibility.WriteResult
 import com.dot.capri.ai.CloudAiClient
 import com.dot.capri.ai.OnDeviceAiClient
+import com.dot.capri.llm.LlmRouter
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentExecutor
 import com.dot.capri.intents.IntentParser
@@ -58,6 +62,7 @@ class BubbleService : Service() {
         var instance: BubbleService? = null
 
         private val persistentChatHistory = mutableListOf<Pair<String, String>>()
+        fun getPersistentChatHistory(): MutableList<Pair<String, String>> = persistentChatHistory
     }
 
     private var windowManager: WindowManager? = null
@@ -70,6 +75,10 @@ class BubbleService : Service() {
     private var chatView: View? = null
     private var bannerView: View? = null
     private var proactivityEngine: ProactivityEngine? = null
+
+    private var lastWriteTimestamp = 0L
+    private var pendingDraftText: String? = null
+    private val easterEggCounts = mutableMapOf<String, Int>()
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -142,7 +151,16 @@ class BubbleService : Service() {
         }
     }
 
+    fun refreshBubbleVisibility() {
+        if (MainActivity.isHideBubbleDot(this)) {
+            removeBubble()
+        } else {
+            showBubble()
+        }
+    }
+
     fun showBubble() {
+        if (MainActivity.isHideBubbleDot(this)) return
         if (bubbleView != null) return
 
         val themedContext = ContextThemeWrapper(this, R.style.Theme_Capri)
@@ -169,7 +187,26 @@ class BubbleService : Service() {
         var initialTouchY = 0f
         var isDragging = false
 
+        val gestureDetector = android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                if (!isDragging) {
+                    triggerHapticFeedback()
+                    onBubbleClick()
+                    return true
+                }
+                return false
+            }
+
+            override fun onLongPress(e: MotionEvent) {
+                if (!isDragging) {
+                    triggerHapticFeedback()
+                    onBubbleClick()
+                }
+            }
+        })
+
         bubbleView?.setOnTouchListener { view, event ->
+            gestureDetector.onTouchEvent(event)
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params.x
@@ -184,7 +221,7 @@ class BubbleService : Service() {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
-                    if (abs(dx) > 12 || abs(dy) > 12) {
+                    if (abs(dx) > 30 || abs(dy) > 30) {
                         isDragging = true
                     }
                     if (isDragging) {
@@ -194,8 +231,8 @@ class BubbleService : Service() {
                     }
                     true
                 }
-                MotionEvent.ACTION_UP -> {
-                    if (!isDragging) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (!isDragging && event.action == MotionEvent.ACTION_UP) {
                         view.performClick()
                         triggerHapticFeedback()
                         onBubbleClick()
@@ -209,8 +246,12 @@ class BubbleService : Service() {
             }
         }
 
-        windowManager?.addView(bubbleView, params)
-        bubbleView?.let { startBubblePulseAnimation(it) }
+        try {
+            windowManager?.addView(bubbleView, params)
+            bubbleView?.let { startBubblePulseAnimation(it) }
+        } catch (e: Exception) {
+            Log.e("CAPRI_BUBBLE", "Failed to add bubble view to WindowManager", e)
+        }
     }
 
     private fun startBubblePulseAnimation(view: View) {
@@ -254,8 +295,26 @@ class BubbleService : Service() {
         pulseAnimatorY = null
     }
 
+    private fun postNotificationReminder(text: String) {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Capri")
+                .setContentText(text)
+                .setSmallIcon(R.drawable.ic_bubble_chat)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true)
+                .build()
+            notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), notification)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun showProactiveComment(text: String) {
         if (chatView != null || bannerView != null) return
+
+        postNotificationReminder(text)
 
         bubbleView?.let { bView ->
             bView.setBackgroundResource(resolveBubbleAsset(BubbleState.COMMENTING))
@@ -281,11 +340,6 @@ class BubbleService : Service() {
         val bannerText = bView.findViewById<TextView>(R.id.banner_text)
         bannerText.text = text
 
-        val currentParams = bubbleParams ?: WindowManager.LayoutParams().apply {
-            x = 32
-            y = 200
-        }
-
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -293,9 +347,26 @@ class BubbleService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = currentParams.x
-            y = currentParams.y + 160
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = 120
+        }
+
+        val chipShutUp = bView.findViewById<TextView>(R.id.chip_shut_up)
+        val chipMyTotals = bView.findViewById<TextView>(R.id.chip_my_totals)
+
+        chipShutUp?.setOnClickListener {
+            proactivityEngine?.muteFor(1)
+            removeBannerView()
+        }
+
+        chipMyTotals?.setOnClickListener {
+            removeBannerView()
+            expandToChat()
+            val summary = com.dot.capri.monitor.AppUsageTotals.getTopAppsSummary(this)
+            val themedContext = ContextThemeWrapper(this, R.style.Theme_Capri)
+            val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
+            persistentChatHistory.add(Pair("Capri", summary))
+            addMessageView(themedContext, historyContainer, "Capri", summary)
         }
 
         bView.setOnClickListener {
@@ -311,7 +382,7 @@ class BubbleService : Service() {
         }
 
         serviceScope.launch {
-            delay(4000)
+            delay(6000)
             bView.animate()
                 .alpha(0f)
                 .setDuration(300)
@@ -444,7 +515,17 @@ class BubbleService : Service() {
             }
         }
 
-        windowManager?.addView(chatView, params)
+        try {
+            windowManager?.addView(chatView, params)
+        } catch (e: Exception) {
+            Log.e("CAPRI_BUBBLE", "Failed to add chat view to WindowManager", e)
+        }
+
+        inputText?.requestFocus()
+        inputText?.postDelayed({
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.showSoftInput(inputText, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+        }, 150)
     }
 
     private fun addMessageView(context: Context, container: LinearLayout?, speaker: String, text: String) {
@@ -470,7 +551,7 @@ class BubbleService : Service() {
     private fun updateStatusIndicator() {
         val statusView = chatView?.findViewById<TextView>(R.id.status_indicator) ?: return
         val hasOnDeviceAi = OnDeviceAiClient.isAvailable(this)
-        val hasKey = MainActivity.getApiKey(this).isNotBlank()
+        val hasKey = LlmRouter.hasAnyApiKey(this)
         val online = NetworkUtils.isOnline(this) && hasKey
 
         if (hasOnDeviceAi || online) {
@@ -511,6 +592,8 @@ class BubbleService : Service() {
 
         val themedContext = ContextThemeWrapper(this, R.style.Theme_Capri)
 
+        proactivityEngine?.recordUserInteraction()
+
         persistentChatHistory.add(Pair("You", command))
         addMessageView(themedContext, historyContainer, "You", command)
 
@@ -542,9 +625,56 @@ class BubbleService : Service() {
         }
     }
 
+    private fun executeWriteCommand(text: String): String {
+        if (!MainActivity.isAllowTyping(this)) {
+            return "typing is disabled in my settings."
+        }
+        if (text.isBlank()) {
+            return "write what, exactly."
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastWriteTimestamp < 5000L) {
+            return "give the field a second to breathe."
+        }
+
+        val result = ScreenWriter.writeToFocusedField(text)
+        if (result is WriteResult.Success) {
+            lastWriteTimestamp = now
+            return "done. send it before you overthink it."
+        }
+        return when (result) {
+            is WriteResult.NoField -> "nowhere to write. tap a text field first."
+            is WriteResult.OwnChatFocused -> "i'm not typing into my own chat. that's weird."
+            is WriteResult.Failed -> "couldn't type that. the field said no."
+            else -> "couldn't type that. the field said no."
+        }
+    }
+
+    private fun executeClearFieldCommand(): String {
+        if (!MainActivity.isAllowTyping(this)) {
+            return "typing is disabled in my settings."
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastWriteTimestamp < 5000L) {
+            return "give the field a second to breathe."
+        }
+
+        val result = ScreenWriter.clearFocusedField()
+        if (result is WriteResult.Success) {
+            lastWriteTimestamp = now
+            return "done. send it before you overthink it."
+        }
+        return when (result) {
+            is WriteResult.NoField -> "nowhere to write. tap a text field first."
+            is WriteResult.OwnChatFocused -> "i'm not typing into my own chat. that's weird."
+            is WriteResult.Failed -> "couldn't type that. the field said no."
+            else -> "couldn't type that. the field said no."
+        }
+    }
+
     private fun executeEmbeddedActionTag(response: String): String {
         var cleanResponse = response
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE):([^]]+)\\]", RegexOption.IGNORE_CASE)
         val match = actionRegex.find(response)
         if (match != null) {
             val (actionType, rawTarget) = match.destructured
@@ -567,7 +697,7 @@ class BubbleService : Service() {
                     }
                     Cmd.Volume(dir)
                 }
-                "TYPE" -> Cmd.TypeText(rawTarget.trim())
+                "TYPE", "WRITE" -> Cmd.Write(rawTarget.trim())
                 "CALL" -> Cmd.Call(rawTarget.trim())
                 "TEXT" -> {
                     val parts = rawTarget.split(":")
@@ -581,6 +711,9 @@ class BubbleService : Service() {
                 else -> null
             }
             if (cmd != null) {
+                if (cmd is Cmd.Write) {
+                    return executeWriteCommand(cmd.text)
+                }
                 IntentExecutor.execute(this, cmd)
             }
             cleanResponse = response.replace(match.value, "").trim()
@@ -589,7 +722,58 @@ class BubbleService : Service() {
     }
 
     private suspend fun processCommand(text: String): String {
+        val trimmedInput = text.trim()
+
+        if (pendingDraftText != null) {
+            val draft = pendingDraftText!!
+            pendingDraftText = null
+            val confirmRegex = Regex("^(?:yes|sure|go|yeah|yep|do it|ok|okay)$", RegexOption.IGNORE_CASE)
+            if (confirmRegex.matches(trimmedInput)) {
+                return executeWriteCommand(draft)
+            }
+        }
+
         val cmd = IntentParser.parse(text)
+
+        if (cmd is Cmd.CheckNotifications) {
+            return com.dot.capri.monitor.CapriNotificationListenerService.getRecentSummary()
+        }
+
+        if (cmd is Cmd.EasterEgg) {
+            val count = easterEggCounts.getOrPut(cmd.response) { 0 }
+            if (count >= 5) {
+                return "that's enough of that."
+            }
+            easterEggCounts[cmd.response] = count + 1
+            Log.d("CAPRI_EGG", "Easter egg triggered: '${cmd.response}' (uses: ${count + 1})")
+            return cmd.response
+        }
+
+        if (cmd is Cmd.Write || cmd is Cmd.TypeText) {
+            val writeText = if (cmd is Cmd.Write) cmd.text else (cmd as Cmd.TypeText).text
+            val smartComposeRegex = Regex("^(?:about\\s+(.+)|write\\s+about\\s+(.+))$", RegexOption.IGNORE_CASE)
+            val match = smartComposeRegex.find(writeText)
+            if (match != null) {
+                val topic = (match.groups[1]?.value ?: match.groups[2]?.value ?: "").trim()
+                val prompt = "write a short message about: $topic. max 2 sentences. match a casual texting tone. no quotes, no preamble, just the message text."
+                val cloudResult = CloudAiClient.generateResponse(this, prompt)
+                if (cloudResult.isSuccess) {
+                    var draft = cloudResult.getOrNull()?.trim() ?: ""
+                    draft = draft.removeSurrounding("\"").removeSurrounding("'")
+                    if (draft.isNotEmpty()) {
+                        pendingDraftText = draft
+                        return "$draft\n\nwant me to put it in the field?"
+                    }
+                }
+                return "couldn't write about that."
+            } else {
+                return executeWriteCommand(writeText)
+            }
+        }
+
+        if (cmd is Cmd.ClearField) {
+            return executeClearFieldCommand()
+        }
 
         if (cmd is Cmd.MuteProactivity) {
             proactivityEngine?.muteFor(4)
@@ -608,14 +792,14 @@ class BubbleService : Service() {
         }
 
         if (cmd is Cmd.SeeScreen) {
-            val hasKey = MainActivity.getApiKey(this).isNotBlank()
+            val hasKey = LlmRouter.hasAnyApiKey(this)
             val isOnline = NetworkUtils.isOnline(this) && hasKey
             if (!isOnline) {
-                return "Need api key and internet to see screen pixels, choom~"
+                return "need api key and internet to see screen pixels, choom~"
             }
             val accessibilityService = CapriAccessibilityService.instance
             if (accessibilityService == null) {
-                return "Accessibility service not enabled. Please enable 'Capri' in Android Accessibility settings first, choom~"
+                return "accessibility service not enabled. please enable 'Capri' in Android Accessibility settings first, choom~"
             }
 
             withContext(Dispatchers.Main) {
@@ -624,27 +808,30 @@ class BubbleService : Service() {
             delay(250)
 
             val imageBytes = accessibilityService.captureScreenBitmap()
+            val screenTextTree = accessibilityService.dumpScreenTextTree()
 
             withContext(Dispatchers.Main) {
                 chatView?.visibility = View.VISIBLE
             }
 
-            if (imageBytes != null) {
-                val cloudResult = CloudAiClient.generateResponse(this, cmd.prompt.ifBlank { "what is visible on this screen? read any text, identify the photo or tiktok video and describe it thoroughly in character." }, imageBytes)
-                if (cloudResult.isSuccess) {
-                    val textResponse = cloudResult.getOrNull()
-                    if (!textResponse.isNullOrBlank()) {
-                        return executeEmbeddedActionTag(textResponse)
-                    }
-                }
-                return "Couldn't analyze the screenshot bytes, choom~"
+            val userPrompt = if (screenTextTree.isNotEmpty()) {
+                "${cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }}\n\n[Extracted On-Screen Text/Elements]:\n$screenTextTree"
             } else {
-                return "Failed to take screenshot via accessibility service, choom~"
+                cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }
             }
+
+            val cloudResult = CloudAiClient.generateResponse(this, userPrompt, imageBytes)
+            if (cloudResult.isSuccess) {
+                val textResponse = cloudResult.getOrNull()
+                if (!textResponse.isNullOrBlank()) {
+                    return executeEmbeddedActionTag(textResponse)
+                }
+            }
+            return "couldn't analyze what's on screen, choom~"
         }
 
         if (cmd is Cmd.Search) {
-            val hasKey = MainActivity.getApiKey(this).isNotBlank()
+            val hasKey = LlmRouter.hasAnyApiKey(this)
             val isOnline = NetworkUtils.isOnline(this) && hasKey
             if (isOnline) {
                 val cloudResult = CloudAiClient.generateResponse(this, text)
@@ -673,7 +860,7 @@ class BubbleService : Service() {
             }
         }
 
-        val hasKey = MainActivity.getApiKey(this).isNotBlank()
+        val hasKey = LlmRouter.hasAnyApiKey(this)
         val isOnline = NetworkUtils.isOnline(this) && hasKey
         if (isOnline) {
             val cloudResult = CloudAiClient.generateResponse(this, text)

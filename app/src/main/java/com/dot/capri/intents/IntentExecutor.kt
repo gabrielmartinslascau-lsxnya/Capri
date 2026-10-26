@@ -37,6 +37,8 @@ object IntentExecutor {
                 is Cmd.MediaControl -> executeMediaControl(context, cmd)
                 is Cmd.Volume -> executeVolume(context, cmd)
                 is Cmd.TypeText -> executeTypeText(cmd)
+                is Cmd.Write -> com.dot.capri.accessibility.ScreenWriter.writeToFocusedField(cmd.text) is com.dot.capri.accessibility.WriteResult.Success
+                is Cmd.ClearField -> com.dot.capri.accessibility.ScreenWriter.clearFocusedField() is com.dot.capri.accessibility.WriteResult.Success
                 is Cmd.Call -> executeCall(context, cmd)
                 is Cmd.Text -> executeText(context, cmd)
                 is Cmd.Open -> executeOpen(context, cmd)
@@ -45,6 +47,8 @@ object IntentExecutor {
                 is Cmd.Search -> false
                 is Cmd.SeeScreen -> true
                 is Cmd.ClearHistory -> true
+                is Cmd.EasterEgg -> true
+                is Cmd.CheckNotifications -> true
                 is Cmd.Chat, is Cmd.Compliment, is Cmd.Mention, Cmd.MuteProactivity, Cmd.UnmuteProactivity -> true
                 is Cmd.Unknown -> false
             }

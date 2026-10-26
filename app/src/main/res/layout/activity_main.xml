@@ -37,13 +37,93 @@
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
-        <EditText
-            android:id="@+id/input_api_key"
+        <!-- Navigation Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_open_ai_usage"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#2E7D32"
+                android:text="AI Usage Dashboard"
+                android:textColor="@color/white"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btn_open_health"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:backgroundTint="#1565C0"
+                android:text="Capri Health Status"
+                android:textColor="@color/white"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Provider Selection -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:text="Active AI Provider"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinner_active_provider"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="10dp"
             android:background="@drawable/bg_input_field"
-            android:hint="@string/api_key_hint"
+            android:minHeight="48dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
+
+        <EditText
+            android:id="@+id/input_api_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_input_field"
+            android:hint="Gemini API Key"
+            android:inputType="textPassword"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/input_anthropic_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_input_field"
+            android:hint="Anthropic (Claude) API Key"
+            android:inputType="textPassword"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/input_openrouter_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_input_field"
+            android:hint="OpenRouter API Key"
             android:inputType="textPassword"
             android:minHeight="48dp"
             android:paddingStart="16dp"
@@ -103,6 +183,30 @@
             android:textColor="@color/text_primary"
             android:textSize="13sp" />
 
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_allow_typing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:checked="true"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="Allow Capri to type into other apps"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_hide_bubble"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:checked="false"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="Hide floating bubble dot (Power Button &amp; Top Banners)"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
         <Button
             android:id="@+id/btn_enable_usage_stats"
             android:layout_width="match_parent"
@@ -112,6 +216,30 @@
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="@string/enable_usage_stats"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_enable_notif_access"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/input_bg"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="Enable Notification Gatekeeper"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_set_default_assistant"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/input_bg"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="Set Capri as Default Assistant (Power Button)"
             android:textColor="@color/text_primary"
             android:textSize="13sp" />
 
@@ -135,6 +263,25 @@
             android:textColor="@color/accent_red_pink"
             android:textSize="13sp"
             android:textStyle="bold" />
+
+        <!-- Force Mood Developer Override -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="2dp"
+            android:text="Force Mood Override"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinner_forced_mood"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_input_field"
+            android:minHeight="48dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
 
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/switch_dev_quiet_hours"

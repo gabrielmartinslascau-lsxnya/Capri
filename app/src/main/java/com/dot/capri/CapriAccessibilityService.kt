@@ -1,7 +1,10 @@
 package com.dot.capri
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.graphics.Bitmap
+import android.graphics.Path
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.Display
@@ -84,6 +87,57 @@ class CapriAccessibilityService : AccessibilityService() {
                 e.printStackTrace()
                 continuation.resume(null)
             }
+        }
+    }
+
+    fun tapNode(node: AccessibilityNodeInfo, onComplete: ((Boolean) -> Unit)? = null) {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        val x = bounds.centerX().toFloat()
+        val y = bounds.centerY().toFloat()
+        if (x <= 0 || y <= 0) {
+            onComplete?.invoke(false)
+            return
+        }
+        val path = Path().apply {
+            moveTo(x, y)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+            .build()
+        dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                onComplete?.invoke(true)
+            }
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                onComplete?.invoke(false)
+            }
+        }, null)
+    }
+
+    fun dumpScreenTextTree(): String {
+        val root = rootInActiveWindow ?: return ""
+        val sb = StringBuilder()
+        val pkg = root.packageName?.toString() ?: ""
+        if (pkg.isNotEmpty()) {
+            sb.append("Foreground Package: $pkg\n")
+        }
+        traverseNodeTree(root, sb)
+        return sb.toString().trim()
+    }
+
+    private fun traverseNodeTree(node: AccessibilityNodeInfo?, sb: StringBuilder) {
+        if (node == null) return
+        val text = node.text?.toString()?.trim()
+        val contentDesc = node.contentDescription?.toString()?.trim()
+        if (!text.isNullOrEmpty()) {
+            sb.append("- $text\n")
+        } else if (!contentDesc.isNullOrEmpty()) {
+            sb.append("- [desc]: $contentDesc\n")
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            traverseNodeTree(child, sb)
         }
     }
 }

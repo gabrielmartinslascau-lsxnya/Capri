@@ -13,6 +13,8 @@ sealed interface Cmd {
     data class MediaControl(val action: MediaAction) : Cmd
     data class Volume(val direction: VolumeDirection) : Cmd
     data class TypeText(val text: String) : Cmd
+    data class Write(val text: String) : Cmd
+    object ClearField : Cmd
     data class Call(val contact: String) : Cmd
     data class Text(val contact: String, val message: String?) : Cmd
     data class Open(val app: String) : Cmd
@@ -26,5 +28,7 @@ sealed interface Cmd {
     object UnmuteProactivity : Cmd
     object ClearHistory : Cmd
     object GoHome : Cmd
+    object CheckNotifications : Cmd
+    data class EasterEgg(val response: String) : Cmd
     data class Unknown(val raw: String) : Cmd
 }

@@ -6,6 +6,25 @@ object Personality {
 
     private var lastResponse: String? = null
 
+    private val noBrainTemplates = listOf(
+        "No brain chip installed, choom~ Add an API key in my settings so my neural net can start cooking!",
+        "No brain installed, choom~ Pop an API key into my settings and let's get this construct fully operational!",
+        "My brain's offline, netrunner~ Add an API key in settings so I can actually think for you!",
+        "U-um, no brain chip in my slot yet... Add an API key in settings, choom~"
+    )
+
+    private val budgetWarningTemplates = listOf(
+        "Heads up, choom~ I'm almost out of brain processing power for today!",
+        "Heads up, netrunner~ My daily neural bandwidth is almost running on empty...",
+        "Just a heads up, choom~ My daily brain quota hit 90%! Almost out of steam for today~"
+    )
+
+    private val budgetExhaustedTemplates = listOf(
+        "Brain's done for today, choom~ The free version of me wasn't actually free, turns out!",
+        "Neural processing exhausted for today, netrunner~ Turns out running my construct takes serious eddies!",
+        "Brain chip resting for the night, choom~ Recharged and back online tomorrow~"
+    )
+
     private val playSuccessTemplatesWithApp = listOf(
         "Ooo, playing {q} on {app}~ Too bad I can't hear it, choom.",
         "Playing {q} on {app}. Setting the net-vibe for my host~",
@@ -140,6 +159,24 @@ object Personality {
         "Analyzing pixels..."
     )
 
+    fun noBrainInstalled(): String {
+        val choice = noBrainTemplates.filter { it != lastResponse }.randomOrNull() ?: noBrainTemplates.random()
+        lastResponse = choice
+        return choice
+    }
+
+    fun budgetWarning(): String {
+        val choice = budgetWarningTemplates.filter { it != lastResponse }.randomOrNull() ?: budgetWarningTemplates.random()
+        lastResponse = choice
+        return choice
+    }
+
+    fun budgetExhausted(): String {
+        val choice = budgetExhaustedTemplates.filter { it != lastResponse }.randomOrNull() ?: budgetExhaustedTemplates.random()
+        lastResponse = choice
+        return choice
+    }
+
     fun respond(cmd: Cmd, success: Boolean): String {
         if (!success && cmd !is Cmd.Unknown) {
             val res = failureTemplates.filter { it != lastResponse }.randomOrNull() ?: failureTemplates.random()
@@ -162,8 +199,17 @@ object Personality {
             is Cmd.Volume -> {
                 volumeTemplates
             }
-            is Cmd.TypeText -> {
+            is Cmd.TypeText, is Cmd.Write -> {
                 typeTextTemplates
+            }
+            is Cmd.ClearField -> {
+                listOf("done. send it before you overthink it.")
+            }
+            is Cmd.EasterEgg -> {
+                listOf(cmd.response)
+            }
+            is Cmd.CheckNotifications -> {
+                listOf("checking notifications...")
             }
             is Cmd.Call -> {
                 callTemplates.map { it.replace("{c}", cmd.contact) }

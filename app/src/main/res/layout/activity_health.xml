@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Capri Health Status"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Single source of truth for system capabilities &amp; AI status"
+            android:textColor="#888888"
+            android:textSize="12sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="#333333" />
+
+        <!-- 1. Overlay Permission -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_overlay"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_overlay"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Overlay Permission: Disabled"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_fix_overlay"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fix" />
+        </LinearLayout>
+
+        <!-- 2. Accessibility -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_accessibility"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_accessibility"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Accessibility: Disconnected"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_fix_accessibility"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fix" />
+        </LinearLayout>
+
+        <!-- 3. Usage Stats -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_usage_stats"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_usage_stats"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Usage Stats: Disabled"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_fix_usage_stats"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fix" />
+        </LinearLayout>
+
+        <!-- 4. Notification Listener -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_notif_listener"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_notif_listener"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Notification Listener: Disabled"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_fix_notif_listener"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fix" />
+        </LinearLayout>
+
+        <!-- Sideloaded Helper Card -->
+        <LinearLayout
+            android:id="@+id/card_sideload_helper"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginVertical="4dp"
+            android:background="#262600"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sideloaded Install Helper"
+                android:textColor="#FFEB3B"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="If notification settings are grayed out: Open Android App Info for Capri -> Top-right 3 dots -> 'Allow restricted settings'."
+                android:textColor="#FFFF8D"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 5. Default Assistant -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_default_assistant"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_default_assistant"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Default Assistant: Other / None"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_fix_default_assistant"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fix" />
+        </LinearLayout>
+
+        <!-- 6. Battery Exemption -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_battery_exemption"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_battery_exemption"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Battery Exemption: Unoptimized"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_fix_battery_exemption"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fix" />
+        </LinearLayout>
+
+        <!-- 7. AI Core Status -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_ai_core"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_ai_core"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="AI Core: Local-Only (No Key)"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="#333333" />
+
+        <!-- 8. Typing Self-Test Scratch Field -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Typing Self-Test Target"
+            android:textColor="#BBBBBB"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/scratch_typing_field"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:background="#222222"
+            android:hint="Focus here to test typing ladder..."
+            android:padding="8dp"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#777777" />
+
+        <Button
+            android:id="@+id/btn_run_typing_test"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Run Typing Self-Test" />
+
+        <TextView
+            android:id="@+id/tv_typing_test_result"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Test result: Not run yet"
+            android:textColor="#00E676"
+            android:textSize="13sp" />
+
+    </LinearLayout>
+
+</ScrollView>

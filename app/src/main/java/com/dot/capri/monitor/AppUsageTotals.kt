@@ -14,6 +14,25 @@ object AppUsageTotals {
         return ms / (60 * 1000L)
     }
 
+    fun totalScreenTimeTodayMinutes(context: Context): Long {
+        refreshIfNeeded(context)
+        val totalMs = usageMap.values.sum()
+        return totalMs / (60 * 1000L)
+    }
+
+    fun getTopAppsSummary(context: Context): String {
+        refreshIfNeeded(context)
+        val sb = StringBuilder()
+        val sorted = usageMap.entries.sortedByDescending { it.value }
+        for ((pkg, ms) in sorted.take(3)) {
+            val mins = ms / (60 * 1000L)
+            if (mins > 0) {
+                sb.append("- $pkg: ${mins}m\n")
+            }
+        }
+        return sb.toString().trim().ifEmpty { "no app usage recorded today." }
+    }
+
     fun getUsageSummaryString(context: Context): String {
         refreshIfNeeded(context)
         val sb = StringBuilder()
