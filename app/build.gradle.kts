@@ -52,6 +52,10 @@ android {
     }
 }
 
+base {
+    archivesName.set("Capri-v6.0")
+}
+
 dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
