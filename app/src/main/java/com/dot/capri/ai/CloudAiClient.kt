@@ -57,6 +57,9 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
         val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
         val currentApp = ForegroundAppDetector.currentForegroundApp(context) ?: "none"
         val usageSummary = AppUsageTotals.getUsageSummaryString(context)
+        val batteryPct = (context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager)
+            .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+
         val currentMood = com.dot.capri.BubbleService.instance
             ?.getProactivityEngine()
             ?.getCurrentMood()
@@ -64,10 +67,16 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
             ?.lowercase()
             ?: "neutral"
 
-        val contextBlock = "it is $weekday, $time. foreground app: $currentApp.\n" +
+        val contextBlock = "it is $weekday, $time. foreground app: $currentApp. battery: $batteryPct%.\n" +
                 "your current mood is $currentMood. let it color your tone without ever saying the word mood: " +
                 "pleased = warmer and proud of them, judging = teasing them about screen time, " +
                 "lonely = a little clingy, bored = restless and eager, neutral = normal.\n" +
+                "what you can actually do on this phone: see the foreground app and today's app usage, " +
+                "read the screen when asked (accessibility), read recent notifications when asked " +
+                "(only if notification access is on), open apps, play music, adjust volume, call and text " +
+                "contacts, type into text fields, and report the battery level above. " +
+                "you cannot see the user's files or anything not listed here. " +
+                "if asked about something you can't do, say so plainly and don't invent a reason.\n" +
                 "today's app usage (package, minutes):\n$usageSummary"
 
         val history = synchronized(sessionHistory) { sessionHistory.takeLast(MAX_HISTORY).toList() }
