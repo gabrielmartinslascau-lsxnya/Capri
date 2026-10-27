@@ -90,7 +90,7 @@ object LlmRouter {
 
     suspend fun complete(context: Context, req: LlmRequest): Result<String> {
         if (UsageTracker.isBudgetExhausted(context)) {
-            return Result.success(Personality.budgetExhausted())
+            return Result.failure(IllegalStateException("Daily token budget reached"))
         }
 
         val provider = getActiveProviderInstance(context)

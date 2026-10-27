@@ -8,6 +8,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
@@ -722,28 +725,32 @@ class BubbleService : Service() {
         return cleanResponse
     }
 
-    /**
-     * Sends a prompt to the model. Returns the reply (with action tags executed),
-     * an error line if the call failed while online, or null if no brain is set up.
-     */
+    // 3-way brain: API -> local model -> null (caller falls back to commands / canned lines)
     private suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
-        if (!LlmRouter.hasAnyApiKey(this) || !NetworkUtils.isOnline(this)) return null
+        var apiError: String? = null
 
-        val result = withContext(Dispatchers.IO) {
-            CloudAiClient.generateResponse(this@BubbleService, prompt, imageBytes)
-        }
-
-        return if (result.isSuccess) {
-            result.getOrNull()?.takeIf { it.isNotBlank() }?.let { executeEmbeddedActionTag(it) }
-        } else {
-            val why = result.exceptionOrNull()?.message ?: "unknown"
-            android.util.Log.e("CAPRI_BRAIN", "Brain call failed: $why")
-            if (why.contains("Hourly", ignoreCase = true)) {
-                "hit my hourly chat limit, choom~ give me a bit and try again."
-            } else {
-                "my brain glitched ($why). check logcat for CAPRI_GEMINI, choom~"
+        // Tier 1: cloud API (needs a key and internet)
+        if (LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)) {
+            val result = withContext(Dispatchers.IO) {
+                CloudAiClient.generateResponse(this@BubbleService, prompt, imageBytes)
             }
+            val text = result.getOrNull()?.takeIf { it.isNotBlank() }
+            if (text != null) return executeEmbeddedActionTag(text)
+            apiError = result.exceptionOrNull()?.message ?: "empty reply"
+            android.util.Log.w("CAPRI_BRAIN", "API tier failed ($apiError), trying local")
         }
+
+        // Tier 2: on-device model (only if imported, enabled, and the phone has the RAM)
+        if (OnDeviceAiClient.isAvailable(this)) {
+            val local = OnDeviceAiClient.generateResponse(this, prompt)
+            val text = local.getOrNull()?.takeIf { it.isNotBlank() }
+            if (text != null) return executeEmbeddedActionTag(text)
+            android.util.Log.w("CAPRI_BRAIN", "Local tier failed (${local.exceptionOrNull()?.message})")
+        }
+
+        // Tier 3: nothing worked. A spent budget is the one case worth saying out loud.
+        if (apiError?.contains("budget", ignoreCase = true) == true) return Personality.budgetExhausted()
+        return null
     }
 
     private suspend fun processCommand(text: String): String {
@@ -761,6 +768,11 @@ class BubbleService : Service() {
         val cmd = IntentParser.parse(text)
 
         if (cmd is Cmd.CheckNotifications) {
+            val listenerOn = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+            if (!listenerOn) {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return "opened notification access for you. flip capri on and come back, choom."
+            }
             return com.dot.capri.monitor.CapriNotificationListenerService.getRecentSummary()
         }
 
@@ -809,8 +821,8 @@ class BubbleService : Service() {
         }
 
         if (cmd is Cmd.SeeScreen) {
-            if (!LlmRouter.hasAnyApiKey(this) || !NetworkUtils.isOnline(this)) {
-                return "need api key and internet to see screen pixels, choom~"
+            if (!OnDeviceAiClient.isAvailable(this) && (!LlmRouter.hasAnyApiKey(this) || !NetworkUtils.isOnline(this))) {
+                return "need an api key + internet, or an imported local model, to look at the screen, choom~"
             }
             val accessibilityService = CapriAccessibilityService.instance
                 ?: return "accessibility service not enabled. please enable 'Capri' in Android Accessibility settings first, choom~"
@@ -834,17 +846,18 @@ class BubbleService : Service() {
         }
 
         if (cmd is Cmd.Search) {
-            askBrain(text)?.let { return it }
+            val url = "https://www.google.com/search?q=" + Uri.encode(cmd.query)
+            return try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                "searching '${cmd.query}' in your browser, choom."
+            } catch (e: Exception) {
+                "no browser to search with, choom."
+            }
         }
 
-        // Conversation always goes to the model first. Canned lines are only a last resort.
+        // Conversation goes API -> local model -> canned lines.
         if (cmd is Cmd.Chat || cmd is Cmd.Mention || cmd is Cmd.Compliment || cmd is Cmd.Unknown) {
             askBrain(text)?.let { return it }
-
-            if (OnDeviceAiClient.isAvailable(this)) {
-                val onDevice = OnDeviceAiClient.generateResponse(this, text)
-                onDevice.getOrNull()?.takeIf { it.isNotBlank() }?.let { return executeEmbeddedActionTag(it) }
-            }
             return Personality.respond(cmd, cmd !is Cmd.Unknown)
         }
 

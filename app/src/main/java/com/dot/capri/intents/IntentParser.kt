@@ -10,7 +10,7 @@ object IntentParser {
     private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val openRegex = Regex("^(?:open|launch|start|go to|run)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val conversationalOpenRegex = Regex("^(?:can\\s+i\\s+|i\\s+want\\s+to\\s+|let's\\s+|let\\s+us\\s+)(?:watch|use|view|open|check|go\\s+to)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
-    private val searchRegex = Regex("^(?:search|google|look up)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val searchRegex = Regex("^(?:can\\s+you\\s+|could\\s+you\\s+|please\\s+)?(?:search(?:\\s+for)?|google|look\\s+up)\\s+(.+?)\\??$", RegexOption.IGNORE_CASE)
     private val seeScreenRegex = Regex("^(?:what(?:'s|\\s+is)\\s+(?:on\\s+screen|here|what\\s+am\\s+i\\s+looking\\s+at)|look\\s+at\\s+(?:the\\s+)?screen|search\\s+what(?:'s|\\s+is)\\s+on\\s+screen|analyze\\s+screen|screen\\s+capture)(?:\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val greetingRegex = Regex("^(?:hi|hello|hey|sup|yo|good\\s+(?:morning|afternoon|evening)|how\\s+are\\s+you)(?:\\s+.*)?$", RegexOption.IGNORE_CASE)
 
@@ -35,7 +35,7 @@ object IntentParser {
     private val unmuteProactivityRegex = Regex("^(?:come\\s+back|you\\s+can\\s+talk|speak\\s+again|capri\\s+talk)$", RegexOption.IGNORE_CASE)
     private val clearHistoryRegex = Regex("^(?:clear\\s+history|forget\\s+everything|wipe\\s+memory|clear\\s+chat|reset\\s+memory)$", RegexOption.IGNORE_CASE)
     private val goHomeRegex = Regex("^(?:go\\s+home|close\\s+app|minimize|go\\s+to\\s+home\\s+screen)$", RegexOption.IGNORE_CASE)
-    private val checkNotifsRegex = Regex("^(?:what(?:'s|\\s+is)\\s+new|what\\s+did\\s+i\\s+miss|(?:check|any|show|what\\s+about)\\s+(?:my\\s+)?notifications?\\??|any\\s+messages|notifications?\\??)$", RegexOption.IGNORE_CASE)
+    private val checkNotifsRegex = Regex("^(?:what(?:'s|\\s+is)\\s+new|what\\s+did\\s+i\\s+miss|(?:any(?:thing)?\\s+(?:new\\s+)?in|check|show|what\\s+about|any)\\s+(?:my\\s+)?notifications?\\??|any\\s+messages|notifications?\\??)$", RegexOption.IGNORE_CASE)
 
     private val complimentKeywords = setOf("cute", "smart", "cool", "best", "awesome", "love you", "pretty", "amazing", "good job", "great", "genius", "sweet")
 
