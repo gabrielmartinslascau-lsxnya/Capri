@@ -865,6 +865,12 @@ class BubbleService : Service() {
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
         }
 
+        // LLM-First principle: if an API or LLM is connected, let it interpret the user input first.
+        // Local CMD parsing is strictly the last resort.
+        if (LlmRouter.hasAnyApiKey(this) || OnDeviceAiClient.isAvailable(this)) {
+            askBrain(text)?.let { return it }
+        }
+
         val cmd = IntentParser.parse(text)
 
         if (cmd is Cmd.Text && !cmd.message.isNullOrBlank() && CapriAccessibilityService.instance != null) {
