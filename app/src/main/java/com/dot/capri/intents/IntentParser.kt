@@ -11,7 +11,18 @@ object IntentParser {
     private val openRegex = Regex("^(?:open|launch|start|go to|run)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val conversationalOpenRegex = Regex("^(?:can\\s+i\\s+|i\\s+want\\s+to\\s+|let's\\s+|let\\s+us\\s+)(?:watch|use|view|open|check|go\\s+to)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val searchRegex = Regex("^(?:can\\s+you\\s+|could\\s+you\\s+|please\\s+)?(?:search(?:\\s+for)?|google|look\\s+up)\\s+(.+?)\\??$", RegexOption.IGNORE_CASE)
-    private val seeScreenRegex = Regex("^(?:what(?:'s|\\s+is)\\s+(?:on\\s+screen|here|what\\s+am\\s+i\\s+looking\\s+at)|look\\s+at\\s+(?:the\\s+)?screen|search\\s+what(?:'s|\\s+is)\\s+on\\s+screen|analyze\\s+screen|screen\\s+capture)(?:\\s+(.+))?$", RegexOption.IGNORE_CASE)
+    private val seeScreenRegex = Regex(
+        "^(?:" +
+        "what(?:'s|s|\\s+is)\\s+(?:on\\s+(?:my\\s+|the\\s+)?screen|here|this)|" +
+        "what\\s+(?:do\\s+you\\s+see|am\\s+i\\s+looking\\s+at)|" +
+        "(?:can|could|would)?\\s*(?:you\\s+)?(?:see|look\\s+at|read|describe|analyze|scan|peek|check)\\s+(?:at\\s+)?(?:my\\s+|the\\s+)?screen|" +
+        "(?:can|could)?\\s*(?:you\\s+)?see\\s+this|" +
+        "(?:take\\s+a\\s+)?look\\s+(?:at\\s+)?(?:my\\s+|the\\s+)?screen|" +
+        "tell\\s+me\\s+what\\s+you\\s+see|" +
+        "screen\\s+(?:capture|read|scan|check)" +
+        ")(?:\\s+(.+))?$",
+        RegexOption.IGNORE_CASE
+    )
     private val greetingRegex = Regex("^(?:hi|hello|hey|sup|yo|good\\s+(?:morning|afternoon|evening)|how\\s+are\\s+you)(?:\\s+.*)?$", RegexOption.IGNORE_CASE)
 
     private val resumeRegex = Regex("^(?:resume|resume\\s+(?:the\\s+)?(?:music|song|track|playback)|continue|continue\\s+playing|unpause)$", RegexOption.IGNORE_CASE)

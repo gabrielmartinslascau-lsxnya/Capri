@@ -123,4 +123,23 @@ class IntentParserTest {
         val cmd3 = IntentParser.parse("writ ehi")
         assertEquals(Cmd.Unknown("writ ehi"), cmd3)
     }
+
+    @Test
+    fun testParseSeeScreenVariations() {
+        val phrases = listOf(
+            "whats on screen",
+            "what's on my screen",
+            "can you see my screen",
+            "what do you see",
+            "can you see this",
+            "look at my screen",
+            "take a look at the screen",
+            "tell me what you see",
+            "read my screen"
+        )
+        for (phrase in phrases) {
+            val cmd = IntentParser.parse(phrase)
+            assert(cmd is Cmd.SeeScreen)
+        }
+    }
 }
