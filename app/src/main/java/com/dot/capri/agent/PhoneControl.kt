@@ -109,6 +109,7 @@ object PhoneControl {
     suspend fun tap(item: UiItem): Boolean {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
+        item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         if (item.node.isClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
         return dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, 60)
     }
@@ -124,18 +125,21 @@ object PhoneControl {
         return dispatch(Path().apply { moveTo(x, from); lineTo(x, to) }, 350)
     }
 
-    /** Puts `text` into a field (replaces what is there). Respects the "Allow Capri to type" switch. */
+    /** Puts `text` into a field (replaces what is there) and automatically hits enter/submit if possible. */
     suspend fun typeInto(context: Context, item: UiItem, text: String): Boolean {
         if (!MainActivity.isAllowTyping(context)) return false
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
         item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        delay(250)
+        delay(300)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        return item.node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        val ok = item.node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        delay(300)
+        submitTypedText(context, item)
+        return ok
     }
 
     fun back(): Boolean =
@@ -144,19 +148,23 @@ object PhoneControl {
     fun home(): Boolean =
         service()?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) == true
 
-    // ---- the send button (WhatsApp, Google Messages, most chat apps) ----
+    // ---- submit / send / enter handling ----
 
-    private val SEND_WORDS = setOf(
-        "send", "enviar", "envoyer", "senden", "invia", "verzenden", "gönder", "отправить"
+    private val SUBMIT_WORDS = setOf(
+        "send", "search", "go", "done", "enter", "submit", "enviar", "envoyer", "senden", "invia", "verzenden", "gönder", "отправить", "buscar", "suchen"
     )
 
-    private fun findSendButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    private fun findSubmitButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         fun walk(n: AccessibilityNodeInfo?, depth: Int): AccessibilityNodeInfo? {
             if (n == null || depth > 40) return null
             if (n.isVisibleToUser && n.isClickable) {
                 val id = n.viewIdResourceName.orEmpty().lowercase()
                 val desc = n.contentDescription?.toString()?.trim()?.lowercase().orEmpty()
-                if (id.endsWith(":id/send") || desc in SEND_WORDS || desc.startsWith("send ")) return n
+                val text = n.text?.toString()?.trim()?.lowercase().orEmpty()
+                if (id.endsWith(":id/send") || id.endsWith(":id/search") || id.endsWith(":id/button_yes") ||
+                    desc in SUBMIT_WORDS || text in SUBMIT_WORDS || desc.startsWith("send ") || desc.startsWith("search ")) {
+                    return n
+                }
             }
             for (i in 0 until n.childCount) {
                 walk(n.getChild(i), depth + 1)?.let { return it }
@@ -166,10 +174,22 @@ object PhoneControl {
         return walk(root, 0)
     }
 
+    suspend fun submitTypedText(context: Context, item: UiItem): Boolean {
+        item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        val root = foregroundRoot() ?: return false
+        val btn = findSubmitButton(root) ?: return false
+        val r = Rect()
+        btn.getBoundsInScreen(r)
+        CapriCursor.moveTo(r.centerX(), r.centerY())
+        CapriCursor.pulse()
+        return btn.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                dispatch(Path().apply { moveTo(r.centerX().toFloat(), r.centerY().toFloat()) }, 60)
+    }
+
     /** Glides the cursor to the send button and presses it. Returns false if it can't find one. */
     suspend fun pressSend(context: Context): Boolean {
         val root = foregroundRoot() ?: return false
-        val button = findSendButton(root) ?: return false
+        val button = findSubmitButton(root) ?: return false
         val r = Rect()
         button.getBoundsInScreen(r)
         CapriCursor.show(context)

@@ -55,6 +55,7 @@ object PhoneAgent {
 Reply with ONLY a JSON object, nothing else. Actions:
 {"do":"tap","id":N}
 {"do":"type","id":N,"text":"..."}   (replaces the text in that field)
+{"do":"submit","id":N}  (presses enter, send, or search after typing)
 {"do":"scroll","dir":"down"}   (or "up")
 {"do":"back"}
 {"do":"home"}
@@ -213,6 +214,15 @@ Rules:
                         } else {
                             val ok = PhoneControl.typeInto(context, item, text)
                             log.add("typed into ${item.label}" + if (ok) "" else " (failed)")
+                        }
+                    }
+                    "submit" -> {
+                        val item = items.firstOrNull { it.id == a.id }
+                        if (item == null) {
+                            log.add("submit: bad target")
+                        } else {
+                            val ok = PhoneControl.submitTypedText(context, item)
+                            log.add("submitted ${item.label}" + if (ok) "" else " (failed)")
                         }
                     }
                     "scroll" -> {
