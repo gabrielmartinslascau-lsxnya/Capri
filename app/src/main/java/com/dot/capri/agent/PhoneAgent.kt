@@ -51,7 +51,8 @@ object PhoneAgent {
         val say: String?
     )
 
-    private const val SYSTEM = """You are the hands of an Android assistant called Capri. You operate the phone by reading a numbered list of on-screen elements and choosing ONE action at a time.
+    private const val SYSTEM = """You are the hands of an Android assistant called Capri. You possess a glowing neon-pink cursor ring on screen that glides directly to target (x, y) coordinates when you choose an element to tap or type into.
+You operate the phone by reading a numbered list of on-screen elements with coordinates and choosing ONE action at a time.
 Reply with ONLY a JSON object, nothing else. Actions:
 {"do":"tap","id":N}
 {"do":"type","id":N,"text":"..."}   (replaces the text in that field)
@@ -64,7 +65,8 @@ Reply with ONLY a JSON object, nothing else. Actions:
 {"do":"done","say":"short summary for the user"}
 {"do":"fail","say":"why you can't do it"}
 Rules:
-- Use ids only from the list. Elements look like [id] kind "label".
+- Use ids only from the list. Elements look like [id] kind "label" at (x, y).
+- Your cursor automatically glides to (x, y) and pulses when you tap or type.
 - Never guess passwords, codes, card numbers or personal details.
 - If the task is finished, answer done. If the screen doesn't show what you need, scroll, go back, or open the right app.
 - Don't repeat an action that didn't change the screen. Try something different or answer fail.
@@ -108,7 +110,7 @@ Rules:
         log: List<String>,
         shot: ByteArray?
     ): String? {
-        val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\"" }
+        val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\" at (${it.cx}, ${it.cy})" }
         val prompt = "TASK: $goal\n" +
                 "STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(8).joinToString(" > ")}\n" +
                 "FOREGROUND APP: $pkg\n" +
@@ -203,7 +205,7 @@ Rules:
                                 return "about to tap \"${item.label}\". go ahead? (yes/no)"
                             }
                             val ok = PhoneControl.tap(item)
-                            log.add("tapped ${item.label}" + if (ok) "" else " (failed)")
+                            log.add("glided cursor to (${item.cx}, ${item.cy}) & tapped ${item.label}" + if (ok) "" else " (failed)")
                         }
                     }
                     "type" -> {
@@ -213,7 +215,7 @@ Rules:
                             log.add("type: bad target")
                         } else {
                             val ok = PhoneControl.typeInto(context, item, text)
-                            log.add("typed into ${item.label}" + if (ok) "" else " (failed)")
+                            log.add("glided cursor to (${item.cx}, ${item.cy}) & typed into ${item.label}" + if (ok) "" else " (failed)")
                         }
                     }
                     "submit" -> {
