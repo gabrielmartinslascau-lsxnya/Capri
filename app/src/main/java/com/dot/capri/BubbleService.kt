@@ -692,25 +692,48 @@ class BubbleService : Service() {
 
     private suspend fun executeEmbeddedActionTag(response: String): String {
         var cleanResponse = response
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|TASK):([^]]+)\\]", RegexOption.IGNORE_CASE)
         val match = actionRegex.find(response)
         if (match != null) {
             val (actionType, rawTarget) = match.destructured
             val target = rawTarget.trim()
             when (actionType.uppercase()) {
                 "SCROLL" -> {
-                    val down = !target.equals("UP", ignoreCase = true)
-                    PhoneControl.scroll(down)
+                    val parts = target.split(":")
+                    val dirStr = parts[0].trim().uppercase()
+                    val count = parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 1
+                    val dir = when (dirStr) {
+                        "UP" -> com.dot.capri.intents.ScrollDirection.UP
+                        "DOWN" -> com.dot.capri.intents.ScrollDirection.DOWN
+                        "LEFT" -> com.dot.capri.intents.ScrollDirection.LEFT
+                        "RIGHT" -> com.dot.capri.intents.ScrollDirection.RIGHT
+                        else -> com.dot.capri.intents.ScrollDirection.DOWN
+                    }
+                    if (CapriAccessibilityService.instance != null) {
+                        repeat(count) {
+                            PhoneControl.scroll(dir)
+                            if (count > 1) delay(200)
+                        }
+                    }
                 }
                 "TAP" -> {
                     val root = PhoneControl.foregroundRoot()
+                    var done = false
                     if (root != null) {
                         val items = PhoneControl.snapshot(root)
                         val matchItem = items.firstOrNull { it.label.contains(target, ignoreCase = true) }
                         if (matchItem != null) {
-                            PhoneControl.tap(matchItem)
+                            done = PhoneControl.tap(matchItem)
                         }
                     }
+                    if (!done) {
+                        cleanResponse = PhoneAgent.run(this, "click on $target", null) { setChatVisible(it) }
+                        return cleanResponse
+                    }
+                }
+                "TASK" -> {
+                    cleanResponse = PhoneAgent.run(this, target, null) { setChatVisible(it) }
+                    return cleanResponse
                 }
                 else -> {
                     val cmd = when (actionType.uppercase()) {
