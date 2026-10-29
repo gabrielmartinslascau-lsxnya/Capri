@@ -357,6 +357,18 @@
             android:textColor="@color/text_secondary"
             android:textSize="12sp" />
 
+        <Button
+            android:id="@+id/btn_preview_cursor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/input_bg"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="Preview Capri Cursor &amp; STOP Pill"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

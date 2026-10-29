@@ -19,6 +19,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.dot.capri.llm.LlmRouter
 import com.dot.capri.monitor.ForegroundAppDetector
 import com.dot.capri.proactivity.ProactivityEngine
@@ -384,6 +385,27 @@ class MainActivity : AppCompatActivity() {
             BubbleService.instance?.getProactivityEngine()?.resetFireCounts()
             Toast.makeText(this, "Reset all fire counts", Toast.LENGTH_SHORT).show()
             updateDebugTriggersInfo()
+        }
+
+        findViewById<Button>(R.id.btn_preview_cursor)?.setOnClickListener {
+            if (!Settings.canDrawOverlays(this)) {
+                requestOverlayPermission()
+                return@setOnClickListener
+            }
+            com.dot.capri.agent.CapriCursor.show(this)
+            lifecycleScope.launch {
+                delay(300)
+                val metrics = resources.displayMetrics
+                com.dot.capri.agent.CapriCursor.moveTo(metrics.widthPixels / 4, metrics.heightPixels / 2)
+                delay(500)
+                com.dot.capri.agent.CapriCursor.pulse()
+                delay(400)
+                com.dot.capri.agent.CapriCursor.moveTo(3 * metrics.widthPixels / 4, metrics.heightPixels / 2)
+                delay(500)
+                com.dot.capri.agent.CapriCursor.pulse()
+                delay(1500)
+                com.dot.capri.agent.CapriCursor.hide()
+            }
         }
 
         updateUsageStatsButton(usageStatsBtn)
