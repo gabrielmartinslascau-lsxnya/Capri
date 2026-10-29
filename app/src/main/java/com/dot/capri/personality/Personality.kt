@@ -62,6 +62,12 @@ object Personality {
         "Audio levels shifted, netrunner~"
     )
 
+    private val scrollTemplates = listOf(
+        "scrolling for you, choom~",
+        "swiping the screen right away, netrunner!",
+        "scrolling along~"
+    )
+
     private val typeTextTemplates = listOf(
         "Typed that right into your text box, choom~",
         "Bypassed keyboard and typed it in for you!",
@@ -201,6 +207,9 @@ object Personality {
             }
             is Cmd.Volume -> {
                 volumeTemplates
+            }
+            is Cmd.Scroll -> {
+                scrollTemplates
             }
             is Cmd.TypeText, is Cmd.Write -> {
                 typeTextTemplates

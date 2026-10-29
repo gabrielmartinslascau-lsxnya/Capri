@@ -30,6 +30,8 @@ object IntentParser {
     private val nextRegex = Regex("^(?:next|next\\s+song|skip|skip\\s+song|next\\s+track)$", RegexOption.IGNORE_CASE)
     private val prevRegex = Regex("^(?:previous|prev|previous\\s+song|last\\s+song|back\\s+a\\s+song)$", RegexOption.IGNORE_CASE)
 
+    private val scrollDownRegex = Regex("^(?:scroll\\s+down|swipe\\s+down|page\\s+down|scroll\\s+further|scroll)$", RegexOption.IGNORE_CASE)
+    private val scrollUpRegex = Regex("^(?:scroll\\s+up|swipe\\s+up|page\\s+up)$", RegexOption.IGNORE_CASE)
     private val volUpRegex = Regex("^(?:volume\\s+up|louder|turn\\s+it\\s+up|increase\\s+volume|make\\s+it\\s+louder)$", RegexOption.IGNORE_CASE)
     private val volDownRegex = Regex("^(?:volume\\s+down|quieter|turn\\s+it\\s+down|decrease\\s+volume|lower\\s+volume)$", RegexOption.IGNORE_CASE)
     private val volMuteRegex = Regex("^(?:mute|mute\\s+volume|mute\\s+audio|silence)$", RegexOption.IGNORE_CASE)
@@ -149,6 +151,13 @@ object IntentParser {
         }
         if (volUnmuteRegex.matches(raw) || volUnmuteRegex.matches(cleaned)) {
             return Cmd.Volume(VolumeDirection.UNMUTE)
+        }
+
+        if (scrollDownRegex.matches(raw) || scrollDownRegex.matches(cleaned)) {
+            return Cmd.Scroll(down = true)
+        }
+        if (scrollUpRegex.matches(raw) || scrollUpRegex.matches(cleaned)) {
+            return Cmd.Scroll(down = false)
         }
 
         if (clearFieldRegex.matches(raw) || clearFieldRegex.matches(cleaned)) {

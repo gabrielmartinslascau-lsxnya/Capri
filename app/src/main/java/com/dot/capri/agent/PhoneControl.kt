@@ -121,8 +121,13 @@ object PhoneControl {
         val x = w / 2f
         val from = if (down) h * 0.70f else h * 0.30f
         val to = if (down) h * 0.30f else h * 0.70f
+        CapriCursor.show(s)
         CapriCursor.moveTo(w / 2, h / 2)
-        return dispatch(Path().apply { moveTo(x, from); lineTo(x, to) }, 350)
+        CapriCursor.pulse()
+        val ok = dispatch(Path().apply { moveTo(x, from); lineTo(x, to) }, 350)
+        delay(400)
+        CapriCursor.hide()
+        return ok
     }
 
     /** Puts `text` into a field (replaces what is there) and automatically hits enter/submit if possible. */

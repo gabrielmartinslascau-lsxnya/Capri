@@ -46,6 +46,7 @@ object IntentExecutor {
                 is Cmd.GoHome -> executeGoHome(context)
                 is Cmd.Search -> false
                 is Cmd.SeeScreen -> true
+                is Cmd.Scroll -> true
                 is Cmd.ClearHistory -> true
                 is Cmd.EasterEgg -> true
                 is Cmd.CheckNotifications -> true

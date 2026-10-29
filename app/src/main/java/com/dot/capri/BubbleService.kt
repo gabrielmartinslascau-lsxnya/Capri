@@ -872,6 +872,11 @@ class BubbleService : Service() {
             return executeWriteCommand(writeText)
         }
 
+        if (cmd is Cmd.Scroll) {
+            val ok = PhoneControl.scroll(cmd.down)
+            return Personality.respond(cmd, ok)
+        }
+
         if (cmd is Cmd.ClearField) return executeClearFieldCommand()
 
         if (cmd is Cmd.MuteProactivity) {
