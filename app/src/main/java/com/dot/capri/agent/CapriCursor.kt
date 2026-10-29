@@ -136,11 +136,48 @@ object CapriCursor {
         val toY = y - half
         suspendCancellableCoroutine<Unit> { cont ->
             val anim = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 450
+                duration = 350
                 addUpdateListener {
                     val f = it.animatedValue as Float
                     params.x = (fromX + (toX - fromX) * f).toInt()
                     params.y = (fromY + (toY - fromY) * f).toInt()
+                    try {
+                        wm?.updateViewLayout(view, params)
+                    } catch (e: Exception) {
+                        // view already removed
+                    }
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+
+                    override fun onAnimationCancel(animation: Animator) {
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+                })
+            }
+            main.post { anim.start() }
+            cont.invokeOnCancellation { main.post { anim.cancel() } }
+        }
+    }
+
+    /** Glides the ring smoothly from (fromX, fromY) to (toX, toY) in sync with a swipe touch gesture. */
+    suspend fun glideAlongPath(fromX: Float, fromY: Float, toX: Float, toY: Float, durationMs: Long) {
+        val view = dot ?: return
+        val params = dotParams ?: return
+        val half = sizePx / 2
+        val startX = fromX - half
+        val startY = fromY - half
+        val endX = toX - half
+        val endY = toY - half
+        suspendCancellableCoroutine<Unit> { cont ->
+            val anim = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = durationMs
+                addUpdateListener {
+                    val f = it.animatedValue as Float
+                    params.x = (startX + (endX - startX) * f).toInt()
+                    params.y = (startY + (endY - startY) * f).toInt()
                     try {
                         wm?.updateViewLayout(view, params)
                     } catch (e: Exception) {

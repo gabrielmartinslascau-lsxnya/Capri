@@ -11,7 +11,10 @@ import android.view.accessibility.AccessibilityWindowInfo
 import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.MainActivity
 import com.dot.capri.intents.ScrollDirection
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -130,10 +133,20 @@ object PhoneControl {
         }
 
         CapriCursor.show(s)
-        CapriCursor.moveTo(w / 2, h / 2)
+        CapriCursor.moveTo(fromX.toInt(), fromY.toInt())
         CapriCursor.pulse()
-        val ok = dispatch(Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }, 350)
-        delay(400)
+        delay(150)
+
+        val path = Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }
+        var ok = false
+        coroutineScope {
+            val animJob = launch { CapriCursor.glideAlongPath(fromX, fromY, toX, toY, 350) }
+            val gestureJob = async { dispatch(path, 350) }
+            ok = gestureJob.await()
+            animJob.join()
+        }
+
+        delay(250)
         CapriCursor.hide()
         return ok
     }
