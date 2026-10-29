@@ -118,6 +118,14 @@ object PhoneControl {
         return dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, 60)
     }
 
+    suspend fun longPress(item: UiItem, durationMs: Long = 800): Boolean {
+        CapriCursor.moveTo(item.cx, item.cy)
+        CapriCursor.pulse()
+        item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        if (item.node.isLongClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) return true
+        return dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, durationMs)
+    }
+
     suspend fun scroll(direction: ScrollDirection): Boolean {
         val s = service() ?: return false
         val w = s.resources.displayMetrics.widthPixels
@@ -126,10 +134,10 @@ object PhoneControl {
         val cy = h / 2f
 
         val (fromX, fromY, toX, toY) = when (direction) {
-            ScrollDirection.DOWN -> listOf(cx, h * 0.70f, cx, h * 0.30f)
-            ScrollDirection.UP -> listOf(cx, h * 0.30f, cx, h * 0.70f)
-            ScrollDirection.LEFT -> listOf(w * 0.80f, cy, w * 0.20f, cy)
-            ScrollDirection.RIGHT -> listOf(w * 0.20f, cy, w * 0.80f, cy)
+            ScrollDirection.DOWN -> listOf(cx, h * 0.75f, cx, h * 0.25f) // Swipe UP moves content DOWN
+            ScrollDirection.UP -> listOf(cx, h * 0.25f, cx, h * 0.75f)   // Swipe DOWN moves content UP
+            ScrollDirection.LEFT -> listOf(w * 0.25f, cy, w * 0.75f, cy) // Swipe RIGHT moves content LEFT
+            ScrollDirection.RIGHT -> listOf(w * 0.75f, cy, w * 0.25f, cy)// Swipe LEFT moves content RIGHT
         }
 
         CapriCursor.show(s)

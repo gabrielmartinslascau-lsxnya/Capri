@@ -48,6 +48,7 @@ object IntentExecutor {
                 is Cmd.SeeScreen -> true
                 is Cmd.Scroll -> true
                 is Cmd.Tap -> true
+                is Cmd.LongPress -> true
                 is Cmd.ClearHistory -> true
                 is Cmd.EasterEgg -> true
                 is Cmd.CheckNotifications -> true

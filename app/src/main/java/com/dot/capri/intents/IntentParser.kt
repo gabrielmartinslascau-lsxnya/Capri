@@ -46,6 +46,7 @@ object IntentParser {
         }
     }
     private val tapRegex = Regex("^(?:click|click\\s+on|tap|press|touch)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val longPressRegex = Regex("^(?:long\\s+press|press\\s+and\\s+hold|hold|click\\s+and\\s+hold|tap\\s+and\\s+hold)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val volUpRegex = Regex("^(?:volume\\s+up|louder|turn\\s+it\\s+up|increase\\s+volume|make\\s+it\\s+louder)$", RegexOption.IGNORE_CASE)
     private val volDownRegex = Regex("^(?:volume\\s+down|quieter|turn\\s+it\\s+down|decrease\\s+volume|lower\\s+volume)$", RegexOption.IGNORE_CASE)
     private val volMuteRegex = Regex("^(?:mute|mute\\s+volume|mute\\s+audio|silence)$", RegexOption.IGNORE_CASE)
@@ -178,6 +179,11 @@ object IntentParser {
         }
         if (scrollRightRegex.matches(raw) || scrollRightRegex.matches(cleaned)) {
             return Cmd.Scroll(ScrollDirection.RIGHT, parseRepeatCount(raw))
+        }
+
+        longPressRegex.find(cleaned)?.let { match ->
+            val target = match.groups[1]?.value?.trim() ?: ""
+            if (target.isNotEmpty()) return Cmd.LongPress(target)
         }
 
         tapRegex.find(cleaned)?.let { match ->

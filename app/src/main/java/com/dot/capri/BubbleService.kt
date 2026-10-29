@@ -692,7 +692,7 @@ class BubbleService : Service() {
 
     private suspend fun executeEmbeddedActionTag(response: String): String {
         var cleanResponse = response
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|TASK):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|TASK):([^]]+)\\]", RegexOption.IGNORE_CASE)
         val match = actionRegex.find(response)
         if (match != null) {
             val (actionType, rawTarget) = match.destructured
@@ -728,6 +728,21 @@ class BubbleService : Service() {
                     }
                     if (!done) {
                         cleanResponse = PhoneAgent.run(this, "click on $target", null) { setChatVisible(it) }
+                        return cleanResponse
+                    }
+                }
+                "LONG_PRESS", "LONGPRESS" -> {
+                    val root = PhoneControl.foregroundRoot()
+                    var done = false
+                    if (root != null) {
+                        val items = PhoneControl.snapshot(root)
+                        val matchItem = items.firstOrNull { it.label.contains(target, ignoreCase = true) }
+                        if (matchItem != null) {
+                            done = PhoneControl.longPress(matchItem)
+                        }
+                    }
+                    if (!done) {
+                        cleanResponse = PhoneAgent.run(this, "long press $target", null) { setChatVisible(it) }
                         return cleanResponse
                     }
                 }
@@ -922,6 +937,22 @@ class BubbleService : Service() {
             }
             // Fallback: visual screen capture & task agent loop
             return PhoneAgent.run(this, "click on ${cmd.target}", null) { setChatVisible(it) }
+        }
+
+        if (cmd is Cmd.LongPress) {
+            if (CapriAccessibilityService.instance == null) {
+                return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+            }
+            val root = PhoneControl.foregroundRoot()
+            if (root != null) {
+                val items = PhoneControl.snapshot(root)
+                val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
+                if (matchItem != null) {
+                    val ok = PhoneControl.longPress(matchItem)
+                    return Personality.respond(cmd, ok)
+                }
+            }
+            return PhoneAgent.run(this, "long press ${cmd.target}", null) { setChatVisible(it) }
         }
 
         if (cmd is Cmd.ClearField) return executeClearFieldCommand()
