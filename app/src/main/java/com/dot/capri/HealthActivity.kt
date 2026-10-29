@@ -159,6 +159,13 @@ class HealthActivity : AppCompatActivity() {
             aiDotTv.setTextColor(Color.parseColor("#00E676"))
             aiStatusTv.text = "AI Core: $activeProviderName ($modelName) - Active & Healthy"
         }
+
+        // 8. Local Model
+        val localAvailable = com.dot.capri.ai.OnDeviceAiClient.isAvailable(this)
+        val localDotTv = findViewById<TextView>(R.id.dot_local_llm)
+        val localStatusTv = findViewById<TextView>(R.id.status_local_llm)
+        localDotTv?.setTextColor(if (localAvailable) Color.parseColor("#00E676") else Color.parseColor("#FFAB00"))
+        localStatusTv?.text = "Local Model: ${com.dot.capri.ai.OnDeviceAiClient.statusLine(this)}"
     }
 
     private fun setRowStatus(dotResId: Int, statusResId: Int, btnResId: Int, isOk: Boolean, title: String, okText: String) {

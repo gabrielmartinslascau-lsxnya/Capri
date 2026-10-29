@@ -290,6 +290,33 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
+        <!-- 8. Local On-Device Model Status -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/dot_local_llm"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:text="●"
+                android:textColor="#FF1744"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/status_local_llm"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Local Model: Checking..."
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

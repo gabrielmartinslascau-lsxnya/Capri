@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import com.dot.capri.llm.LlmRouter
 import com.dot.capri.monitor.ForegroundAppDetector
 import com.dot.capri.proactivity.ProactivityEngine
+import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -97,6 +98,12 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 false
             }
+        }
+    }
+
+    private val importLocalModelLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            importLocalModelUri(uri)
         }
     }
 
@@ -203,6 +210,18 @@ class MainActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
+
+        // Local On-Device LLM Controls
+        val switchLocalLlm = findViewById<SwitchCompat>(R.id.switch_local_llm)
+        switchLocalLlm?.isChecked = prefs.getBoolean(com.dot.capri.ai.OnDeviceAiClient.KEY_LOCAL_LLM_ENABLED, true)
+        switchLocalLlm?.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(com.dot.capri.ai.OnDeviceAiClient.KEY_LOCAL_LLM_ENABLED, isChecked).apply()
+            updateLocalLlmStatus()
+        }
+
+        findViewById<Button>(R.id.btn_import_local_llm)?.setOnClickListener {
+            importLocalModelLauncher.launch("*/*")
+        }
 
         // Force Mood Spinner
         val forcedMoodSpinner = findViewById<Spinner>(R.id.spinner_forced_mood)
@@ -400,6 +419,37 @@ class MainActivity : AppCompatActivity() {
         val usageStatsBtn = findViewById<Button>(R.id.btn_enable_usage_stats)
         updateUsageStatsButton(usageStatsBtn)
         updateDebugTriggersInfo()
+        updateLocalLlmStatus()
+    }
+
+    private fun importLocalModelUri(uri: Uri) {
+        val progressToast = Toast.makeText(this, "Importing local model file...", Toast.LENGTH_LONG)
+        progressToast.show()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val targetFile = com.dot.capri.ai.OnDeviceAiClient.modelFile(this@MainActivity)
+                    targetFile.parentFile?.mkdirs()
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Local model imported successfully!", Toast.LENGTH_SHORT).show()
+                    updateLocalLlmStatus()
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Failed to import model: ${e.message}", Toast.LENGTH_LONG).show()
+                    updateLocalLlmStatus()
+                }
+            }
+        }
+    }
+
+    private fun updateLocalLlmStatus() {
+        val tvStatus = findViewById<TextView>(R.id.tv_local_llm_status) ?: return
+        tvStatus.text = com.dot.capri.ai.OnDeviceAiClient.statusLine(this)
     }
 
     private fun updateUsageStatsButton(button: Button) {
