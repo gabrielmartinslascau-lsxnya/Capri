@@ -144,17 +144,38 @@
             android:textColor="@color/text_primary"
             android:textSize="13sp" />
 
-        <Button
-            android:id="@+id/btn_import_local_llm"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
-            android:backgroundTint="@color/input_bg"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:text="Import Local Model (.litertlm)"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_import_local_llm"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="@color/input_bg"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:text="Import (.litertlm)"
+                android:textColor="@color/text_primary"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btn_download_local_llm"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:backgroundTint="@color/accent_red_pink"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:text="Auto-Download Model"
+                android:textColor="@color/white"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tv_local_llm_status"

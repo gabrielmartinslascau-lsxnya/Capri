@@ -223,6 +223,13 @@ class MainActivity : AppCompatActivity() {
             importLocalModelLauncher.launch("*/*")
         }
 
+        findViewById<Button>(R.id.btn_download_local_llm)?.setOnClickListener {
+            com.dot.capri.ai.OnDeviceAiClient.downloadLocalModel(this) { _, message ->
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                updateLocalLlmStatus()
+            }
+        }
+
         // Force Mood Spinner
         val forcedMoodSpinner = findViewById<Spinner>(R.id.spinner_forced_mood)
         val moodList = listOf("None", "Judging", "Pleased", "Bored", "Neutral", "Lonely")

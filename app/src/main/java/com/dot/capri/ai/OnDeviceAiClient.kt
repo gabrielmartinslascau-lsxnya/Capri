@@ -33,6 +33,7 @@ object OnDeviceAiClient {
     const val KEY_LOCAL_LLM_ENABLED = "local_llm_enabled"
 
     private const val MODEL_FILE_NAME = "capri-local.litertlm"
+    const val DEFAULT_MODEL_URL = "https://huggingface.co/google/gemma-2-2b-it-litert/resolve/main/gemma-2-2b-it-cpu.litertlm"
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
     private const val PREFER_GPU = true                   // set false if she crashes on load
     private const val IDLE_RELEASE_MS = 10 * 60 * 1000L   // unload the model after 10 idle minutes
@@ -72,9 +73,38 @@ object OnDeviceAiClient {
         val file = modelFile(context)
         return when {
             !hasEnoughRam(context) -> "this phone doesn't have enough RAM for the local model."
-            !file.exists() -> "no local model yet. import a .litertlm file (Gemma 4 E2B works well)."
+            !file.exists() -> "no local model yet. tap Auto-Download or import a .litertlm file."
             !isEnabled(context) -> "local model imported but switched off."
             else -> "local model ready (${file.length() / 1_000_000} MB). used when the API is unavailable."
+        }
+    }
+
+    fun downloadLocalModel(context: Context, modelUrl: String = DEFAULT_MODEL_URL, onComplete: (Boolean, String) -> Unit) {
+        val targetFile = modelFile(context)
+        targetFile.parentFile?.mkdirs()
+        if (targetFile.exists()) {
+            targetFile.delete()
+        }
+
+        try {
+            val request = android.app.DownloadManager.Request(android.net.Uri.parse(modelUrl))
+                .setTitle("Capri On-Device AI Model")
+                .setDescription("Downloading local LiteRT LM model...")
+                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationUri(android.net.Uri.fromFile(targetFile))
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(true)
+
+            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? android.app.DownloadManager
+            if (manager != null) {
+                manager.enqueue(request)
+                onComplete(true, "Download started! Check status in notification bar.")
+            } else {
+                onComplete(false, "DownloadManager service unavailable.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Download failed to enqueue", e)
+            onComplete(false, "Error starting download: ${e.message}")
         }
     }
 
