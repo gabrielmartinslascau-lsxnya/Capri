@@ -876,8 +876,24 @@ class BubbleService : Service() {
             if (CapriAccessibilityService.instance == null) {
                 return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
             }
-            val ok = PhoneControl.scroll(cmd.down)
+            val ok = PhoneControl.scroll(cmd.direction)
             return Personality.respond(cmd, ok)
+        }
+
+        if (cmd is Cmd.Tap) {
+            if (CapriAccessibilityService.instance == null) {
+                return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+            }
+            val root = PhoneControl.foregroundRoot()
+            if (root != null) {
+                val items = PhoneControl.snapshot(root)
+                val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
+                if (matchItem != null) {
+                    val ok = PhoneControl.tap(matchItem)
+                    return Personality.respond(cmd, ok)
+                }
+            }
+            return "couldn't find \"${cmd.target}\" on screen to tap, choom~"
         }
 
         if (cmd is Cmd.ClearField) return executeClearFieldCommand()

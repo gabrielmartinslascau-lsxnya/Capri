@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.MainActivity
+import com.dot.capri.intents.ScrollDirection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -114,21 +115,31 @@ object PhoneControl {
         return dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, 60)
     }
 
-    suspend fun scroll(down: Boolean): Boolean {
+    suspend fun scroll(direction: ScrollDirection): Boolean {
         val s = service() ?: return false
         val w = s.resources.displayMetrics.widthPixels
         val h = s.resources.displayMetrics.heightPixels
-        val x = w / 2f
-        val from = if (down) h * 0.70f else h * 0.30f
-        val to = if (down) h * 0.30f else h * 0.70f
+        val cx = w / 2f
+        val cy = h / 2f
+
+        val (fromX, fromY, toX, toY) = when (direction) {
+            ScrollDirection.DOWN -> listOf(cx, h * 0.70f, cx, h * 0.30f)
+            ScrollDirection.UP -> listOf(cx, h * 0.30f, cx, h * 0.70f)
+            ScrollDirection.LEFT -> listOf(w * 0.80f, cy, w * 0.20f, cy)
+            ScrollDirection.RIGHT -> listOf(w * 0.20f, cy, w * 0.80f, cy)
+        }
+
         CapriCursor.show(s)
         CapriCursor.moveTo(w / 2, h / 2)
         CapriCursor.pulse()
-        val ok = dispatch(Path().apply { moveTo(x, from); lineTo(x, to) }, 350)
+        val ok = dispatch(Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }, 350)
         delay(400)
         CapriCursor.hide()
         return ok
     }
+
+    suspend fun scroll(down: Boolean): Boolean =
+        scroll(if (down) ScrollDirection.DOWN else ScrollDirection.UP)
 
     /** Puts `text` into a field (replaces what is there) and automatically hits enter/submit if possible. */
     suspend fun typeInto(context: Context, item: UiItem, text: String): Boolean {

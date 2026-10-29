@@ -32,6 +32,9 @@ object IntentParser {
 
     private val scrollDownRegex = Regex("^(?:scroll\\s+down|swipe\\s+down|page\\s+down|scroll\\s+further|scroll)$", RegexOption.IGNORE_CASE)
     private val scrollUpRegex = Regex("^(?:scroll\\s+up|swipe\\s+up|page\\s+up)$", RegexOption.IGNORE_CASE)
+    private val scrollLeftRegex = Regex("^(?:scroll\\s+left|swipe\\s+left|scroll\\s+sideways|swipe\\s+sideways)$", RegexOption.IGNORE_CASE)
+    private val scrollRightRegex = Regex("^(?:scroll\\s+right|swipe\\s+right)$", RegexOption.IGNORE_CASE)
+    private val tapRegex = Regex("^(?:click|click\\s+on|tap|press|touch)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val volUpRegex = Regex("^(?:volume\\s+up|louder|turn\\s+it\\s+up|increase\\s+volume|make\\s+it\\s+louder)$", RegexOption.IGNORE_CASE)
     private val volDownRegex = Regex("^(?:volume\\s+down|quieter|turn\\s+it\\s+down|decrease\\s+volume|lower\\s+volume)$", RegexOption.IGNORE_CASE)
     private val volMuteRegex = Regex("^(?:mute|mute\\s+volume|mute\\s+audio|silence)$", RegexOption.IGNORE_CASE)
@@ -154,10 +157,21 @@ object IntentParser {
         }
 
         if (scrollDownRegex.matches(raw) || scrollDownRegex.matches(cleaned)) {
-            return Cmd.Scroll(down = true)
+            return Cmd.Scroll(ScrollDirection.DOWN)
         }
         if (scrollUpRegex.matches(raw) || scrollUpRegex.matches(cleaned)) {
-            return Cmd.Scroll(down = false)
+            return Cmd.Scroll(ScrollDirection.UP)
+        }
+        if (scrollLeftRegex.matches(raw) || scrollLeftRegex.matches(cleaned)) {
+            return Cmd.Scroll(ScrollDirection.LEFT)
+        }
+        if (scrollRightRegex.matches(raw) || scrollRightRegex.matches(cleaned)) {
+            return Cmd.Scroll(ScrollDirection.RIGHT)
+        }
+
+        tapRegex.find(cleaned)?.let { match ->
+            val target = match.groups[1]?.value?.trim() ?: ""
+            if (target.isNotEmpty()) return Cmd.Tap(target)
         }
 
         if (clearFieldRegex.matches(raw) || clearFieldRegex.matches(cleaned)) {

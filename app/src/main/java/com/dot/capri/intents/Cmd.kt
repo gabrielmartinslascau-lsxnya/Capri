@@ -8,6 +8,10 @@ enum class VolumeDirection {
     UP, DOWN, MUTE, UNMUTE
 }
 
+enum class ScrollDirection {
+    UP, DOWN, LEFT, RIGHT
+}
+
 sealed interface Cmd {
     data class Play(val query: String, val app: String?) : Cmd
     data class MediaControl(val action: MediaAction) : Cmd
@@ -20,7 +24,8 @@ sealed interface Cmd {
     data class Open(val app: String) : Cmd
     data class Search(val query: String) : Cmd
     data class SeeScreen(val prompt: String) : Cmd
-    data class Scroll(val down: Boolean) : Cmd
+    data class Scroll(val direction: ScrollDirection) : Cmd
+    data class Tap(val target: String) : Cmd
     data class SetDefaultApp(val category: String, val appName: String) : Cmd
     data class Chat(val text: String) : Cmd
     data class Compliment(val text: String) : Cmd

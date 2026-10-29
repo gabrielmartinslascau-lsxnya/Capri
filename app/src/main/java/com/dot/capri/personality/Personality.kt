@@ -68,6 +68,12 @@ object Personality {
         "scrolling along~"
     )
 
+    private val tapTemplates = listOf(
+        "tapping '{t}' for you, choom~",
+        "gliding cursor to '{t}' right away, netrunner!",
+        "tapping '{t}'~"
+    )
+
     private val typeTextTemplates = listOf(
         "Typed that right into your text box, choom~",
         "Bypassed keyboard and typed it in for you!",
@@ -221,6 +227,9 @@ object Personality {
             }
             is Cmd.Scroll -> {
                 scrollTemplates
+            }
+            is Cmd.Tap -> {
+                tapTemplates.map { it.replace("{t}", cmd.target) }
             }
             is Cmd.TypeText, is Cmd.Write -> {
                 typeTextTemplates
