@@ -690,49 +690,60 @@ class BubbleService : Service() {
         }
     }
 
-    private fun executeEmbeddedActionTag(response: String): String {
+    private suspend fun executeEmbeddedActionTag(response: String): String {
         var cleanResponse = response
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP):([^]]+)\\]", RegexOption.IGNORE_CASE)
         val match = actionRegex.find(response)
         if (match != null) {
             val (actionType, rawTarget) = match.destructured
-            val cmd = when (actionType.uppercase()) {
-                "OPEN" -> Cmd.Open(rawTarget.trim())
-                "PLAY" -> {
-                    val parts = rawTarget.split(":")
-                    if (parts.size >= 2) {
-                        Cmd.Play(parts[0].trim(), parts[1].trim())
-                    } else {
-                        Cmd.Play(rawTarget.trim(), null)
+            val target = rawTarget.trim()
+            when (actionType.uppercase()) {
+                "SCROLL" -> {
+                    val down = !target.equals("UP", ignoreCase = true)
+                    PhoneControl.scroll(down)
+                }
+                "TAP" -> {
+                    val root = PhoneControl.foregroundRoot()
+                    if (root != null) {
+                        val items = PhoneControl.snapshot(root)
+                        val matchItem = items.firstOrNull { it.label.contains(target, ignoreCase = true) }
+                        if (matchItem != null) {
+                            PhoneControl.tap(matchItem)
+                        }
                     }
                 }
-                "VOLUME" -> {
-                    val dir = when (rawTarget.trim().uppercase()) {
-                        "UP" -> VolumeDirection.UP
-                        "DOWN" -> VolumeDirection.DOWN
-                        "MUTE" -> VolumeDirection.MUTE
-                        else -> VolumeDirection.UNMUTE
+                else -> {
+                    val cmd = when (actionType.uppercase()) {
+                        "OPEN" -> Cmd.Open(target)
+                        "PLAY" -> {
+                            val parts = target.split(":")
+                            if (parts.size >= 2) Cmd.Play(parts[0].trim(), parts[1].trim()) else Cmd.Play(target, null)
+                        }
+                        "VOLUME" -> {
+                            val dir = when (target.uppercase()) {
+                                "UP" -> VolumeDirection.UP
+                                "DOWN" -> VolumeDirection.DOWN
+                                "MUTE" -> VolumeDirection.MUTE
+                                else -> VolumeDirection.UNMUTE
+                            }
+                            Cmd.Volume(dir)
+                        }
+                        "TYPE", "WRITE" -> Cmd.Write(target)
+                        "CALL" -> Cmd.Call(target)
+                        "TEXT" -> {
+                            val parts = target.split(":")
+                            if (parts.size >= 2) Cmd.Text(parts[0].trim(), parts[1].trim()) else Cmd.Text(target, null)
+                        }
+                        "SEARCH" -> Cmd.Search(target)
+                        else -> null
                     }
-                    Cmd.Volume(dir)
-                }
-                "TYPE", "WRITE" -> Cmd.Write(rawTarget.trim())
-                "CALL" -> Cmd.Call(rawTarget.trim())
-                "TEXT" -> {
-                    val parts = rawTarget.split(":")
-                    if (parts.size >= 2) {
-                        Cmd.Text(parts[0].trim(), parts[1].trim())
-                    } else {
-                        Cmd.Text(rawTarget.trim(), null)
+                    if (cmd != null) {
+                        if (cmd is Cmd.Write) {
+                            return executeWriteCommand(cmd.text)
+                        }
+                        IntentExecutor.execute(this, cmd)
                     }
                 }
-                "SEARCH" -> Cmd.Search(rawTarget.trim())
-                else -> null
-            }
-            if (cmd != null) {
-                if (cmd is Cmd.Write) {
-                    return executeWriteCommand(cmd.text)
-                }
-                IntentExecutor.execute(this, cmd)
             }
             cleanResponse = response.replace(match.value, "").trim()
         }

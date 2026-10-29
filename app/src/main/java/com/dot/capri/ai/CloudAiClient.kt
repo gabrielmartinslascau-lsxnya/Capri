@@ -50,6 +50,8 @@ Only when the user clearly asks you to do something on the phone, start the repl
 - [ACTION:OPEN:app_name]
 - [ACTION:PLAY:song_query] or [ACTION:PLAY:song_query:target_app_name]
 - [ACTION:VOLUME:UP] or [ACTION:VOLUME:DOWN] or [ACTION:VOLUME:MUTE]
+- [ACTION:SCROLL:UP] or [ACTION:SCROLL:DOWN]
+- [ACTION:TAP:button_label]
 - [ACTION:TYPE:text_to_type]
 - [ACTION:CALL:contact_name]
 - [ACTION:TEXT:contact_name:optional_message]
