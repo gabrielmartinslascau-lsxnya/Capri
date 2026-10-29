@@ -1,0 +1,4 @@
+- [ ] Update GeminiProvider default model to a valid existing model name (`gemini-1.5-flash`)
+- [ ] Unify comment history in ProactivityGenerator to prevent repetition between triggers and mood lines
+- [ ] Refactor ProactivityEngine evaluation to harmonize app triggers and mood states
+- [ ] Build project and run unit tests
