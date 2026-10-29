@@ -873,6 +873,9 @@ class BubbleService : Service() {
         }
 
         if (cmd is Cmd.Scroll) {
+            if (CapriAccessibilityService.instance == null) {
+                return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+            }
             val ok = PhoneControl.scroll(cmd.down)
             return Personality.respond(cmd, ok)
         }

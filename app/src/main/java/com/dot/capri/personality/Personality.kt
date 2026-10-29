@@ -163,10 +163,16 @@ object Personality {
         "That sounds made up, u-um. Try 'play X' or 'open Y'."
     )
 
-    private val failureTemplates = listOf(
+    private val contactFailureTemplates = listOf(
         "Couldn't find that contact in your address book, choom! Double check the name?",
         "Subsystem override failed~ Couldn't find that contact in your list.",
         "Couldn't do that, netrunner. Contact name not found!"
+    )
+
+    private val genericFailureTemplates = listOf(
+        "Subsystem override failed~ Couldn't perform that action right now, choom.",
+        "Action failed to execute. Check my accessibility connection, netrunner~",
+        "Couldn't complete that command right now."
     )
 
     private val thinkingLabels = listOf(
@@ -190,7 +196,12 @@ object Personality {
 
     fun respond(cmd: Cmd, success: Boolean): String {
         if (!success && cmd !is Cmd.Unknown) {
-            return pick(failureTemplates)
+            return when (cmd) {
+                is Cmd.Call, is Cmd.Text -> pick(contactFailureTemplates)
+                is Cmd.Open -> "Couldn't open that app, choom~ Check if it's installed."
+                is Cmd.Scroll -> "Couldn't scroll right now. Check my accessibility connection in settings, choom~"
+                else -> pick(genericFailureTemplates)
+            }
         }
 
         val pool = when (cmd) {
