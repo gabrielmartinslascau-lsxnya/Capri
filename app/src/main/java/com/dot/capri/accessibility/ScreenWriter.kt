@@ -134,22 +134,33 @@ object ScreenWriter {
         return success
     }
 
+    private var savedClip: ClipData? = null
+    private var hasSavedClip = false
+
     private fun setClipboardText(context: Context, text: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        if (clipboard != null) {
-            val clip = ClipData.newPlainText("Capri", text)
-            clipboard.setPrimaryClip(clip)
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+        if (!hasSavedClip) {
+            savedClip = try { clipboard.primaryClip } catch (e: Exception) { null }
+            hasSavedClip = true
         }
+        clipboard.setPrimaryClip(ClipData.newPlainText("Capri", text))
     }
 
     private fun scheduleClipboardClear(context: Context, delayMs: Long = 60_000L) {
         mainHandler.postDelayed({
             try {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                clipboard?.setPrimaryClip(ClipData.newPlainText("", ""))
+                val previous = savedClip
+                if (previous != null) {
+                    clipboard?.setPrimaryClip(previous)
+                } else {
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to clear clipboard", e)
+                Log.e(TAG, "Failed to restore clipboard", e)
             }
+            savedClip = null
+            hasSavedClip = false
         }, delayMs)
     }
 
@@ -162,6 +173,7 @@ object ScreenWriter {
     }
 
     private fun isEditableNode(node: AccessibilityNodeInfo): Boolean {
+        if (node.isPassword) return false
         if (!node.isFocused) return false
         val className = node.className?.toString() ?: ""
         return node.isEditable || className.contains("EditText", ignoreCase = true) || node.inputType != 0

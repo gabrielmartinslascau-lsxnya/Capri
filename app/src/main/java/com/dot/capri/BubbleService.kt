@@ -35,6 +35,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.dot.capri.accessibility.ScreenWriter
 import com.dot.capri.accessibility.WriteResult
+import com.dot.capri.agent.CapriCursor
+import com.dot.capri.agent.PhoneAgent
+import com.dot.capri.agent.PhoneControl
 import com.dot.capri.ai.CloudAiClient
 import com.dot.capri.ai.OnDeviceAiClient
 import com.dot.capri.llm.LlmRouter
@@ -81,9 +84,22 @@ class BubbleService : Service() {
 
     private var lastWriteTimestamp = 0L
     private var pendingDraftText: String? = null
+    private var pendingSend: Cmd.Text? = null
     private val easterEggCounts = mutableMapOf<String, Int>()
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+
+    private suspend fun setChatVisible(visible: Boolean) {
+        withContext(Dispatchers.Main) {
+            val v = chatView ?: return@withContext
+            if (!visible) {
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                imm.hideSoftInputFromWindow(v.windowToken, 0)
+            }
+            v.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        }
+        if (!visible) delay(350)
+    }
 
     fun getProactivityEngine(): ProactivityEngine? = proactivityEngine
 
@@ -765,7 +781,52 @@ class BubbleService : Service() {
             }
         }
 
+        val yes = Regex("^(?:yes|yeah|yep|y|sure|ok|okay|go|go ahead|do it|send it|send)$", RegexOption.IGNORE_CASE)
+        val no = Regex("^(?:no|nope|n|nah|cancel|stop|don't|dont|drop it)$", RegexOption.IGNORE_CASE)
+
+        pendingSend?.let { p ->
+            pendingSend = null
+            if (yes.matches(trimmedInput)) {
+                setChatVisible(false)
+                val ok = try {
+                    PhoneControl.pressSend(this)
+                } finally {
+                    setChatVisible(true)
+                }
+                if (ok) {
+                    delay(300)
+                    PhoneControl.home()
+                    return "sent to ${p.contact}, choom."
+                }
+                return "couldn't find the send button. the message is ready in the chat, tap it yourself."
+            }
+            if (no.matches(trimmedInput)) return "okay, left it as a draft."
+        }
+
+        PhoneAgent.pending?.let { p ->
+            PhoneAgent.pending = null
+            if (yes.matches(trimmedInput)) {
+                return PhoneAgent.run(this, p.goal, p) { setChatVisible(it) }
+            }
+            if (no.matches(trimmedInput)) return "okay, dropped it."
+        }
+
+        val taskMatch = Regex("^(?:task|agent|do\\s+this)\\s*[:\\-]\\s*(.+)$", RegexOption.IGNORE_CASE)
+            .find(trimmedInput)
+        if (taskMatch != null) {
+            PhoneAgent.pending = null
+            return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
+        }
+
         val cmd = IntentParser.parse(text)
+
+        if (cmd is Cmd.Text && !cmd.message.isNullOrBlank() && CapriAccessibilityService.instance != null) {
+            val opened = IntentExecutor.execute(this, cmd)
+            delay(300)
+            if (!opened) return Personality.respond(cmd, false)
+            pendingSend = cmd
+            return "chat with ${cmd.contact} is open with \"${cmd.message}\" ready. send it? (yes/no)"
+        }
 
         if (cmd is Cmd.CheckNotifications) {
             val listenerOn = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
@@ -872,6 +933,7 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        CapriCursor.hide()
         proactivityEngine?.stop()
         proactivityEngine = null
         instance = null

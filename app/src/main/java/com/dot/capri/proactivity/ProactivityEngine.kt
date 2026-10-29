@@ -47,6 +47,12 @@ class ProactivityEngine(
         )
     }
 
+    private val DISTRACTION_PACKAGES = setOf(
+        "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", "com.google.android.youtube",
+        "com.instagram.android", "com.facebook.katana", "com.reddit.frontpage",
+        "com.twitter.android", "com.snapchat.android", "com.pinterest"
+    )
+
     private val handler = Handler(Looper.getMainLooper())
     private var isRunning = false
     private var mutedUntil: Long = 0L
@@ -104,7 +110,8 @@ class ProactivityEngine(
 
         val computed: ProactivityGenerator.Mood = when {
             commandsToday >= 3 -> ProactivityGenerator.Mood.PLEASED
-            detectedApp != null && (now - appContinuousStartTime >= 20 * 60 * 1000L) -> ProactivityGenerator.Mood.JUDGING
+            detectedApp != null && detectedApp in DISTRACTION_PACKAGES &&
+                (now - appContinuousStartTime >= 20 * 60 * 1000L) -> ProactivityGenerator.Mood.JUDGING
             now - lastUserInteractionTime >= 30 * 60 * 1000L -> ProactivityGenerator.Mood.LONELY
             else -> ProactivityGenerator.Mood.NEUTRAL
         }
