@@ -884,6 +884,14 @@ class BubbleService : Service() {
             return com.dot.capri.monitor.CapriNotificationListenerService.getRecentSummary()
         }
 
+        if (cmd is Cmd.WhatIsPlaying) {
+            val song = com.dot.capri.monitor.CapriNotificationListenerService.getCurrentPlayingSong()
+            if (song != null) {
+                return "currently playing: $song, choom~"
+            }
+            return "no media playing right now, or notification access is disabled."
+        }
+
         if (cmd is Cmd.EasterEgg) {
             val count = easterEggCounts.getOrPut(cmd.response) { 0 }
             if (count >= 5) return "that's enough of that."

@@ -36,6 +36,7 @@ sealed interface Cmd {
     object ClearHistory : Cmd
     object GoHome : Cmd
     object CheckNotifications : Cmd
+    object WhatIsPlaying : Cmd
     data class EasterEgg(val response: String) : Cmd
     data class Unknown(val raw: String) : Cmd
 }

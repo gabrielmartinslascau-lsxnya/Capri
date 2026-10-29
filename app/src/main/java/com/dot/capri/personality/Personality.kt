@@ -235,6 +235,9 @@ object Personality {
                 listOf("holding down '{t}' for you, choom~", "long pressing '{t}' right away!")
                     .map { it.replace("{t}", cmd.target) }
             }
+            is Cmd.WhatIsPlaying -> {
+                listOf("checking what's playing right now...", "let me check your media player, choom~")
+            }
             is Cmd.TypeText, is Cmd.Write -> {
                 typeTextTemplates
             }

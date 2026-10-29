@@ -25,6 +25,23 @@ class CapriNotificationListenerService : NotificationListenerService() {
             }
         }
 
+        fun getCurrentPlayingSong(): String? {
+            val now = System.currentTimeMillis()
+            synchronized(recentNotifications) {
+                recentNotifications.removeAll { now - it.timestamp > 30 * 60 * 1000L }
+                val mediaNotif = recentNotifications.lastOrNull { notif ->
+                    val pkg = notif.appPkg.lowercase()
+                    pkg.contains("spotify") || pkg.contains("youtube") || pkg.contains("music") ||
+                    pkg.contains("soundcloud") || pkg.contains("pandora") || pkg.contains("deezer") ||
+                    notif.title.contains("play", ignoreCase = true) || notif.text.contains("play", ignoreCase = true)
+                }
+                if (mediaNotif != null) {
+                    return "\"${mediaNotif.title}\" by ${mediaNotif.text}"
+                }
+            }
+            return null
+        }
+
         fun checkNotificationGatekeeper(): String? {
             val now = System.currentTimeMillis()
             synchronized(recentNotifications) {
