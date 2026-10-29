@@ -24,7 +24,7 @@ sealed interface Cmd {
     data class Open(val app: String) : Cmd
     data class Search(val query: String) : Cmd
     data class SeeScreen(val prompt: String) : Cmd
-    data class Scroll(val direction: ScrollDirection) : Cmd
+    data class Scroll(val direction: ScrollDirection, val count: Int = 1) : Cmd
     data class Tap(val target: String) : Cmd
     data class SetDefaultApp(val category: String, val appName: String) : Cmd
     data class Chat(val text: String) : Cmd

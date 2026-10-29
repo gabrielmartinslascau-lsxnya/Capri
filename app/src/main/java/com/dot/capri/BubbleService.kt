@@ -876,7 +876,11 @@ class BubbleService : Service() {
             if (CapriAccessibilityService.instance == null) {
                 return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
             }
-            val ok = PhoneControl.scroll(cmd.direction)
+            var ok = true
+            repeat(cmd.count) {
+                ok = PhoneControl.scroll(cmd.direction) && ok
+                if (cmd.count > 1) delay(200)
+            }
             return Personality.respond(cmd, ok)
         }
 
@@ -893,7 +897,8 @@ class BubbleService : Service() {
                     return Personality.respond(cmd, ok)
                 }
             }
-            return "couldn't find \"${cmd.target}\" on screen to tap, choom~"
+            // Fallback: visual screen capture & task agent loop
+            return PhoneAgent.run(this, "click on ${cmd.target}", null) { setChatVisible(it) }
         }
 
         if (cmd is Cmd.ClearField) return executeClearFieldCommand()

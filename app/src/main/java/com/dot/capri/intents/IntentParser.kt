@@ -30,10 +30,21 @@ object IntentParser {
     private val nextRegex = Regex("^(?:next|next\\s+song|skip|skip\\s+song|next\\s+track)$", RegexOption.IGNORE_CASE)
     private val prevRegex = Regex("^(?:previous|prev|previous\\s+song|last\\s+song|back\\s+a\\s+song)$", RegexOption.IGNORE_CASE)
 
-    private val scrollDownRegex = Regex("^(?:scroll\\s+down|swipe\\s+down|page\\s+down|scroll\\s+further|scroll)$", RegexOption.IGNORE_CASE)
-    private val scrollUpRegex = Regex("^(?:scroll\\s+up|swipe\\s+up|page\\s+up)$", RegexOption.IGNORE_CASE)
-    private val scrollLeftRegex = Regex("^(?:scroll\\s+left|swipe\\s+left|scroll\\s+sideways|swipe\\s+sideways)$", RegexOption.IGNORE_CASE)
-    private val scrollRightRegex = Regex("^(?:scroll\\s+right|swipe\\s+right)$", RegexOption.IGNORE_CASE)
+    private val scrollDownRegex = Regex("^(?:scroll|swipe|page)\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollUpRegex = Regex("^(?:scroll|swipe|page)\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollLeftRegex = Regex("^(?:scroll|swipe)\\s+(?:left|sideways)(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollRightRegex = Regex("^(?:scroll|swipe)\\s+right(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+
+    private fun parseRepeatCount(text: String): Int {
+        val lower = text.lowercase()
+        return when {
+            lower.contains("twice") || lower.contains("2 times") || lower.contains("two times") || lower.contains("2x") -> 2
+            lower.contains("thrice") || lower.contains("3 times") || lower.contains("three times") || lower.contains("3x") -> 3
+            lower.contains("4 times") || lower.contains("four times") || lower.contains("4x") -> 4
+            lower.contains("5 times") || lower.contains("five times") || lower.contains("5x") -> 5
+            else -> 1
+        }
+    }
     private val tapRegex = Regex("^(?:click|click\\s+on|tap|press|touch)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val volUpRegex = Regex("^(?:volume\\s+up|louder|turn\\s+it\\s+up|increase\\s+volume|make\\s+it\\s+louder)$", RegexOption.IGNORE_CASE)
     private val volDownRegex = Regex("^(?:volume\\s+down|quieter|turn\\s+it\\s+down|decrease\\s+volume|lower\\s+volume)$", RegexOption.IGNORE_CASE)
@@ -157,16 +168,16 @@ object IntentParser {
         }
 
         if (scrollDownRegex.matches(raw) || scrollDownRegex.matches(cleaned)) {
-            return Cmd.Scroll(ScrollDirection.DOWN)
+            return Cmd.Scroll(ScrollDirection.DOWN, parseRepeatCount(raw))
         }
         if (scrollUpRegex.matches(raw) || scrollUpRegex.matches(cleaned)) {
-            return Cmd.Scroll(ScrollDirection.UP)
+            return Cmd.Scroll(ScrollDirection.UP, parseRepeatCount(raw))
         }
         if (scrollLeftRegex.matches(raw) || scrollLeftRegex.matches(cleaned)) {
-            return Cmd.Scroll(ScrollDirection.LEFT)
+            return Cmd.Scroll(ScrollDirection.LEFT, parseRepeatCount(raw))
         }
         if (scrollRightRegex.matches(raw) || scrollRightRegex.matches(cleaned)) {
-            return Cmd.Scroll(ScrollDirection.RIGHT)
+            return Cmd.Scroll(ScrollDirection.RIGHT, parseRepeatCount(raw))
         }
 
         tapRegex.find(cleaned)?.let { match ->

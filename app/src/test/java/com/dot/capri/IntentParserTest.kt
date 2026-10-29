@@ -142,4 +142,13 @@ class IntentParserTest {
             assert(cmd is Cmd.SeeScreen)
         }
     }
+
+    @Test
+    fun testParseRepeatScroll() {
+        val cmd1 = IntentParser.parse("scroll left twice")
+        assert(cmd1 is Cmd.Scroll && cmd1.count == 2)
+
+        val cmd2 = IntentParser.parse("swipe down 3 times")
+        assert(cmd2 is Cmd.Scroll && cmd2.count == 3)
+    }
 }
