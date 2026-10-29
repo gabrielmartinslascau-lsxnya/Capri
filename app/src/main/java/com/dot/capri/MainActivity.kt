@@ -223,11 +223,22 @@ class MainActivity : AppCompatActivity() {
             importLocalModelLauncher.launch("*/*")
         }
 
-        findViewById<Button>(R.id.btn_download_local_llm)?.setOnClickListener {
-            com.dot.capri.ai.OnDeviceAiClient.downloadLocalModel(this) { _, message ->
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-                updateLocalLlmStatus()
-            }
+        val btnDownloadLocalLlm = findViewById<Button>(R.id.btn_download_local_llm)
+        btnDownloadLocalLlm?.setOnClickListener {
+            btnDownloadLocalLlm.isEnabled = false
+            btnDownloadLocalLlm.text = "Downloading 0%..."
+            com.dot.capri.ai.OnDeviceAiClient.downloadLocalModel(
+                context = this,
+                onProgress = { pct ->
+                    btnDownloadLocalLlm.text = "Downloading $pct%..."
+                },
+                onComplete = { success, message ->
+                    btnDownloadLocalLlm.isEnabled = true
+                    btnDownloadLocalLlm.text = "Auto-Download Model"
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    updateLocalLlmStatus()
+                }
+            )
         }
 
         // Force Mood Spinner

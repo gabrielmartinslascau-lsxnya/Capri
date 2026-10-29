@@ -79,32 +79,93 @@ object OnDeviceAiClient {
         }
     }
 
-    fun downloadLocalModel(context: Context, modelUrl: String = DEFAULT_MODEL_URL, onComplete: (Boolean, String) -> Unit) {
+    fun downloadLocalModel(
+        context: Context,
+        modelUrl: String = DEFAULT_MODEL_URL,
+        onProgress: ((Int) -> Unit)? = null,
+        onComplete: (Boolean, String) -> Unit
+    ) {
         val targetFile = modelFile(context)
         targetFile.parentFile?.mkdirs()
-        if (targetFile.exists()) {
-            targetFile.delete()
-        }
+        val tempFile = File(targetFile.parentFile, "capri-local.litertlm.tmp")
 
-        try {
-            val request = android.app.DownloadManager.Request(android.net.Uri.parse(modelUrl))
-                .setTitle("Capri On-Device AI Model")
-                .setDescription("Downloading local LiteRT LM model...")
-                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationUri(android.net.Uri.fromFile(targetFile))
-                .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(true)
+        scope.launch(Dispatchers.IO) {
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                var currentUrl = modelUrl
+                var redirects = 0
+                while (redirects < 5) {
+                    val url = java.net.URL(currentUrl)
+                    val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                        instanceFollowRedirects = true
+                        connectTimeout = 15_000
+                        readTimeout = 60_000
+                        setRequestProperty("User-Agent", "Capri-Android-App")
+                    }
+                    val code = conn.responseCode
+                    if (code in 300..399) {
+                        currentUrl = conn.getHeaderField("Location") ?: break
+                        conn.disconnect()
+                        redirects++
+                    } else if (code in 200..299) {
+                        connection = conn
+                        break
+                    } else {
+                        conn.disconnect()
+                        withContext(Dispatchers.Main) {
+                            onComplete(false, "Download failed (HTTP $code)")
+                        }
+                        return@launch
+                    }
+                }
 
-            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? android.app.DownloadManager
-            if (manager != null) {
-                manager.enqueue(request)
-                onComplete(true, "Download started! Check status in notification bar.")
-            } else {
-                onComplete(false, "DownloadManager service unavailable.")
+                val conn = connection ?: run {
+                    withContext(Dispatchers.Main) {
+                        onComplete(false, "Download failed (Too many redirects)")
+                    }
+                    return@launch
+                }
+
+                val totalLength = conn.contentLengthLong
+                var bytesDownloaded = 0L
+
+                conn.inputStream.use { input ->
+                    tempFile.outputStream().use { output ->
+                        val buffer = ByteArray(32 * 1024)
+                        var read: Int
+                        var lastProgress = 0
+                        while (input.read(buffer).also { read = it } != -1) {
+                            output.write(buffer, 0, read)
+                            bytesDownloaded += read
+                            if (totalLength > 0) {
+                                val progress = ((bytesDownloaded * 100) / totalLength).toInt()
+                                if (progress != lastProgress) {
+                                    lastProgress = progress
+                                    withContext(Dispatchers.Main) {
+                                        onProgress?.invoke(progress)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (targetFile.exists()) targetFile.delete()
+                tempFile.renameTo(targetFile)
+
+                Log.d(TAG, "Local model downloaded successfully (${targetFile.length()} bytes)")
+                withContext(Dispatchers.Main) {
+                    onComplete(true, "Model downloaded successfully! Local LLM ready.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Local model download exception", e)
+                if (tempFile.exists()) tempFile.delete()
+                withContext(Dispatchers.Main) {
+                    onComplete(false, "Download failed: ${e.message ?: "Network error"}")
+                }
+            } finally {
+                connection?.disconnect()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Download failed to enqueue", e)
-            onComplete(false, "Error starting download: ${e.message}")
         }
     }
 
