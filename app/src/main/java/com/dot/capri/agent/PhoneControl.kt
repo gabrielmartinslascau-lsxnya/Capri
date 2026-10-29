@@ -114,16 +114,18 @@ object PhoneControl {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
         item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        if (item.node.isClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-        return dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, 60)
+        val gestureOk = dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, 60)
+        if (gestureOk) return true
+        return item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
 
     suspend fun longPress(item: UiItem, durationMs: Long = 800): Boolean {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
         item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        if (item.node.isLongClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) return true
-        return dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, durationMs)
+        val gestureOk = dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, durationMs)
+        if (gestureOk) return true
+        return item.node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
     }
 
     suspend fun scroll(direction: ScrollDirection): Boolean {
