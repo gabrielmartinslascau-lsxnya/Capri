@@ -18,7 +18,6 @@ class GeminiProvider(
 
     companion object {
         private const val TAG = "CAPRI_GEMINI"
-        // If logcat shows HTTP 404 "model not found", change this to a current model name.
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
         private const val BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
     }
@@ -44,10 +43,14 @@ class GeminiProvider(
         val started = System.currentTimeMillis()
         var connection: HttpURLConnection? = null
         return try {
-            val conn = (URL(BASE + currentModel + ":generateContent").openConnection() as HttpURLConnection).apply {
+            val urlString = if (currentModel.startsWith("http://") || currentModel.startsWith("https://")) {
+                currentModel
+            } else {
+                "$BASE$currentModel:generateContent?key=$apiKey"
+            }
+            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                // Key goes in a header, not the URL, so it never lands in logs or proxies.
                 setRequestProperty("x-goog-api-key", apiKey)
                 connectTimeout = 10_000
                 readTimeout = 45_000
