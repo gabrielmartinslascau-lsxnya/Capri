@@ -97,8 +97,8 @@ object OnDeviceAiClient {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Shrinks a screenshot to a 768px JPEG so the vision model stays fast. */
-    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 768): ByteArray {
+    /** Shrinks a screenshot to a 1024px JPEG so grid labels stay readable. */
+    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 1024): ByteArray {
         val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
         val scale = minOf(1f, maxSide.toFloat() / maxOf(src.width, src.height))
         val scaled = android.graphics.Bitmap.createScaledBitmap(

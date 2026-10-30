@@ -24,13 +24,11 @@ object PhoneAgent {
         RegexOption.IGNORE_CASE
     )
 
-    // Apps she refuses to operate. Add package names here.
     private val BLOCKED_PACKAGES = setOf(
         "com.google.android.apps.walletnfcrel",
         "com.paypal.android.p2pmobile"
     )
 
-    /** A risky action that is waiting for the user's yes/no. */
     class Pending(
         val goal: String,
         val kind: String,
@@ -46,81 +44,114 @@ object PhoneAgent {
     private class Act(
         val doWhat: String,
         val id: Int?,
-        val x: Int?,
-        val y: Int?,
         val text: String?,
         val dir: String?,
         val app: String?,
-        val say: String?
+        val say: String?,
+        val x: Int?,
+        val y: Int?,
+        val x2: Int?,
+        val y2: Int?
     )
 
-    private const val SYSTEM = """You are the hands of an Android assistant called Capri. You possess glowing neon-pink cursor rings on screen that glide directly to target coordinates (x, y) when you tap, type, or interact. You can spawn and control multiple cursors simultaneously (id: 1, 2, 3...).
-You operate the phone by reading on-screen elements AND looking at the live screenshot.
-Reply with ONLY a JSON object, nothing else. Actions:
-{"do":"tap","x":X,"y":Y}   (glides cursor to pixel (x, y) on screen and taps)
-{"do":"tap","id":N}       (taps element N from screen list)
-{"do":"type","id":N,"text":"..."}   (replaces the text in that field)
-{"do":"submit","id":N}  (presses enter, send, or search after typing)
-{"do":"spawn_cursor","id":N,"x":X,"y":Y}   (spawns cursor N at pixel (x, y))
-{"do":"move_cursor","id":N,"x":X,"y":Y}    (glides cursor N to pixel (x, y))
-{"do":"remove_cursor","id":N}             (removes cursor N)
-{"do":"clear_cursors"}                    (removes all active cursors)
-{"do":"scroll","dir":"down"}   (or "up", "left", "right")
+    private val SYSTEM = """
+You are the hands of an Android assistant called Capri. You control the phone by reading the numbered element list AND the screenshot.
+The screenshot has a light grid. Columns are A to F, left to right. Rows are 1 to 10, top to bottom. Each cell label is in the cell's top-left corner.
+Reply with ONLY a JSON object. Actions:
+{"do":"tap","id":N}                          tap element N from the list (preferred)
+{"do":"tap","cell":"C4"}                     tap the centre of a grid cell
+{"do":"tap","x":X,"y":Y}                     tap an exact pixel (rarely needed)
+{"do":"long_press","id":N}                   press and hold element N
+{"do":"long_press","cell":"C4"}              press and hold a grid cell
+{"do":"swipe","cell":"B5","cell2":"B2"}      drag from cell B5 to cell B2 (pixels also work: x,y,x2,y2)
+{"do":"type","id":N,"text":"..."}            type into field N and press Enter
+{"do":"submit","id":N}                       press Enter on field N
+{"do":"scroll","dir":"down"}                 show MORE content below. dir is down, up, left or right. "right" shows content further right.
 {"do":"back"}
 {"do":"home"}
 {"do":"open","app":"app name"}
 {"do":"wait"}
-{"do":"done","say":"short summary for the user"}
+{"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
 Rules:
-- You can tap ANY position on screen by giving exact pixel coordinates {"do":"tap","x":X,"y":Y} from looking at the live screenshot, OR by id {"do":"tap","id":N}.
-- Always make sure target (x, y) coordinates stay strictly inside current screen bounds [0..WIDTH] and [0..HEIGHT].
+- Pick an element from the list by its label or id when one matches. Use a grid cell only when nothing in the list matches.
+- Never choose by colour. Choose by the label, the id, or what the element does.
+- If the screen doesn't show what you need, scroll down, go back, or open the right app.
+- Don't repeat an action when the screen did not change.
 - Never guess passwords, codes, card numbers or personal details.
-- If the task is finished, answer done. If the screen doesn't show what you need, tap, scroll, go back, or open the right app.
-- Keep "say" to one short lowercase sentence, a little dry, like a sharp friend."""
+- Keep "say" to one short lowercase sentence.
+""".trimIndent()
 
-    private fun parseAct(raw: String, screenW: Int, screenH: Int): Act? {
+    private fun cellToXY(cell: String, w: Int, h: Int): Pair<Int, Int>? {
+        val c = cell.trim().uppercase()
+        val col = c.firstOrNull()?.let { it - 'A' } ?: return null
+        val row = c.drop(1).toIntOrNull()?.minus(1) ?: return null
+        if (col !in 0..5 || row !in 0..9) return null
+        return Pair(((col + 0.5f) * w / 6f).toInt(), ((row + 0.5f) * h / 10f).toInt())
+    }
+
+    private fun annotate(bytes: ByteArray?): ByteArray? {
+        if (bytes == null) return null
+        val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+        val bmp = src.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+        val canvas = android.graphics.Canvas(bmp)
+        val line = android.graphics.Paint().apply { color = 0x88FF2D6B.toInt(); strokeWidth = 2f }
+        val label = android.graphics.Paint().apply {
+            color = 0xFFFFFFFF.toInt()
+            textSize = bmp.height / 45f
+            isAntiAlias = true
+            setShadowLayer(4f, 0f, 0f, 0xFF000000.toInt())
+        }
+        for (col in 0..6) {
+            val x = bmp.width * col / 6f
+            canvas.drawLine(x, 0f, x, bmp.height.toFloat(), line)
+        }
+        for (row in 0..10) {
+            val y = bmp.height * row / 10f
+            canvas.drawLine(0f, y, bmp.width.toFloat(), y, line)
+        }
+        for (col in 0..5) {
+            for (row in 0..9) {
+                val x = bmp.width * col / 6f + 6f
+                val y = bmp.height * row / 10f + label.textSize + 4f
+                canvas.drawText("${'A' + col}${row + 1}", x, y, label)
+            }
+        }
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+        return out.toByteArray()
+    }
+
+    private fun parseAct(raw: String, w: Int, h: Int): Act? {
         val cleaned = raw
             .replace(Regex("```json\\s*", RegexOption.IGNORE_CASE), "")
             .replace(Regex("```\\s*", RegexOption.IGNORE_CASE), "")
             .trim()
         val start = cleaned.indexOf('{')
         val end = cleaned.lastIndexOf('}')
-        if (start < 0 || end <= start) {
-            return parseTextFallback(cleaned, screenW, screenH)
-        }
+        if (start < 0 || end <= start) return null
         return try {
             val o = JSONObject(cleaned.substring(start, end + 1))
-            var x = if (o.has("x")) o.optInt("x") else null
-            var y = if (o.has("y")) o.optInt("y") else null
-            if (x != null && x <= 1000 && y != null && y <= 1000 && screenW > 1000) {
-                x = (x * screenW) / 1000
-                y = (y * screenH) / 1000
-            }
+            val cell1 = o.optString("cell").ifEmpty { null }?.let { cellToXY(it, w, h) }
+            val cell2 = o.optString("cell2").ifEmpty { null }?.let { cellToXY(it, w, h) }
+            val x = if (o.has("x")) o.optInt("x") else cell1?.first
+            val y = if (o.has("y")) o.optInt("y") else cell1?.second
+            val x2 = if (o.has("x2")) o.optInt("x2") else cell2?.first
+            val y2 = if (o.has("y2")) o.optInt("y2") else cell2?.second
             Act(
                 doWhat = o.optString("do").lowercase(),
                 id = if (o.has("id")) o.optInt("id") else null,
-                x = x,
-                y = y,
                 text = o.optString("text").ifEmpty { null },
                 dir = o.optString("dir").ifEmpty { null },
                 app = o.optString("app").ifEmpty { null },
-                say = o.optString("say").ifEmpty { null }
+                say = o.optString("say").ifEmpty { null },
+                x = x?.coerceIn(0, w - 1),
+                y = y?.coerceIn(0, h - 1),
+                x2 = x2?.coerceIn(0, w - 1),
+                y2 = y2?.coerceIn(0, h - 1)
             )
         } catch (e: Exception) {
-            parseTextFallback(cleaned, screenW, screenH)
-        }
-    }
-
-    private fun parseTextFallback(text: String, screenW: Int, screenH: Int): Act? {
-        val lower = text.lowercase()
-        return when {
-            lower.contains("done") || lower.contains("finish") -> Act("done", null, null, null, null, null, null, "done.")
-            lower.contains("home") -> Act("home", null, null, null, null, null, null, null)
-            lower.contains("back") -> Act("back", null, null, null, null, null, null, null)
-            lower.contains("scroll down") || lower.contains("swipe down") -> Act("scroll", null, null, null, null, "down", null, null)
-            lower.contains("scroll up") || lower.contains("swipe up") -> Act("scroll", null, null, null, null, "up", null, null)
-            else -> null
+            null
         }
     }
 
@@ -148,6 +179,7 @@ Rules:
     ): String? {
         val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\"" }
         val prompt = "TASK: $goal\n" +
+                "SCREEN SIZE: ${PhoneControl.screenSize()?.let { "${it.first}x${it.second}" } ?: "unknown"}\n" +
                 "STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(8).joinToString(" > ")}\n" +
                 "FOREGROUND APP: $pkg\n" +
                 "SCREEN ELEMENTS:\n${screen.ifEmpty { "(nothing readable, use the screenshot)" }}"
@@ -160,11 +192,6 @@ Rules:
         return OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM).getOrNull()
     }
 
-    /**
-     * Runs a task. `resume` is set when the user just said yes to a risky action.
-     * `chatVisible` hides / shows Capri's chat window (so it can't cover what she taps).
-     * Returns the text Capri says back to the user.
-     */
     suspend fun run(
         context: Context,
         goal: String,
@@ -183,6 +210,7 @@ Rules:
         val started = System.currentTimeMillis()
         var lastKey = ""
         var repeats = 0
+        val (screenW, screenH) = PhoneControl.screenSize() ?: (1080 to 2400)
 
         chatVisible(false)
         CapriCursor.show(context)
@@ -197,22 +225,20 @@ Rules:
                 if (pkg in BLOCKED_PACKAGES) return "i keep my hands off that app, choom."
                 val items = PhoneControl.snapshot(root)
 
-                // Decide this step: either the action the user just confirmed, or ask the model.
                 var chosen: Act? = null
                 val rp = confirmedAction
                 if (rp != null) {
                     confirmedAction = null
                     val match = items.firstOrNull { it.label == rp.label }
                     if (match != null) {
-                        chosen = Act(rp.kind, match.id, null, null, rp.arg, null, null, null)
+                        chosen = Act(rp.kind, match.id, rp.arg, null, null, null, null, null, null, null)
                     } else {
                         log.add("screen changed, re-checking")
                     }
                 }
                 if (chosen == null) {
                     CapriCursor.setStatus("observing...")
-                    val shot = service.captureScreenBitmap()
-                    val (screenW, screenH) = PhoneControl.realScreenBounds(context)
+                    val shot = annotate(service.captureScreenBitmap())
                     var reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
                     chosen = parseAct(reply, screenW, screenH)
@@ -263,10 +289,30 @@ Rules:
                         CapriCursor.hide()
                         log.add("cleared all cursors")
                     }
+                    "swipe" -> {
+                        val fx = a.x; val fy = a.y; val tx = a.x2; val ty = a.y2
+                        if (fx == null || fy == null || tx == null || ty == null) {
+                            log.add("swipe: missing coordinates")
+                        } else {
+                            CapriCursor.setStatus("swiping...")
+                            PhoneControl.swipe(fx.toFloat(), fy.toFloat(), tx.toFloat(), ty.toFloat())
+                            log.add("swiped ($fx,$fy) to ($tx,$ty)")
+                        }
+                    }
+                    "long_press" -> {
+                        CapriCursor.setStatus("holding...")
+                        val item = items.firstOrNull { it.id == a.id }
+                        val ok = when {
+                            item != null -> PhoneControl.longPress(item)
+                            a.x != null && a.y != null -> PhoneControl.longPressAt(a.x, a.y)
+                            else -> false
+                        }
+                        log.add("long pressed" + if (ok) "" else " (failed)")
+                    }
                     "tap" -> {
                         CapriCursor.setStatus("tapping...")
                         if (a.x != null && a.y != null) {
-                            CapriCursor.moveTo(a.x, a.y)
+                            CapriCursor.spawnCursor(context, 1, a.x, a.y)
                             CapriCursor.pulse()
                             val ok = PhoneControl.tapAt(a.x, a.y)
                             log.add("glided cursor to (${a.x}, ${a.y}) & tapped pixel" + if (ok) "" else " (failed)")

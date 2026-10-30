@@ -40,6 +40,11 @@ object PhoneControl {
         return Pair(metrics.widthPixels, metrics.heightPixels)
     }
 
+    fun screenSize(): Pair<Int, Int>? {
+        val s = service() ?: return null
+        return realScreenBounds(s)
+    }
+
     /** The app the user is looking at. Never returns one of Capri's own windows. */
     fun foregroundRoot(): AccessibilityNodeInfo? {
         val s = service() ?: return null
@@ -187,39 +192,44 @@ object PhoneControl {
 
     suspend fun scroll(direction: ScrollDirection): Boolean {
         val s = service() ?: return false
-        val root = foregroundRoot()
-        val windowRect = Rect()
-        root?.getBoundsInScreen(windowRect)
-
         val (realW, realH) = realScreenBounds(s)
-        val w = if (windowRect.width() > 0) windowRect.width().toFloat() else realW.toFloat()
-        val h = if (windowRect.height() > 0) windowRect.height().toFloat() else realH.toFloat()
+        val w = realW.toFloat()
+        val h = realH.toFloat()
         val cx = w / 2f
         val cy = h / 2f
-
         val (fromX, fromY, toX, toY) = when (direction) {
-            ScrollDirection.DOWN -> listOf(cx, h * 0.30f, cx, h * 0.70f) // Scroll down: drag finger down
-            ScrollDirection.UP -> listOf(cx, h * 0.70f, cx, h * 0.30f)   // Scroll up: drag finger up
-            ScrollDirection.LEFT -> listOf(w * 0.70f, cy, w * 0.30f, cy) // Scroll left: drag finger left
-            ScrollDirection.RIGHT -> listOf(w * 0.30f, cy, w * 0.70f, cy)// Scroll right: drag finger right
+            ScrollDirection.DOWN -> listOf(cx, h * 0.70f, cx, h * 0.30f)   // finger moves UP
+            ScrollDirection.UP -> listOf(cx, h * 0.30f, cx, h * 0.70f)     // finger moves DOWN
+            ScrollDirection.RIGHT -> listOf(w * 0.80f, cy, w * 0.20f, cy)  // finger moves LEFT
+            ScrollDirection.LEFT -> listOf(w * 0.20f, cy, w * 0.80f, cy)   // finger moves RIGHT
         }
+        return swipe(fromX, fromY, toX, toY, 450)
+    }
 
-        CapriCursor.spawnCursor(s, 1, fromX.toInt(), fromY.toInt()) // Spawn directly at start, zero diagonal movement!
+    /** Drags from (x1,y1) to (x2,y2). The cursor is placed at the start first, so there's no diagonal jump. */
+    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 450): Boolean {
+        val s = service() ?: return false
+        CapriCursor.spawnCursor(s, 1, x1.toInt(), y1.toInt())
         CapriCursor.pulse()
-        delay(100)
-
-        val path = Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }
+        delay(120)
+        val path = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
         var ok = false
         coroutineScope {
-            val animJob = launch { CapriCursor.glideAlongPath(fromX, fromY, toX, toY, 450) }
-            val gestureJob = async { dispatch(path, 450) }
+            val animJob = launch { CapriCursor.glideAlongPath(x1, y1, x2, y2, ms) }
+            val gestureJob = async { dispatch(path, ms) }
             ok = gestureJob.await()
             animJob.join()
         }
-
-        delay(250)
+        delay(200)
         CapriCursor.hide()
         return ok
+    }
+
+    /** Press and hold at a pixel for `ms` milliseconds. */
+    suspend fun longPressAt(x: Int, y: Int, ms: Long = 800): Boolean {
+        CapriCursor.moveTo(x, y)
+        CapriCursor.pulse()
+        return dispatch(Path().apply { moveTo(x.toFloat(), y.toFloat()) }, ms)
     }
 
     suspend fun scroll(down: Boolean): Boolean =
