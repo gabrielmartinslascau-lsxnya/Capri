@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Capri AI Usage Dashboard"
+            android:text="Capri AI Usage &amp; Quota Dashboard"
             android:textColor="#FFFFFF"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -26,6 +26,16 @@
             android:text="Provider: Gemini | Model: gemini-3.5-flash-lite"
             android:textColor="#00E676"
             android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tv_quota_remaining"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Quota Remaining: Unlimited"
+            android:textColor="#00E676"
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
         <View
             android:layout_width="match_parent"
@@ -99,6 +109,47 @@
             android:text="Cumulative Tokens: 0"
             android:textColor="#FFFFFF"
             android:textSize="14sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="#333333" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Custom Model Override"
+            android:textColor="#BBBBBB"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/input_model_override"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="#222222"
+                android:hint="e.g. gemini-1.5-flash, gemini-3.8, argon 4..."
+                android:inputType="text"
+                android:padding="8dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#777777" />
+
+            <Button
+                android:id="@+id/btn_save_model"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:text="Set Model" />
+
+        </LinearLayout>
 
         <View
             android:layout_width="match_parent"
