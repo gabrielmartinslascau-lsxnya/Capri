@@ -26,6 +26,7 @@ object UsageTracker {
     private const val KEY_LAST_DAY = "last_day_of_year"
     private const val KEY_DAILY_TOKEN_BUDGET = "daily_token_budget"
     private const val KEY_CALL_LOGS_JSON = "call_logs_json"
+    private const val DEFAULT_DAILY_BUDGET = 50_000
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -97,7 +98,7 @@ object UsageTracker {
     }
 
     fun getDailyBudget(context: Context): Int {
-        return getPrefs(context).getInt(KEY_DAILY_TOKEN_BUDGET, 0)
+        return getPrefs(context).getInt(KEY_DAILY_TOKEN_BUDGET, DEFAULT_DAILY_BUDGET)
     }
 
     fun setDailyBudget(context: Context, budget: Int) {
