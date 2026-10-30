@@ -635,12 +635,30 @@ class BubbleService : Service() {
             }
 
             persistentChatHistory.add(Pair("Capri", response))
-            addMessageView(themedContext, historyContainer, "Capri", response)
-
-            // No fixed height jump here any more. The window stays the size the user chose.
-            chatScroll?.post { chatScroll.fullScroll(ScrollView.FOCUS_DOWN) }
+            streamMessageView(themedContext, historyContainer, response, chatScroll)
 
             triggerSpeakingDoublePulse()
+        }
+    }
+
+    private suspend fun streamMessageView(context: Context, container: LinearLayout?, message: String, chatScroll: ScrollView?) {
+        val tv = TextView(context).apply {
+            this.text = "Capri: "
+            setTextColor(ContextCompat.getColor(context, R.color.accent_red_pink))
+            textSize = 15f
+            setPadding(0, 4, 0, 8)
+        }
+        withContext(Dispatchers.Main) {
+            container?.addView(tv)
+        }
+        val sb = StringBuilder("Capri: ")
+        for (char in message) {
+            sb.append(char)
+            withContext(Dispatchers.Main) {
+                tv.text = sb.toString()
+                chatScroll?.fullScroll(ScrollView.FOCUS_DOWN)
+            }
+            delay(12)
         }
     }
 
