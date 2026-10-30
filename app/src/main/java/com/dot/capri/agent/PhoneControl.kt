@@ -136,22 +136,31 @@ object PhoneControl {
         return item.node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
     }
 
+    suspend fun tapAt(x: Int, y: Int): Boolean {
+        service() ?: return false
+        val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
+        val gestureOk = dispatch(path, 80)
+        if (gestureOk) return true
+        return false
+    }
+
     suspend fun scroll(direction: ScrollDirection): Boolean {
         val s = service() ?: return false
         val root = foregroundRoot()
         val windowRect = Rect()
         root?.getBoundsInScreen(windowRect)
 
-        val w = if (windowRect.width() > 0) windowRect.width().toFloat() else s.resources.displayMetrics.widthPixels.toFloat()
-        val h = if (windowRect.height() > 0) windowRect.height().toFloat() else s.resources.displayMetrics.heightPixels.toFloat()
+        val (realW, realH) = realScreenBounds(s)
+        val w = if (windowRect.width() > 0) windowRect.width().toFloat() else realW.toFloat()
+        val h = if (windowRect.height() > 0) windowRect.height().toFloat() else realH.toFloat()
         val cx = w / 2f
         val cy = h / 2f
 
         val (fromX, fromY, toX, toY) = when (direction) {
-            ScrollDirection.DOWN -> listOf(cx, h * 0.75f, cx, h * 0.25f) // Swipe UP moves content DOWN
-            ScrollDirection.UP -> listOf(cx, h * 0.25f, cx, h * 0.75f)   // Swipe DOWN moves content UP
-            ScrollDirection.LEFT -> listOf(w * 0.25f, cy, w * 0.75f, cy) // Swipe RIGHT moves content LEFT
-            ScrollDirection.RIGHT -> listOf(w * 0.75f, cy, w * 0.25f, cy)// Swipe LEFT moves content RIGHT
+            ScrollDirection.DOWN -> listOf(cx, h * 0.30f, cx, h * 0.70f) // Scroll down: drag finger down
+            ScrollDirection.UP -> listOf(cx, h * 0.70f, cx, h * 0.30f)   // Scroll up: drag finger up
+            ScrollDirection.LEFT -> listOf(w * 0.70f, cy, w * 0.30f, cy) // Scroll left: drag finger left
+            ScrollDirection.RIGHT -> listOf(w * 0.30f, cy, w * 0.70f, cy)// Scroll right: drag finger right
         }
 
         CapriCursor.show(s)
@@ -162,8 +171,8 @@ object PhoneControl {
         val path = Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }
         var ok = false
         coroutineScope {
-            val animJob = launch { CapriCursor.glideAlongPath(fromX, fromY, toX, toY, 350) }
-            val gestureJob = async { dispatch(path, 350) }
+            val animJob = launch { CapriCursor.glideAlongPath(fromX, fromY, toX, toY, 500) }
+            val gestureJob = async { dispatch(path, 500) }
             ok = gestureJob.await()
             animJob.join()
         }

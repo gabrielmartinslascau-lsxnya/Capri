@@ -241,9 +241,10 @@ Rules:
                     "tap" -> {
                         CapriCursor.setStatus("tapping...")
                         if (a.x != null && a.y != null) {
-                            val fallbackItem = PhoneControl.UiItem(0, "tap", "button", a.x, a.y, root)
-                            val ok = PhoneControl.tap(fallbackItem)
-                            log.add("glided cursor to (${a.x}, ${a.y}) & tapped" + if (ok) "" else " (failed)")
+                            CapriCursor.moveTo(a.x, a.y)
+                            CapriCursor.pulse()
+                            val ok = PhoneControl.tapAt(a.x, a.y)
+                            log.add("glided cursor to (${a.x}, ${a.y}) & tapped pixel" + if (ok) "" else " (failed)")
                         } else {
                             val item = items.firstOrNull { it.id == a.id }
                             if (item == null) {
