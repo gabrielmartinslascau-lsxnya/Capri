@@ -19,6 +19,7 @@ import android.widget.TextView
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
@@ -60,6 +61,7 @@ object CapriCursor {
     }
 
     @Volatile private var wm: WindowManager? = null
+    @Volatile private var appContext: Context? = null
     @Volatile private var pill: TextView? = null
     @Volatile private var sizePx = 0
     private val activeCursors = ConcurrentHashMap<Int, CursorInstance>()
@@ -169,8 +171,8 @@ object CapriCursor {
             baseFlags,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (36 * density).toInt()
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = (120 * density).toInt()
         }
         try {
             manager.addView(container, pp)
@@ -187,6 +189,7 @@ object CapriCursor {
     }
 
     fun spawnCursor(context: Context, id: Int = 1, x: Int, y: Int, colorHex: Int = 0xFFFF2D6B.toInt()) {
+        appContext = context.applicationContext
         cancelled = false
         val task = Runnable {
             val app = context.applicationContext
@@ -275,7 +278,9 @@ object CapriCursor {
 
     suspend fun moveTo(x: Int, y: Int, id: Int = 1) {
         if (!activeCursors.containsKey(id)) {
-            withContext(Dispatchers.Main) { }
+            val ctx = appContext ?: return
+            spawnCursor(ctx, id, x, y)
+            delay(80) // let the main thread create the view before moving it
         }
         val instance = activeCursors[id] ?: return
         val half = sizePx / 2
@@ -308,7 +313,7 @@ object CapriCursor {
                 })
             }
             main.post {
-                instance.animator?.cancel()
+                instance.animator?.cancel()   // a new move replaces the old one
                 instance.animator = anim
                 anim.start()
             }
