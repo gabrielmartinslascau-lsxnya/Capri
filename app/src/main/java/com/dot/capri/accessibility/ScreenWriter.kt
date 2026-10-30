@@ -136,6 +136,7 @@ object ScreenWriter {
 
     private var savedClip: ClipData? = null
     private var hasSavedClip = false
+    private var pendingClearRunnable: Runnable? = null
 
     private fun setClipboardText(context: Context, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
@@ -147,7 +148,8 @@ object ScreenWriter {
     }
 
     private fun scheduleClipboardClear(context: Context, delayMs: Long = 60_000L) {
-        mainHandler.postDelayed({
+        pendingClearRunnable?.let { mainHandler.removeCallbacks(it) }
+        val clearRunnable = Runnable {
             try {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 val previous = savedClip
@@ -161,7 +163,10 @@ object ScreenWriter {
             }
             savedClip = null
             hasSavedClip = false
-        }, delayMs)
+            pendingClearRunnable = null
+        }
+        pendingClearRunnable = clearRunnable
+        mainHandler.postDelayed(clearRunnable, delayMs)
     }
 
     private fun findFocusedEditableNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {

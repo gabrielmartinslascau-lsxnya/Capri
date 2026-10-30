@@ -32,10 +32,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Capri">
 
-        <property
-            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-            android:value="Floating AI Assistant Bubble Overlay" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -77,7 +73,11 @@
             android:name=".BubbleService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse|mediaPlayback" />
+            android:foregroundServiceType="specialUse|mediaPlayback">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating AI Assistant Bubble Overlay" />
+        </service>
 
         <service
             android:name=".monitor.CapriNotificationListenerService"

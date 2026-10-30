@@ -37,7 +37,7 @@ object PhoneControl {
         val s = service() ?: return null
         val own = s.packageName
         val fromWindows = s.windows
-            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION || it.type == AccessibilityWindowInfo.TYPE_SYSTEM || it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }
             .sortedByDescending { it.layer }
             .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() != own } }
         return fromWindows ?: s.rootInActiveWindow?.takeIf { it.packageName?.toString() != own }

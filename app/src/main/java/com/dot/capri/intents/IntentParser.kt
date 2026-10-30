@@ -30,8 +30,10 @@ object IntentParser {
     private val nextRegex = Regex("^(?:next|next\\s+song|skip|skip\\s+song|next\\s+track)$", RegexOption.IGNORE_CASE)
     private val prevRegex = Regex("^(?:previous|prev|previous\\s+song|last\\s+song|back\\s+a\\s+song)$", RegexOption.IGNORE_CASE)
 
-    private val scrollDownRegex = Regex("^(?:scroll|swipe|page)\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
-    private val scrollUpRegex = Regex("^(?:scroll|swipe|page)\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollDownRegex = Regex("^(?:scroll|page)\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollUpRegex = Regex("^(?:scroll|page)\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val swipeDownRegex = Regex("^swipe\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val swipeUpRegex = Regex("^swipe\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
     private val scrollLeftRegex = Regex("^(?:scroll|swipe)\\s+(?:left|sideways)(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
     private val scrollRightRegex = Regex("^(?:scroll|swipe)\\s+right(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
 
@@ -178,10 +180,10 @@ object IntentParser {
             return Cmd.Pinch(zoomIn = false)
         }
 
-        if (scrollDownRegex.matches(raw) || scrollDownRegex.matches(cleaned)) {
+        if (scrollDownRegex.matches(raw) || scrollDownRegex.matches(cleaned) || swipeUpRegex.matches(raw) || swipeUpRegex.matches(cleaned)) {
             return Cmd.Scroll(ScrollDirection.DOWN, parseRepeatCount(raw))
         }
-        if (scrollUpRegex.matches(raw) || scrollUpRegex.matches(cleaned)) {
+        if (scrollUpRegex.matches(raw) || scrollUpRegex.matches(cleaned) || swipeDownRegex.matches(raw) || swipeDownRegex.matches(cleaned)) {
             return Cmd.Scroll(ScrollDirection.UP, parseRepeatCount(raw))
         }
         if (scrollLeftRegex.matches(raw) || scrollLeftRegex.matches(cleaned)) {

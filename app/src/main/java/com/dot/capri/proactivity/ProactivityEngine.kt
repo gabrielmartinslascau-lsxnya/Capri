@@ -231,6 +231,8 @@ class ProactivityEngine(
 
     private var lastCommentAt: Long = 0L
     private val COMMENT_COOLDOWN_MS = 15 * 60 * 1000L
+    private var lastNotifCommentAt: Long = 0L
+    private val NOTIF_COMMENT_COOLDOWN_MS = 60 * 60 * 1000L
     private var lastMoodCommentAt: Long = 0L
     private val MOOD_QUIET_COOLDOWN_MS = 60 * 60 * 1000L
 
@@ -277,12 +279,15 @@ class ProactivityEngine(
             return
         }
 
-        val notifComment = CapriNotificationListenerService.checkNotificationGatekeeper()
-        if (notifComment != null) {
-            Log.d(TAG, "FIRED NotificationGatekeeper \"$notifComment\"")
-            lastCommentAt = now
-            onTriggerComment(notifComment)
-            return
+        if (now - lastNotifCommentAt >= NOTIF_COMMENT_COOLDOWN_MS && now - lastCommentAt >= COMMENT_COOLDOWN_MS) {
+            val notifComment = CapriNotificationListenerService.checkNotificationGatekeeper()
+            if (notifComment != null) {
+                Log.d(TAG, "FIRED NotificationGatekeeper \"$notifComment\"")
+                lastNotifCommentAt = now
+                lastCommentAt = now
+                onTriggerComment(notifComment)
+                return
+            }
         }
 
         val currentApp = ForegroundAppDetector.currentForegroundApp(context)

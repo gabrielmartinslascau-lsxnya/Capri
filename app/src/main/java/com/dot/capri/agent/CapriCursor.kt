@@ -54,10 +54,12 @@ object CapriCursor {
         }
     }
 
+    @Volatile private var activeAnimator: ValueAnimator? = null
+
     fun show(context: Context) {
         cancelled = false
-        main.post {
-            if (dot != null) return@post
+        val createBlock = Runnable {
+            if (dot != null) return@Runnable
             val app = context.applicationContext
             val manager = app.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val metrics = app.resources.displayMetrics
@@ -113,6 +115,12 @@ object CapriCursor {
             }
             manager.addView(stop, pp)
             pill = stop
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            createBlock.run()
+        } else {
+            main.post(createBlock)
         }
     }
 
@@ -170,6 +178,8 @@ object CapriCursor {
 
     fun hide() {
         main.post {
+            activeAnimator?.cancel()
+            activeAnimator = null
             dot?.let { runCatching { wm?.removeView(it) } }
             dot2?.let { runCatching { wm?.removeView(it) } }
             pill?.let { runCatching { wm?.removeView(it) } }
@@ -183,6 +193,9 @@ object CapriCursor {
 
     /** Glides the ring so its CENTER sits on (x, y) in screen pixels. Suspends until it arrives. */
     suspend fun moveTo(x: Int, y: Int) {
+        if (dot == null) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { }
+        }
         val view = dot ?: return
         val params = dotParams ?: return
         val half = sizePx / 2
@@ -205,21 +218,30 @@ object CapriCursor {
                 }
                 addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
+                        if (activeAnimator === animation) activeAnimator = null
                         if (cont.isActive) cont.resume(Unit)
                     }
 
                     override fun onAnimationCancel(animation: Animator) {
+                        if (activeAnimator === animation) activeAnimator = null
                         if (cont.isActive) cont.resume(Unit)
                     }
                 })
             }
-            main.post { anim.start() }
+            main.post {
+                activeAnimator?.cancel()
+                activeAnimator = anim
+                anim.start()
+            }
             cont.invokeOnCancellation { main.post { anim.cancel() } }
         }
     }
 
     /** Glides the ring smoothly from (fromX, fromY) to (toX, toY) in sync with a swipe touch gesture. */
     suspend fun glideAlongPath(fromX: Float, fromY: Float, toX: Float, toY: Float, durationMs: Long) {
+        if (dot == null) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { }
+        }
         val view = dot ?: return
         val params = dotParams ?: return
         val half = sizePx / 2
@@ -242,15 +264,21 @@ object CapriCursor {
                 }
                 addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
+                        if (activeAnimator === animation) activeAnimator = null
                         if (cont.isActive) cont.resume(Unit)
                     }
 
                     override fun onAnimationCancel(animation: Animator) {
+                        if (activeAnimator === animation) activeAnimator = null
                         if (cont.isActive) cont.resume(Unit)
                     }
                 })
             }
-            main.post { anim.start() }
+            main.post {
+                activeAnimator?.cancel()
+                activeAnimator = anim
+                anim.start()
+            }
             cont.invokeOnCancellation { main.post { anim.cancel() } }
         }
     }
@@ -260,6 +288,9 @@ object CapriCursor {
         x2From: Float, y2From: Float, x2To: Float, y2To: Float,
         durationMs: Long
     ) {
+        if (dot == null) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { }
+        }
         val view1 = dot ?: return
         val params1 = dotParams ?: return
         val view2 = dot2
@@ -283,15 +314,21 @@ object CapriCursor {
                 }
                 addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
+                        if (activeAnimator === animation) activeAnimator = null
                         if (cont.isActive) cont.resume(Unit)
                     }
 
                     override fun onAnimationCancel(animation: Animator) {
+                        if (activeAnimator === animation) activeAnimator = null
                         if (cont.isActive) cont.resume(Unit)
                     }
                 })
             }
-            main.post { anim.start() }
+            main.post {
+                activeAnimator?.cancel()
+                activeAnimator = anim
+                anim.start()
+            }
             cont.invokeOnCancellation { main.post { anim.cancel() } }
         }
     }

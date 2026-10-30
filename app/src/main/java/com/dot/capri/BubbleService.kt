@@ -691,10 +691,13 @@ class BubbleService : Service() {
     }
 
     private suspend fun executeEmbeddedActionTag(response: String): String {
-        var cleanResponse = response
         val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|PINCH|DUALTAP|DUAL_TAP|TASK):([^]]+)\\]", RegexOption.IGNORE_CASE)
-        val match = actionRegex.find(response)
-        if (match != null) {
+        val matches = actionRegex.findAll(response).toList()
+        if (matches.isEmpty()) return response
+
+        var cleanResponse = actionRegex.replace(response, "").trim()
+
+        for (match in matches) {
             val (actionType, rawTarget) = match.destructured
             val target = rawTarget.trim()
             when (actionType.uppercase()) {
@@ -739,8 +742,7 @@ class BubbleService : Service() {
                         }
                     }
                     if (!done) {
-                        cleanResponse = PhoneAgent.run(this, "click on $target", null) { setChatVisible(it) }
-                        return cleanResponse
+                        return PhoneAgent.run(this, "click on $target", null) { setChatVisible(it) }
                     }
                 }
                 "LONG_PRESS", "LONGPRESS" -> {
@@ -754,13 +756,11 @@ class BubbleService : Service() {
                         }
                     }
                     if (!done) {
-                        cleanResponse = PhoneAgent.run(this, "long press $target", null) { setChatVisible(it) }
-                        return cleanResponse
+                        return PhoneAgent.run(this, "long press $target", null) { setChatVisible(it) }
                     }
                 }
                 "TASK" -> {
-                    cleanResponse = PhoneAgent.run(this, target, null) { setChatVisible(it) }
-                    return cleanResponse
+                    return PhoneAgent.run(this, target, null) { setChatVisible(it) }
                 }
                 else -> {
                     val cmd = when (actionType.uppercase()) {
@@ -789,13 +789,14 @@ class BubbleService : Service() {
                     }
                     if (cmd != null) {
                         if (cmd is Cmd.Write) {
-                            return executeWriteCommand(cmd.text)
+                            val writeMsg = executeWriteCommand(cmd.text)
+                            if (cleanResponse.isBlank()) cleanResponse = writeMsg
+                        } else {
+                            IntentExecutor.execute(this, cmd)
                         }
-                        IntentExecutor.execute(this, cmd)
                     }
                 }
             }
-            cleanResponse = response.replace(match.value, "").trim()
         }
         return cleanResponse
     }
@@ -1088,6 +1089,11 @@ class BubbleService : Service() {
             val success = IntentExecutor.execute(this, cmd)
             delay(300)
             if (success) return Personality.respond(cmd, true)
+
+            com.dot.capri.intents.AppChooser.pending?.let { options ->
+                val choices = options.mapIndexed { i, opt -> "${i + 1}. ${opt.label}" }.joinToString("\n")
+                return "found a few matches, choom:\n$choices\nwhich number did you mean?"
+            }
         }
 
         // Conversation goes API -> local model -> canned lines.
