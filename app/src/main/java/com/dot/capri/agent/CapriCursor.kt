@@ -298,6 +298,39 @@ object CapriCursor {
         glideAlongPath(x2From, y2From, x2To, y2To, durationMs, id = 2)
     }
 
+    suspend fun glideCursorsParallel(moves: List<Triple<Int, Pair<Float, Float>, Pair<Float, Float>>>, durationMs: Long) {
+        if (moves.isEmpty()) return
+        suspendCancellableCoroutine<Unit> { cont ->
+            val half = sizePx / 2
+            val anim = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = durationMs
+                addUpdateListener { animator ->
+                    val f = animator.animatedValue as Float
+                    for ((id, from, to) in moves) {
+                        val inst = activeCursors[id] ?: continue
+                        val curX = from.first + (to.first - from.first) * f
+                        val curY = from.second + (to.second - from.second) * f
+                        inst.params.x = (curX - half).toInt()
+                        inst.params.y = (curY - half).toInt()
+                        inst.currentX = inst.params.x + half
+                        inst.currentY = inst.params.y + half
+                        try { wm?.updateViewLayout(inst.view, inst.params) } catch (_: Exception) {}
+                    }
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+                    override fun onAnimationCancel(animation: Animator) {
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+                })
+            }
+            main.post { anim.start() }
+            cont.invokeOnCancellation { main.post { anim.cancel() } }
+        }
+    }
+
     fun pulse(id: Int = 1) {
         main.post {
             activeCursors[id]?.view?.animate()?.scaleX(1.7f)?.scaleY(1.7f)?.setDuration(110)?.withEndAction {
