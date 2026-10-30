@@ -121,28 +121,41 @@ object CapriCursor {
         main.post {
             val app = context.applicationContext
             val manager = wm ?: (app.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
-            if (dot2 != null) return@post
-
-            val baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-
             val half = sizePx / 2
-            val dotView2 = DotView(app)
-            val dp2 = WindowManager.LayoutParams(
-                sizePx, sizePx,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                baseFlags,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.TOP or Gravity.START
-                x = x2 - half
-                y = y2 - half
+
+            if (dotParams != null && dot != null) {
+                dotParams!!.x = x1 - half
+                dotParams!!.y = y1 - half
+                runCatching { manager.updateViewLayout(dot, dotParams) }
             }
-            manager.addView(dotView2, dp2)
-            dot2 = dotView2
-            dotParams2 = dp2
+
+            if (dot2 == null) {
+                val baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+
+                val dotView2 = DotView(app)
+                val dp2 = WindowManager.LayoutParams(
+                    sizePx, sizePx,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    baseFlags,
+                    PixelFormat.TRANSLUCENT
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.START
+                    x = x2 - half
+                    y = y2 - half
+                }
+                manager.addView(dotView2, dp2)
+                dot2 = dotView2
+                dotParams2 = dp2
+            } else {
+                dotParams2?.let {
+                    it.x = x2 - half
+                    it.y = y2 - half
+                    runCatching { manager.updateViewLayout(dot2, it) }
+                }
+            }
         }
     }
 
