@@ -8,7 +8,7 @@ import com.dot.capri.agent.PhoneControl
 import com.dot.capri.intents.ScrollDirection
 import kotlinx.coroutines.delay
 
-/** Replays a saved macro by matching labels/IDs/normalized coordinates on the current screen with original delays. */
+/** Replays a saved macro with exact coordinates and fast, crisp 1:1 touch pacing. */
 object MacroRunner {
 
     suspend fun run(context: Context, macro: Macro, chatVisible: suspend (Boolean) -> Unit): String {
@@ -17,14 +17,14 @@ object MacroRunner {
         }
         chatVisible(false)
         CapriCursor.show(context)
-        delay(250)
+        delay(200)
         try {
             macro.steps.forEachIndexed { i, step ->
                 if (CapriCursor.cancelled) return "stopped at step ${i + 1} of ${macro.steps.size}."
-                if (step.delayMs > 0) delay(step.delayMs)
                 if (!runStep(context, step)) {
                     return "stuck at step ${i + 1} (${describe(step)}). want me to take over, or re-record it?"
                 }
+                delay(250)
             }
             return "done with '${macro.keyword}', choom."
         } finally {
@@ -41,13 +41,17 @@ object MacroRunner {
                 val intent = context.packageManager.getLaunchIntentForPackage(step.pkg) ?: return false
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                delay(1200)
+                delay(800)
                 true
             }
             "scroll" -> PhoneControl.scroll(if (step.dir == "up") ScrollDirection.UP else ScrollDirection.DOWN)
             "tap" -> {
                 val root = PhoneControl.foregroundRoot() ?: return false
                 val items = PhoneControl.snapshot(root)
+                val metrics = context.resources.displayMetrics
+                val targetX = if (step.relX > 0f) (step.relX * metrics.widthPixels).toInt() else step.cx
+                val targetY = if (step.relY > 0f) (step.relY * metrics.heightPixels).toInt() else step.cy
+
                 val item = items.firstOrNull { 
                     step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true
                 } ?: items.firstOrNull { 
@@ -58,21 +62,20 @@ object MacroRunner {
 
                 if (item != null) {
                     PhoneControl.tap(item)
+                } else if (targetX > 0 && targetY > 0) {
+                    val fallbackItem = PhoneControl.UiItem(1, step.label.ifEmpty { "tap" }, "button", targetX, targetY, root)
+                    PhoneControl.tap(fallbackItem)
                 } else {
-                    val metrics = context.resources.displayMetrics
-                    val targetX = if (step.relX > 0f) (step.relX * metrics.widthPixels).toInt() else step.cx
-                    val targetY = if (step.relY > 0f) (step.relY * metrics.heightPixels).toInt() else step.cy
-                    if (targetX > 0 && targetY > 0) {
-                        val fallbackItem = PhoneControl.UiItem(1, step.label.ifEmpty { "tap" }, "button", targetX, targetY, root)
-                        PhoneControl.tap(fallbackItem)
-                    } else {
-                        false
-                    }
+                    false
                 }
             }
             "type" -> {
                 val root = PhoneControl.foregroundRoot() ?: return false
                 val items = PhoneControl.snapshot(root)
+                val metrics = context.resources.displayMetrics
+                val targetX = if (step.relX > 0f) (step.relX * metrics.widthPixels).toInt() else step.cx
+                val targetY = if (step.relY > 0f) (step.relY * metrics.heightPixels).toInt() else step.cy
+
                 val item = items.firstOrNull { 
                     step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true
                 } ?: items.firstOrNull { 
@@ -83,16 +86,11 @@ object MacroRunner {
 
                 if (item != null) {
                     PhoneControl.typeInto(context, item, step.text)
+                } else if (targetX > 0 && targetY > 0) {
+                    val fallbackItem = PhoneControl.UiItem(1, step.label.ifEmpty { "type" }, "input", targetX, targetY, root)
+                    PhoneControl.typeInto(context, fallbackItem, step.text)
                 } else {
-                    val metrics = context.resources.displayMetrics
-                    val targetX = if (step.relX > 0f) (step.relX * metrics.widthPixels).toInt() else step.cx
-                    val targetY = if (step.relY > 0f) (step.relY * metrics.heightPixels).toInt() else step.cy
-                    if (targetX > 0 && targetY > 0) {
-                        val fallbackItem = PhoneControl.UiItem(1, step.label.ifEmpty { "type" }, "input", targetX, targetY, root)
-                        PhoneControl.typeInto(context, fallbackItem, step.text)
-                    } else {
-                        false
-                    }
+                    false
                 }
             }
             else -> false
