@@ -1,6 +1,7 @@
 package com.dot.capri.ai
 
 import android.content.Context
+import com.dot.capri.intents.AppChooser
 import com.dot.capri.llm.LlmRequest
 import com.dot.capri.llm.LlmRouter
 import com.dot.capri.monitor.AppUsageTotals
@@ -48,6 +49,7 @@ VOICE
 
 DEVICE ACTIONS
 Only when the user clearly asks you to do something on the phone, start the reply with exactly one action tag, then a short line:
+- For OPEN, copy the exact label from INSTALLED APPS. "Google" means the app labelled Google, not Chrome, Lens, Drive, Gmail or Photos. If the name could mean more than one app, ask which one.
 - [ACTION:OPEN:app_name]
 - [ACTION:PLAY:song_query] or [ACTION:PLAY:song_query:target_app_name]
 - [ACTION:VOLUME:UP] or [ACTION:VOLUME:DOWN] or [ACTION:VOLUME:MUTE]
@@ -113,7 +115,7 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
 
         val req = LlmRequest(
             prompt = userPrompt,
-            systemPrompt = "$SYSTEM_PROMPT\n\n[Context]:\n$contextBlock",
+            systemPrompt = "$SYSTEM_PROMPT\n\n[Context]:\n$contextBlock\n\nINSTALLED APPS (use these exact labels for OPEN): ${AppChooser.labelsForPrompt(context)}",
             history = history,
             imageBytes = imageBytes
         )

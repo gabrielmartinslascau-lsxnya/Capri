@@ -33,7 +33,9 @@ object OnDeviceAiClient {
     const val KEY_LOCAL_LLM_ENABLED = "local_llm_enabled"
 
     private const val MODEL_FILE_NAME = "capri-local.litertlm"
-    const val DEFAULT_MODEL_URL = "https://huggingface.co/google/gemma-2-2b-it-litert/resolve/main/gemma-2-2b-it-cpu.litertlm"
+    const val DEFAULT_MODEL_URL = "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.litertlm"
+    const val ALT_MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+    private const val MIN_MODEL_BYTES = 5_000_000L
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
     private const val PREFER_GPU = true                   // set false if she crashes on load
     private const val IDLE_RELEASE_MS = 10 * 60 * 1000L   // unload the model after 10 idle minutes
@@ -90,81 +92,112 @@ object OnDeviceAiClient {
         val tempFile = File(targetFile.parentFile, "capri-local.litertlm.tmp")
 
         scope.launch(Dispatchers.IO) {
-            var connection: java.net.HttpURLConnection? = null
+            suspend fun finish(ok: Boolean, msg: String) =
+                withContext(Dispatchers.Main) { onComplete(ok, msg) }
+
+            var conn: java.net.HttpURLConnection? = null
             try {
-                var currentUrl = modelUrl
-                var redirects = 0
-                while (redirects < 5) {
-                    val url = java.net.URL(currentUrl)
-                    val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                        instanceFollowRedirects = true
+                // Follow redirects by hand so every hop's status code is visible.
+                var url = java.net.URL(modelUrl)
+                var response: java.net.HttpURLConnection? = null
+                var hops = 0
+                while (response == null) {
+                    val c = (url.openConnection() as java.net.HttpURLConnection).apply {
+                        instanceFollowRedirects = false
                         connectTimeout = 15_000
                         readTimeout = 60_000
                         setRequestProperty("User-Agent", "Capri-Android-App")
                     }
-                    val code = conn.responseCode
-                    if (code in 300..399) {
-                        currentUrl = conn.getHeaderField("Location") ?: break
-                        conn.disconnect()
-                        redirects++
-                    } else if (code in 200..299) {
-                        connection = conn
-                        break
-                    } else {
-                        conn.disconnect()
-                        withContext(Dispatchers.Main) {
-                            onComplete(false, "Download failed (HTTP $code)")
+                    conn = c
+                    when (val code = c.responseCode) {
+                        in 300..399 -> {
+                            val loc = c.getHeaderField("Location")
+                            if (loc == null || ++hops > 6) {
+                                finish(false, "Download failed: bad redirect (HTTP $code).")
+                                return@launch
+                            }
+                            url = java.net.URL(url, loc)
+                            c.disconnect()
                         }
-                        return@launch
+                        in 200..299 -> response = c
+                        401, 403 -> {
+                            finish(false, "This model needs a Hugging Face login (HTTP $code). Download the .litertlm file in your browser, then tap Import local model.")
+                            return@launch
+                        }
+                        404 -> {
+                            finish(false, "That model link is gone (HTTP 404). Download the file in your browser, then tap Import local model.")
+                            return@launch
+                        }
+                        429 -> {
+                            finish(false, "Hugging Face is rate-limiting downloads (HTTP 429). Try again in a few minutes.")
+                            return@launch
+                        }
+                        else -> {
+                            finish(false, "Download failed (HTTP $code).")
+                            return@launch
+                        }
                     }
                 }
+                val resp = response
 
-                val conn = connection ?: run {
-                    withContext(Dispatchers.Main) {
-                        onComplete(false, "Download failed (Too many redirects)")
-                    }
-                    return@launch
-                }
-
-                val totalLength = conn.contentLengthLong
-                var bytesDownloaded = 0L
-
-                conn.inputStream.use { input ->
-                    tempFile.outputStream().use { output ->
-                        val buffer = ByteArray(32 * 1024)
-                        var read: Int
-                        var lastProgress = 0
-                        while (input.read(buffer).also { read = it } != -1) {
-                            output.write(buffer, 0, read)
-                            bytesDownloaded += read
-                            if (totalLength > 0) {
-                                val progress = ((bytesDownloaded * 100) / totalLength).toInt()
-                                if (progress != lastProgress) {
-                                    lastProgress = progress
-                                    withContext(Dispatchers.Main) {
-                                        onProgress?.invoke(progress)
-                                    }
+                val total = resp.contentLengthLong
+                var done = 0L
+                var lastPct = -1
+                resp.inputStream.use { input ->
+                    tempFile.outputStream().use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n == -1) break
+                            out.write(buf, 0, n)
+                            done += n
+                            if (total > 0) {
+                                val pct = ((done * 100) / total).toInt()
+                                if (pct != lastPct) {
+                                    lastPct = pct
+                                    withContext(Dispatchers.Main) { onProgress?.invoke(pct) }
                                 }
                             }
                         }
                     }
                 }
 
-                if (targetFile.exists()) targetFile.delete()
-                tempFile.renameTo(targetFile)
+                // A login or error page is small and starts with '<' or '{'. Reject it.
+                if (tempFile.length() < MIN_MODEL_BYTES) {
+                    tempFile.delete()
+                    finish(false, "Download too small (${tempFile.length() / 1024} KB). The link returned an error page, not a model.")
+                    return@launch
+                }
+                val head = tempFile.inputStream().use { s -> ByteArray(64).also { s.read(it) } }
+                    .toString(Charsets.ISO_8859_1).trimStart()
+                if (head.startsWith("<") || head.startsWith("{")) {
+                    tempFile.delete()
+                    finish(false, "Got a web page instead of a model. Download the file in your browser, then tap Import local model.")
+                    return@launch
+                }
 
-                Log.d(TAG, "Local model downloaded successfully (${targetFile.length()} bytes)")
-                withContext(Dispatchers.Main) {
-                    onComplete(true, "Model downloaded successfully! Local LLM ready.")
+                if (targetFile.exists() && !targetFile.delete()) {
+                    finish(false, "Couldn't replace the old model file.")
+                    return@launch
                 }
+                if (!tempFile.renameTo(targetFile)) {
+                    finish(false, "Couldn't save the model file to app storage.")
+                    return@launch
+                }
+                Log.d(TAG, "Local model saved (${targetFile.length()} bytes)")
+                finish(true, "Local model downloaded. Turn on 'Use on-device model' and you're set.")
+            } catch (e: java.net.UnknownHostException) {
+                tempFile.delete()
+                finish(false, "No internet connection. Connect and try again.")
+            } catch (e: java.net.SocketTimeoutException) {
+                tempFile.delete()
+                finish(false, "Connection timed out. Try again on a better signal.")
             } catch (e: Exception) {
-                Log.e(TAG, "Local model download exception", e)
-                if (tempFile.exists()) tempFile.delete()
-                withContext(Dispatchers.Main) {
-                    onComplete(false, "Download failed: ${e.message ?: "Network error"}")
-                }
+                Log.e(TAG, "Local model download failed", e)
+                tempFile.delete()
+                finish(false, "Download failed: ${e.message ?: "network error"}")
             } finally {
-                connection?.disconnect()
+                conn?.disconnect()
             }
         }
     }

@@ -27,7 +27,7 @@ class CapriAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Not needed for active screen capture or typing on demand
+        com.dot.capri.macro.MacroRecorder.onEvent(this, event)
     }
 
     override fun onInterrupt() {

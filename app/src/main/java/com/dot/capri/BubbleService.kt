@@ -858,6 +858,34 @@ class BubbleService : Service() {
             if (no.matches(trimmedInput)) return "okay, dropped it."
         }
 
+        com.dot.capri.intents.AppChooser.pending?.let { list ->
+            val num = trimmedInput.toIntOrNull()
+            if (num != null && num in 1..list.size) {
+                com.dot.capri.intents.AppChooser.pending = null
+                val choice = list[num - 1]
+                com.dot.capri.intents.AppChooser.open(this, choice.pkg)
+                return "opening ${choice.label}, choom."
+            }
+            com.dot.capri.intents.AppChooser.pending = null
+        }
+
+        val recordMatch = Regex("^(?:record\\s+macro|start\\s+recording|record)\\s+(.+)$", RegexOption.IGNORE_CASE)
+            .find(trimmedInput)
+        if (recordMatch != null) {
+            val name = recordMatch.groupValues[1].trim()
+            com.dot.capri.macro.MacroRecorder.start(name)
+            return "recording macro '$name'. do the steps in your apps, then say 'stop recording' when you're done, choom."
+        }
+
+        if (Regex("^(?:stop\\s+recording|finish\\s+macro|save\\s+macro)$", RegexOption.IGNORE_CASE).matches(trimmedInput)) {
+            return com.dot.capri.macro.MacroRecorder.stop(this)
+        }
+
+        val macro = com.dot.capri.macro.MacroStore.find(this, trimmedInput)
+        if (macro != null) {
+            return com.dot.capri.macro.MacroRunner.run(this, macro) { setChatVisible(it) }
+        }
+
         val taskMatch = Regex("^(?:task|agent|do\\s+this)\\s*[:\\-]\\s*(.+)$", RegexOption.IGNORE_CASE)
             .find(trimmedInput)
         if (taskMatch != null) {

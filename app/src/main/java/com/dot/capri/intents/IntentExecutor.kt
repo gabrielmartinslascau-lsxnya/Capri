@@ -27,7 +27,13 @@ object IntentExecutor {
         "maps" to "com.google.android.apps.maps",
         "instagram" to "com.instagram.android",
         "discord" to "com.discord",
-        "whatsapp" to "com.whatsapp"
+        "whatsapp" to "com.whatsapp",
+        "google" to "com.google.android.googlequicksearchbox",
+        "google app" to "com.google.android.googlequicksearchbox",
+        "lens" to "com.google.ar.lens",
+        "drive" to "com.google.android.apps.docs",
+        "gmail" to "com.google.android.gm",
+        "photos" to "com.google.android.apps.photos"
     )
 
     fun execute(context: Context, cmd: Cmd): Boolean {
@@ -303,55 +309,40 @@ object IntentExecutor {
 
     private fun executeOpen(context: Context, cmd: Cmd.Open): Boolean {
         val appQuery = cmd.app.lowercase().trim()
+        if (appQuery.isEmpty()) return false
         val pm = context.packageManager
 
-        val mappedPkg = appPackageMap[appQuery]
-        if (mappedPkg != null) {
-            val intent = pm.getLaunchIntentForPackage(mappedPkg)
-            if (intent != null) {
+        // 1) Aliases win, so "google" always means the Google app.
+        appPackageMap[appQuery]?.let { pkg ->
+            pm.getLaunchIntentForPackage(pkg)?.let { intent ->
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return true
-            }
-        }
-
-        val launcherIntent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
-        val resolveInfos = pm.queryIntentActivities(launcherIntent, 0)
-
-        var targetPackage: String? = null
-        for (resolveInfo in resolveInfos) {
-            val label = resolveInfo.loadLabel(pm).toString().lowercase()
-            val pkg = resolveInfo.activityInfo.packageName.lowercase()
-            if (label == appQuery || pkg.contains(appQuery)) {
-                targetPackage = resolveInfo.activityInfo.packageName
-                break
-            }
-        }
-
-        if (targetPackage == null) {
-            for (resolveInfo in resolveInfos) {
-                val label = resolveInfo.loadLabel(pm).toString().lowercase()
-                if (label.contains(appQuery) || appQuery.contains(label)) {
-                    targetPackage = resolveInfo.activityInfo.packageName
-                    break
+                return try {
+                    context.startActivity(intent)
+                    true
+                } catch (e: Exception) {
+                    false
                 }
             }
         }
 
-        if (targetPackage != null) {
-            val intent = pm.getLaunchIntentForPackage(targetPackage) ?: return false
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            return try {
-                context.startActivity(intent)
-                true
-            } catch (e: Exception) {
-                e.printStackTrace()
-                false
-            }
+        val launchers = AppChooser.launchers(context)
+
+        // 2) Exact label: "Google" opens the app labelled exactly "Google".
+        launchers.firstOrNull { it.label.lowercase() == appQuery }?.let {
+            return AppChooser.open(context, it.pkg)
         }
 
-        return false
+        // 3) Partial matches: one clear winner opens, several means ask the user.
+        val partial = launchers
+            .filter { it.label.lowercase().contains(appQuery) }
+            .distinctBy { it.pkg }
+        return when {
+            partial.size == 1 -> AppChooser.open(context, partial[0].pkg)
+            partial.size > 1 -> {
+                AppChooser.pending = partial.take(6)
+                false
+            }
+            else -> false
+        }
     }
 }
