@@ -37,6 +37,20 @@
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
+        <!-- User Guide & Tutorial Button -->
+        <Button
+            android:id="@+id/btn_open_tutorial"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:backgroundTint="#6A1B9A"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="📖 User Guide &amp; Tutorial"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
         <!-- Navigation Buttons -->
         <LinearLayout
             android:layout_width="match_parent"

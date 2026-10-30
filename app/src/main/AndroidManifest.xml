@@ -56,6 +56,11 @@
             android:exported="false"
             android:theme="@style/Theme.Capri" />
 
+        <activity
+            android:name=".TutorialActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Capri" />
+
         <service
             android:name=".CapriAccessibilityService"
             android:exported="true"

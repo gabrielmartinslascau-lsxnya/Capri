@@ -136,6 +136,10 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         // New Navigation Buttons
+        findViewById<Button>(R.id.btn_open_tutorial)?.setOnClickListener {
+            startActivity(Intent(this, TutorialActivity::class.java))
+        }
+
         findViewById<Button>(R.id.btn_open_ai_usage).setOnClickListener {
             startActivity(Intent(this, AiUsageActivity::class.java))
         }
