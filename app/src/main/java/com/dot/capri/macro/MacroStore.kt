@@ -12,6 +12,8 @@ data class MacroStep(
     val resId: String = "",
     val cx: Int = 0,
     val cy: Int = 0,
+    val relX: Float = 0f,
+    val relY: Float = 0f,
     val dir: String = "",
     val text: String = "",
     val delayMs: Long = 400
@@ -40,6 +42,7 @@ object MacroStore {
                         MacroStep(
                             s.getString("type"), s.optString("pkg"), s.optString("label"),
                             s.optString("resId"), s.optInt("cx"), s.optInt("cy"),
+                            s.optDouble("relX", 0.0).toFloat(), s.optDouble("relY", 0.0).toFloat(),
                             s.optString("dir"), s.optString("text"), s.optLong("delayMs", 400)
                         )
                     }
@@ -59,6 +62,7 @@ object MacroStore {
                 sa.put(
                     JSONObject().put("type", s.type).put("pkg", s.pkg).put("label", s.label)
                         .put("resId", s.resId).put("cx", s.cx).put("cy", s.cy)
+                        .put("relX", s.relX).put("relY", s.relY)
                         .put("dir", s.dir).put("text", s.text).put("delayMs", s.delayMs)
                 )
             }
@@ -79,6 +83,7 @@ object MacroStore {
                 sa.put(
                     JSONObject().put("type", s.type).put("pkg", s.pkg).put("label", s.label)
                         .put("resId", s.resId).put("cx", s.cx).put("cy", s.cy)
+                        .put("relX", s.relX).put("relY", s.relY)
                         .put("dir", s.dir).put("text", s.text).put("delayMs", s.delayMs)
                 )
             }
