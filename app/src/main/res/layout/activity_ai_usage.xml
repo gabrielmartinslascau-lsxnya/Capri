@@ -119,37 +119,20 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Custom Model Override"
+            android:text="Select Model"
             android:textColor="#BBBBBB"
             android:textSize="16sp"
             android:textStyle="bold" />
 
-        <LinearLayout
+        <Spinner
+            android:id="@+id/spinner_model_override"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <EditText
-                android:id="@+id/input_model_override"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="#222222"
-                android:hint="e.g. gemini-1.5-flash, gemini-3.8, argon 4..."
-                android:inputType="text"
-                android:padding="8dp"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#777777" />
-
-            <Button
-                android:id="@+id/btn_save_model"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:layout_marginStart="8dp"
-                android:text="Set Model" />
-
-        </LinearLayout>
+            android:background="#222222"
+            android:minHeight="48dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
 
         <View
             android:layout_width="match_parent"

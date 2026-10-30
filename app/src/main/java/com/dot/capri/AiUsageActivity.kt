@@ -4,8 +4,12 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -32,8 +36,7 @@ class AiUsageActivity : AppCompatActivity() {
 
         val budgetInput = findViewById<EditText>(R.id.input_token_budget)
         val saveBudgetBtn = findViewById<Button>(R.id.btn_save_budget)
-        val modelInput = findViewById<EditText>(R.id.input_model_override)
-        val saveModelBtn = findViewById<Button>(R.id.btn_save_model)
+        val modelSpinner = findViewById<Spinner>(R.id.spinner_model_override)
 
         val prefs = getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
         val providerName = LlmRouter.getActiveProviderName(this)
@@ -43,14 +46,29 @@ class AiUsageActivity : AppCompatActivity() {
             else -> LlmRouter.KEY_GEMINI_MODEL_OVERRIDE
         }
 
-        val currentModel = prefs.getString(modelKey, "") ?: ""
-        modelInput.setText(currentModel)
+        val modelsList = when (providerName.lowercase()) {
+            "anthropic" -> listOf("Default (claude-3-5-sonnet)", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229")
+            "openrouter" -> listOf("Default (anthropic/claude-3.5-sonnet)", "anthropic/claude-3.5-sonnet", "google/gemini-flash-1.5", "openai/gpt-4o")
+            else -> listOf("Default (gemini-3.5-flash-lite)", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-2.5-flash")
+        }
 
-        saveModelBtn.setOnClickListener {
-            val enteredModel = modelInput.text.toString().trim()
-            prefs.edit().putString(modelKey, enteredModel).apply()
-            Toast.makeText(this, "Model override set to '${enteredModel.ifEmpty { "default" }}'", Toast.LENGTH_SHORT).show()
-            updateDashboardUI()
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, modelsList).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        modelSpinner.adapter = adapter
+
+        val currentModel = prefs.getString(modelKey, "") ?: ""
+        val selectionIndex = modelsList.indexOfFirst { it.equals(currentModel, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+        modelSpinner.setSelection(selectionIndex)
+
+        modelSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selected = modelsList[position]
+                val valToSave = if (selected.startsWith("Default")) "" else selected
+                prefs.edit().putString(modelKey, valToSave).apply()
+                updateDashboardUI()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         val currentBudget = UsageTracker.getDailyBudget(this)
