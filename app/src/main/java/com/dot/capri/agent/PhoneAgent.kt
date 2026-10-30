@@ -259,13 +259,13 @@ Rules:
                         val app = a.app.orEmpty()
                         val ok = IntentExecutor.execute(context, Cmd.Open(app))
                         log.add("opened $app" + if (ok) "" else " (failed)")
-                        delay(1200)
+                        delay(500)
                     }
                     "wait" -> log.add("waited")
                     else -> log.add("unknown action")
                 }
                 steps++
-                delay(1200)
+                delay(200)
             }
             return "that took too many steps, choom. ${summary(log)}"
         } finally {

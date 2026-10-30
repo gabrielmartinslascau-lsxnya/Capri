@@ -179,7 +179,7 @@ object CapriCursor {
         val toY = y - half
         suspendCancellableCoroutine<Unit> { cont ->
             val anim = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 350
+                duration = 150
                 addUpdateListener {
                     val f = it.animatedValue as Float
                     params.x = (fromX + (toX - fromX) * f).toInt()
