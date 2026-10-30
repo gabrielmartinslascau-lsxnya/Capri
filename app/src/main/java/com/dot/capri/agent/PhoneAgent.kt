@@ -221,6 +221,7 @@ Rules:
         chatVisible(false)
         CapriCursor.show(context)
         delay(250)
+        var failStreak = 0
         try {
             while (steps < MAX_STEPS) {
                 if (CapriCursor.cancelled) return "stopped. ${summary(log)}"
@@ -264,6 +265,17 @@ Rules:
                     }
                 }
                 val a: Act = chosen
+
+                // A tap on an element that isn't on screen is a failed step, not a retry.
+                val missing = a.doWhat == "tap" && a.id != null && a.x == null && items.none { it.id == a.id }
+                if (missing) {
+                    failStreak++
+                    log.add("no element ${a.id} on screen")
+                    if (failStreak >= 2) return "couldn't find that on screen, choom. ${summary(log)}"
+                    steps++
+                    continue
+                }
+                failStreak = 0
 
                 Log.d(TAG, "step=$steps act=${a.doWhat} id=${a.id} x=${a.x} y=${a.y} pkg=$pkg items=${items.size}")
 
