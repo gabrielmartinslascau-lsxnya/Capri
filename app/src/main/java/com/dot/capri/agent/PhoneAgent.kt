@@ -15,8 +15,8 @@ import org.json.JSONObject
 object PhoneAgent {
 
     private const val TAG = "CAPRI_AGENT"
-    private const val MAX_STEPS = 12
-    private const val TOTAL_TIMEOUT_MS = 120_000L
+    private const val MAX_STEPS = 15
+    private const val TOTAL_TIMEOUT_MS = 180_000L
 
     private val RISKY = Regex(
         "\\b(send|pay|buy|purchase|order|checkout|delete|remove|erase|reset|confirm|submit|post|publish|transfer|uninstall|sign out|log out|logout)\\b",
@@ -45,19 +45,22 @@ object PhoneAgent {
     private class Act(
         val doWhat: String,
         val id: Int?,
+        val x: Int?,
+        val y: Int?,
         val text: String?,
         val dir: String?,
         val app: String?,
         val say: String?
     )
 
-    private const val SYSTEM = """You are the hands of an Android assistant called Capri. You possess a glowing neon-pink cursor ring on screen that glides directly to target (x, y) coordinates when you choose an element to tap or type into.
-You operate the phone by reading a numbered list of on-screen elements with coordinates and choosing ONE action at a time.
+    private const val SYSTEM = """You are the hands of an Android assistant called Capri. You possess a glowing neon-pink cursor ring on screen that glides directly to target coordinates (x, y) when you tap or type.
+You operate the phone by reading on-screen elements AND looking at the live screenshot.
 Reply with ONLY a JSON object, nothing else. Actions:
-{"do":"tap","id":N}
+{"do":"tap","x":X,"y":Y}   (glides cursor to pixel (x, y) on screen and taps)
+{"do":"tap","id":N}       (taps element N from screen list)
 {"do":"type","id":N,"text":"..."}   (replaces the text in that field)
 {"do":"submit","id":N}  (presses enter, send, or search after typing)
-{"do":"scroll","dir":"down"}   (or "up")
+{"do":"scroll","dir":"down"}   (or "up", "left", "right")
 {"do":"back"}
 {"do":"home"}
 {"do":"open","app":"app name"}
@@ -65,11 +68,10 @@ Reply with ONLY a JSON object, nothing else. Actions:
 {"do":"done","say":"short summary for the user"}
 {"do":"fail","say":"why you can't do it"}
 Rules:
-- Use ids only from the list. Elements look like [id] kind "label" at (x, y).
+- You can tap ANY position on screen by giving exact pixel coordinates {"do":"tap","x":X,"y":Y} from looking at the live screenshot, OR by id {"do":"tap","id":N}.
 - Your cursor automatically glides to (x, y) and pulses when you tap or type.
 - Never guess passwords, codes, card numbers or personal details.
-- If the task is finished, answer done. If the screen doesn't show what you need, scroll, go back, or open the right app.
-- Don't repeat an action that didn't change the screen. Try something different or answer fail.
+- If the task is finished, answer done. If the screen doesn't show what you need, tap, scroll, go back, or open the right app.
 - Keep "say" to one short lowercase sentence, a little dry, like a sharp friend."""
 
     private fun parseAct(raw: String): Act? {
@@ -81,6 +83,8 @@ Rules:
             Act(
                 doWhat = o.optString("do").lowercase(),
                 id = if (o.has("id")) o.optInt("id") else null,
+                x = if (o.has("x")) o.optInt("x") else null,
+                y = if (o.has("y")) o.optInt("y") else null,
                 text = o.optString("text").ifEmpty { null },
                 dir = o.optString("dir").ifEmpty { null },
                 app = o.optString("app").ifEmpty { null },
@@ -166,7 +170,7 @@ Rules:
                     confirmedAction = null
                     val match = items.firstOrNull { it.label == rp.label }
                     if (match != null) {
-                        chosen = Act(rp.kind, match.id, rp.arg, null, null, null)
+                        chosen = Act(rp.kind, match.id, null, null, rp.arg, null, null, null)
                     } else {
                         log.add("screen changed, re-checking")
                     }
@@ -184,28 +188,33 @@ Rules:
                 }
                 val a: Act = chosen
 
-                Log.d(TAG, "step=$steps act=${a.doWhat} id=${a.id} pkg=$pkg items=${items.size}")
+                Log.d(TAG, "step=$steps act=${a.doWhat} id=${a.id} x=${a.x} y=${a.y} pkg=$pkg items=${items.size}")
 
-                // Same action on the same screen three times in a row = going in circles.
-                val key = "$pkg|${items.joinToString(",") { it.label }.hashCode()}|${a.doWhat}|${a.id}|${a.text}"
+                val key = "$pkg|${items.joinToString(",") { it.label }.hashCode()}|${a.doWhat}|${a.id}|${a.x}|${a.y}|${a.text}"
                 repeats = if (key == lastKey) repeats + 1 else 0
                 lastKey = key
-                if (repeats >= 2) return "i'm going in circles, choom. ${summary(log)}"
+                if (repeats >= 4) return "i'm going in circles, choom. ${summary(log)}"
 
                 when (a.doWhat) {
                     "done" -> return a.say ?: "done."
                     "fail" -> return a.say ?: "couldn't do that, choom."
                     "tap" -> {
-                        val item = items.firstOrNull { it.id == a.id }
-                        if (item == null) {
-                            log.add("tap: unknown element")
+                        if (a.x != null && a.y != null) {
+                            val fallbackItem = PhoneControl.UiItem(0, "tap", "button", a.x, a.y, root)
+                            val ok = PhoneControl.tap(fallbackItem)
+                            log.add("glided cursor to (${a.x}, ${a.y}) & tapped" + if (ok) "" else " (failed)")
                         } else {
-                            if (rp == null && RISKY.containsMatchIn(item.label)) {
-                                pending = Pending(goal, "tap", item.label, null, log.toList(), steps)
-                                return "about to tap \"${item.label}\". go ahead? (yes/no)"
+                            val item = items.firstOrNull { it.id == a.id }
+                            if (item == null) {
+                                log.add("tap: unknown element")
+                            } else {
+                                if (rp == null && RISKY.containsMatchIn(item.label)) {
+                                    pending = Pending(goal, "tap", item.label, null, log.toList(), steps)
+                                    return "about to tap \"${item.label}\". go ahead? (yes/no)"
+                                }
+                                val ok = PhoneControl.tap(item)
+                                log.add("glided cursor to (${item.cx}, ${item.cy}) & tapped ${item.label}" + if (ok) "" else " (failed)")
                             }
-                            val ok = PhoneControl.tap(item)
-                            log.add("glided cursor to (${item.cx}, ${item.cy}) & tapped ${item.label}" + if (ok) "" else " (failed)")
                         }
                     }
                     "type" -> {
@@ -228,7 +237,14 @@ Rules:
                         }
                     }
                     "scroll" -> {
-                        PhoneControl.scroll(a.dir != "up")
+                        val dir = when (a.dir?.lowercase()) {
+                            "up" -> com.dot.capri.intents.ScrollDirection.UP
+                            "down" -> com.dot.capri.intents.ScrollDirection.DOWN
+                            "left" -> com.dot.capri.intents.ScrollDirection.LEFT
+                            "right" -> com.dot.capri.intents.ScrollDirection.RIGHT
+                            else -> com.dot.capri.intents.ScrollDirection.DOWN
+                        }
+                        PhoneControl.scroll(dir)
                         log.add("scrolled ${a.dir ?: "down"}")
                     }
                     "back" -> {
@@ -243,13 +259,13 @@ Rules:
                         val app = a.app.orEmpty()
                         val ok = IntentExecutor.execute(context, Cmd.Open(app))
                         log.add("opened $app" + if (ok) "" else " (failed)")
-                        delay(900)
+                        delay(1200)
                     }
                     "wait" -> log.add("waited")
                     else -> log.add("unknown action")
                 }
                 steps++
-                delay(700)
+                delay(1200)
             }
             return "that took too many steps, choom. ${summary(log)}"
         } finally {
