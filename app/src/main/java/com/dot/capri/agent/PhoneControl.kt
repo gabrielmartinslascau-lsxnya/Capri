@@ -119,9 +119,10 @@ object PhoneControl {
 
     private suspend fun dispatch(path: Path, ms: Long): Boolean {
         val s = service() ?: return false
+        val safeMs = ms.coerceIn(50L, GestureDescription.getMaxGestureDuration())
         return suspendCancellableCoroutine { cont ->
             val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, ms))
+                .addStroke(GestureDescription.StrokeDescription(path, 0, safeMs))
                 .build()
             val accepted = s.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
                 override fun onCompleted(g: GestureDescription?) {
@@ -191,9 +192,14 @@ object PhoneControl {
         val forward = direction == ScrollDirection.DOWN || direction == ScrollDirection.RIGHT
         val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
         else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-        if (scrollable != null && scrollable.performAction(action)) {
-            CapriCursor.pulse()
-            return true
+        if (scrollable != null) {
+            val r = Rect()
+            scrollable.getBoundsInScreen(r)
+            CapriCursor.moveTo(r.centerX(), r.centerY())
+            if (scrollable.performAction(action)) {
+                CapriCursor.pulse()
+                return true
+            }
         }
 
         // Fallback: a finger drag across the middle of the screen.
@@ -208,7 +214,7 @@ object PhoneControl {
             ScrollDirection.RIGHT -> listOf(w * 0.80f, cy, w * 0.20f, cy)
             ScrollDirection.LEFT -> listOf(w * 0.20f, cy, w * 0.80f, cy)
         }
-        return swipe(fx, fy, tx, ty, 450)
+        return swipe(fx, fy, tx, ty, 700)
     }
 
     /** The largest visible scrollable container, usually the main list or page. */
@@ -232,8 +238,28 @@ object PhoneControl {
         return best
     }
 
+    /**
+     * Visible, labelled, clickable items in reading order: rows top to bottom, then left to right.
+     * Items whose centres are within `rowTolerancePx` of each other count as one row.
+     */
+    fun orderedTargets(root: AccessibilityNodeInfo, rowTolerancePx: Int): List<UiItem> {
+        val items = snapshot(root, max = 200)
+            .filter { it.kind == "button" && it.label != "(no label)" }
+            .sortedBy { it.cy }
+        val rows = mutableListOf<MutableList<UiItem>>()
+        for (item in items) {
+            val row = rows.lastOrNull()
+            if (row != null && kotlin.math.abs(row.first().cy - item.cy) <= rowTolerancePx) {
+                row.add(item)
+            } else {
+                rows.add(mutableListOf(item))
+            }
+        }
+        return rows.flatMap { row -> row.sortedBy { it.cx } }
+    }
+
     /** Drags from (x1,y1) to (x2,y2). The cursor is placed at the start first, so there's no diagonal jump. */
-    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 350): Boolean {
+    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 700): Boolean {
         service() ?: return false
         CapriCursor.pulse()
         val path = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }

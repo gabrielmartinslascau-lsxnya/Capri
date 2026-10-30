@@ -67,6 +67,7 @@ Reply with ONLY a JSON object. Actions:
 {"do":"type","id":N,"text":"..."}            type into field N and press Enter
 {"do":"submit","id":N}                       press Enter on field N
 {"do":"scroll","dir":"down"}                 show MORE content below. dir is down, up, left or right. "right" shows content further right.
+{"do":"tap_nth","n":3}    tap the Nth labelled item on screen, counted top to bottom, left to right. Use this for "the 3rd app", "the first icon", etc. Never count items yourself.
 {"do":"back"}
 {"do":"home"}
 {"do":"open","app":"app name"}
@@ -140,7 +141,7 @@ Rules:
             val y2 = if (o.has("y2")) o.optInt("y2") else cell2?.second
             Act(
                 doWhat = o.optString("do").lowercase(),
-                id = if (o.has("id")) o.optInt("id") else null,
+                id = if (o.has("id")) o.optInt("id") else if (o.has("n")) o.optInt("n") else null,
                 text = o.optString("text").ifEmpty { null },
                 dir = o.optString("dir").ifEmpty { null },
                 app = o.optString("app").ifEmpty { null },
@@ -383,6 +384,21 @@ Rules:
                         }
                         PhoneControl.scroll(dir)
                         log.add("scrolled ${a.dir ?: "down"}")
+                    }
+                    "tap_nth" -> {
+                        CapriCursor.setStatus("finding item ${a.id}...")
+                        val n = a.id ?: 0
+                        val root = PhoneControl.foregroundRoot()
+                        val size = PhoneControl.screenSize()
+                        val targets = if (root != null && size != null)
+                            PhoneControl.orderedTargets(root, size.second / 20) else emptyList()
+                        val item = targets.getOrNull(n - 1)
+                        if (item == null) {
+                            log.add("tap_nth: only ${targets.size} labelled items, wanted $n")
+                        } else {
+                            val ok = PhoneControl.tap(item)
+                            log.add("tapped item $n: ${item.label}" + if (ok) "" else " (failed)")
+                        }
                     }
                     "back" -> {
                         CapriCursor.setStatus("going back...")
