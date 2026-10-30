@@ -333,7 +333,7 @@ object IntentParser {
             }
         }
 
-        val looksLikeAppName = Regex("^[a-zA-Z][a-zA-Z0-9 .&'\\-]{0,29}$").matches(raw)
-        return if (looksLikeAppName) Cmd.Open(raw) else Cmd.Unknown(raw)
+        val verbOpen = Regex("^(?:open|launch|start|run)\\s+.+$", RegexOption.IGNORE_CASE).matches(raw)
+        return if (verbOpen) Cmd.Open(raw) else Cmd.Unknown(raw)
     }
 }

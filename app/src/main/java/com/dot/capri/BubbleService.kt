@@ -43,6 +43,7 @@ import com.dot.capri.ai.OnDeviceAiClient
 import com.dot.capri.llm.LlmRouter
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentExecutor
+import com.dot.capri.intents.AppChooser
 import com.dot.capri.intents.IntentParser
 import com.dot.capri.intents.VolumeDirection
 import com.dot.capri.personality.Personality
@@ -863,7 +864,18 @@ class BubbleService : Service() {
 
         // Tier 3: nothing worked. A spent budget is the one case worth saying out loud.
         if (apiError?.contains("budget", ignoreCase = true) == true) return Personality.budgetExhausted()
+        OnDeviceAiClient.lastError?.let { return "my brain glitched: $it" }
         return null
+    }
+
+    private fun noBrainReply(): String {
+        val why = OnDeviceAiClient.lastError
+        return if (why != null) {
+            "my brain glitched: $why"
+        } else {
+            "i can't reach a brain right now, choom. no internet and no local model yet. " +
+                    "download one from settings, or say 'open <app name>' for an app."
+        }
     }
 
     private suspend fun processCommand(text: String): String {
@@ -945,8 +957,20 @@ class BubbleService : Service() {
 
         val cmd = IntentParser.parse(text)
 
-        if (cmd !is Cmd.Unknown) {
-            if (cmd is Cmd.Text && !cmd.message.isNullOrBlank() && CapriAccessibilityService.instance != null) {
+        if (cmd is Cmd.Chat || cmd is Cmd.Mention || cmd is Cmd.Compliment || cmd is Cmd.Unknown) {
+            if (cmd is Cmd.Unknown) {
+                AppChooser.launchers(this)
+                    .firstOrNull { it.label.equals(trimmedInput, ignoreCase = true) }
+                    ?.let { app ->
+                        AppChooser.open(this, app.pkg)
+                        return "opening ${app.label}, choom."
+                    }
+            }
+            askBrain(text)?.let { return it }
+            return if (cmd is Cmd.Unknown) noBrainReply() else Personality.respond(cmd, true)
+        }
+
+        if (cmd is Cmd.Text && !cmd.message.isNullOrBlank() && CapriAccessibilityService.instance != null) {
                 val opened = IntentExecutor.execute(this, cmd)
                 delay(300)
                 if (!opened) return Personality.respond(cmd, false)
@@ -1123,20 +1147,17 @@ class BubbleService : Service() {
                 }
             }
 
-            val success = IntentExecutor.execute(this, cmd)
-            delay(300)
-            if (success) return Personality.respond(cmd, true)
+        val success = IntentExecutor.execute(this, cmd)
+        delay(300)
+        if (success) return Personality.respond(cmd, true)
 
-            com.dot.capri.intents.AppChooser.pending?.let { options ->
-                val choices = options.mapIndexed { i, opt -> "${i + 1}. ${opt.label}" }.joinToString("\n")
-                return "found a few matches, choom:\n$choices\nwhich number did you mean?"
-            }
+        com.dot.capri.intents.AppChooser.pending?.let { options ->
+            val choices = options.mapIndexed { i, opt -> "${i + 1}. ${opt.label}" }.joinToString("\n")
+            return "found a few matches, choom:\n$choices\nwhich number did you mean?"
         }
 
-        // Conversation goes API -> local model -> canned lines.
         askBrain(text)?.let { return it }
-
-        return Personality.respond(cmd, false)
+        return if (cmd is Cmd.Open) noBrainReply() else Personality.respond(cmd, false)
     }
 
     override fun onDestroy() {
