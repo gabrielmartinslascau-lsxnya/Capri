@@ -186,6 +186,7 @@ Rules:
                     }
                 }
                 if (chosen == null) {
+                    CapriCursor.setStatus("observing...")
                     val shot = service.captureScreenBitmap()
                     var reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
@@ -238,6 +239,7 @@ Rules:
                         log.add("cleared all cursors")
                     }
                     "tap" -> {
+                        CapriCursor.setStatus("tapping...")
                         if (a.x != null && a.y != null) {
                             val fallbackItem = PhoneControl.UiItem(0, "tap", "button", a.x, a.y, root)
                             val ok = PhoneControl.tap(fallbackItem)
@@ -257,6 +259,7 @@ Rules:
                         }
                     }
                     "type" -> {
+                        CapriCursor.setStatus("typing...")
                         val item = items.firstOrNull { it.id == a.id }
                         val text = a.text
                         if (item == null || text == null) {
@@ -267,6 +270,7 @@ Rules:
                         }
                     }
                     "submit" -> {
+                        CapriCursor.setStatus("submitting...")
                         val item = items.firstOrNull { it.id == a.id }
                         if (item == null) {
                             log.add("submit: bad target")
@@ -276,6 +280,7 @@ Rules:
                         }
                     }
                     "scroll" -> {
+                        CapriCursor.setStatus("scrolling...")
                         val dir = when (a.dir?.lowercase()) {
                             "up" -> com.dot.capri.intents.ScrollDirection.UP
                             "down" -> com.dot.capri.intents.ScrollDirection.DOWN
@@ -287,14 +292,17 @@ Rules:
                         log.add("scrolled ${a.dir ?: "down"}")
                     }
                     "back" -> {
+                        CapriCursor.setStatus("going back...")
                         PhoneControl.back()
                         log.add("went back")
                     }
                     "home" -> {
+                        CapriCursor.setStatus("going home...")
                         PhoneControl.home()
                         log.add("went home")
                     }
                     "open" -> {
+                        CapriCursor.setStatus("opening app...")
                         val app = a.app.orEmpty()
                         val ok = IntentExecutor.execute(context, Cmd.Open(app))
                         log.add("opened $app" + if (ok) "" else " (failed)")

@@ -73,8 +73,40 @@ object CapriCursor {
         return newManager
     }
 
+    private class AnimatedBarsView(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFF2D6B.toInt()
+            style = Paint.Style.FILL
+            strokeCap = Paint.Cap.ROUND
+        }
+        private var phase = 0f
+        private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 800
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            addUpdateListener {
+                phase = it.animatedValue as Float
+                invalidate()
+            }
+        }.also { it.start() }
+
+        override fun onDraw(canvas: Canvas) {
+            val barWidth = 4f
+            val gap = 3f
+            val maxH = height.toFloat()
+            for (i in 0..3) {
+                val h = maxH * (0.25f + 0.75f * kotlin.math.sin((phase * Math.PI * 2) + (i * 0.7)).toFloat().let { if (it < 0) -it else it })
+                val left = i * (barWidth + gap)
+                canvas.drawRect(left, maxH - h, left + barWidth, maxH, paint)
+            }
+        }
+    }
+
+    private var pillContainer: android.widget.LinearLayout? = null
+    private var statusTv: TextView? = null
+
     private fun ensurePill(context: Context) {
-        if (pill != null) return
+        if (pillContainer != null) return
         val app = context.applicationContext
         val manager = getWindowManager(app)
         val metrics = app.resources.displayMetrics
@@ -85,23 +117,51 @@ object CapriCursor {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 
+        val container = android.widget.LinearLayout(app).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                cornerRadius = 100f
+                setColor(0xEE1A1A1A.toInt())
+                setStroke(2, 0xFFFF2D6B.toInt())
+            }
+            val padH = (12 * density).toInt()
+            val padV = (6 * density).toInt()
+            setPadding(padH, padV, padH, padV)
+        }
+
         val stop = TextView(app).apply {
             text = "STOP"
             setTextColor(Color.WHITE)
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
-            val h = (16 * density).toInt()
-            val v = (8 * density).toInt()
-            setPadding(h, v, h, v)
-            background = GradientDrawable().apply {
-                cornerRadius = 100f
-                setColor(0xEEFF2D6B.toInt())
-            }
             setOnClickListener {
                 cancelled = true
                 text = "stopping..."
             }
         }
+
+        val status = TextView(app).apply {
+            text = "ready"
+            setTextColor(0xAAFFFFFF.toInt())
+            textSize = 11f
+            visibility = View.VISIBLE
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = (8 * density).toInt() }
+        }
+
+        val bars = AnimatedBarsView(app).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams((22 * density).toInt(), (14 * density).toInt()).apply {
+                leftMargin = (8 * density).toInt()
+            }
+        }
+
+        container.addView(stop)
+        container.addView(status)
+        container.addView(bars)
+
         val pp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -109,13 +169,21 @@ object CapriCursor {
             baseFlags,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             y = (36 * density).toInt()
         }
         try {
-            manager.addView(stop, pp)
+            manager.addView(container, pp)
+            pillContainer = container
+            statusTv = status
             pill = stop
         } catch (_: Exception) {}
+    }
+
+    fun setStatus(msg: String) {
+        main.post {
+            statusTv?.text = msg
+        }
     }
 
     fun spawnCursor(context: Context, id: Int = 1, x: Int, y: Int, colorHex: Int = 0xFFFF2D6B.toInt()) {
@@ -192,13 +260,15 @@ object CapriCursor {
 
     fun hide() {
         val task = Runnable {
-            activeCursors.forEach { (id, instance) ->
+            activeCursors.forEach { (_, instance) ->
                 instance.animator?.cancel()
                 try { wm?.removeView(instance.view) } catch (_: Exception) {}
             }
             activeCursors.clear()
-            pill?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
+            pillContainer?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
+            pillContainer = null
             pill = null
+            statusTv = null
         }
         if (Looper.myLooper() == Looper.getMainLooper()) task.run() else main.post(task)
     }
