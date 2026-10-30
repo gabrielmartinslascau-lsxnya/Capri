@@ -893,176 +893,166 @@ class BubbleService : Service() {
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
         }
 
-        // LLM-First principle: if an API or LLM is connected, let it interpret the user input first.
-        // Local CMD parsing is strictly the last resort.
-        if (LlmRouter.hasAnyApiKey(this) || OnDeviceAiClient.isAvailable(this)) {
-            askBrain(text)?.let { return it }
-        }
-
         val cmd = IntentParser.parse(text)
 
-        if (cmd is Cmd.Text && !cmd.message.isNullOrBlank() && CapriAccessibilityService.instance != null) {
-            val opened = IntentExecutor.execute(this, cmd)
+        if (cmd !is Cmd.Unknown) {
+            if (cmd is Cmd.Text && !cmd.message.isNullOrBlank() && CapriAccessibilityService.instance != null) {
+                val opened = IntentExecutor.execute(this, cmd)
+                delay(300)
+                if (!opened) return Personality.respond(cmd, false)
+                pendingSend = cmd
+                return "chat with ${cmd.contact} is open with \"${cmd.message}\" ready. send it? (yes/no)"
+            }
+
+            if (cmd is Cmd.CheckNotifications) {
+                val listenerOn = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+                if (!listenerOn) {
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    return "opened notification access for you. flip capri on and come back, choom."
+                }
+                return com.dot.capri.monitor.CapriNotificationListenerService.getRecentSummary()
+            }
+
+            if (cmd is Cmd.WhatIsPlaying) {
+                val song = com.dot.capri.monitor.CapriNotificationListenerService.getCurrentPlayingSong()
+                if (song != null) {
+                    return "currently playing: $song, choom~"
+                }
+                return "no media playing right now, or notification access is disabled."
+            }
+
+            if (cmd is Cmd.EasterEgg) {
+                val count = easterEggCounts.getOrPut(cmd.response) { 0 }
+                if (count >= 5) return "that's enough of that."
+                easterEggCounts[cmd.response] = count + 1
+                return cmd.response
+            }
+
+            if (cmd is Cmd.Write || cmd is Cmd.TypeText) {
+                val writeText = if (cmd is Cmd.Write) cmd.text else (cmd as Cmd.TypeText).text
+                val smartComposeRegex = Regex("^(?:about\\s+(.+)|write\\s+about\\s+(.+))$", RegexOption.IGNORE_CASE)
+                val match = smartComposeRegex.find(writeText)
+                if (match != null) {
+                    val topic = (match.groups[1]?.value ?: match.groups[2]?.value ?: "").trim()
+                    val prompt = "write a short message about: $topic. max 2 sentences. match a casual texting tone. no quotes, no preamble, just the message text."
+                    val draft = withContext(Dispatchers.IO) {
+                        CloudAiClient.generateResponse(this@BubbleService, prompt).getOrNull()
+                    }?.trim()?.removeSurrounding("\"")?.removeSurrounding("'")
+                    if (!draft.isNullOrEmpty()) {
+                        pendingDraftText = draft
+                        return "$draft\n\nwant me to put it in the field?"
+                    }
+                    return "couldn't write about that."
+                }
+                return executeWriteCommand(writeText)
+            }
+
+            if (cmd is Cmd.Scroll) {
+                if (CapriAccessibilityService.instance == null) {
+                    return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+                }
+                var ok = true
+                repeat(cmd.count) {
+                    ok = PhoneControl.scroll(cmd.direction) && ok
+                    if (cmd.count > 1) delay(200)
+                }
+                return Personality.respond(cmd, ok)
+            }
+
+            if (cmd is Cmd.Tap) {
+                if (CapriAccessibilityService.instance == null) {
+                    return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+                }
+                val root = PhoneControl.foregroundRoot()
+                if (root != null) {
+                    val items = PhoneControl.snapshot(root)
+                    val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
+                    if (matchItem != null) {
+                        val ok = PhoneControl.tap(matchItem)
+                        return Personality.respond(cmd, ok)
+                    }
+                }
+                // Fallback: visual screen capture & task agent loop
+                return PhoneAgent.run(this, "click on ${cmd.target}", null) { setChatVisible(it) }
+            }
+
+            if (cmd is Cmd.LongPress) {
+                if (CapriAccessibilityService.instance == null) {
+                    return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+                }
+                val root = PhoneControl.foregroundRoot()
+                if (root != null) {
+                    val items = PhoneControl.snapshot(root)
+                    val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
+                    if (matchItem != null) {
+                        val ok = PhoneControl.longPress(matchItem)
+                        return Personality.respond(cmd, ok)
+                    }
+                }
+                return PhoneAgent.run(this, "long press ${cmd.target}", null) { setChatVisible(it) }
+            }
+
+            if (cmd is Cmd.ClearField) return executeClearFieldCommand()
+
+            if (cmd is Cmd.MuteProactivity) {
+                proactivityEngine?.muteFor(4)
+                return Personality.respond(cmd, true)
+            }
+
+            if (cmd is Cmd.UnmuteProactivity) {
+                proactivityEngine?.unmute()
+                return Personality.respond(cmd, true)
+            }
+
+            if (cmd is Cmd.ClearHistory) {
+                persistentChatHistory.clear()
+                CloudAiClient.clearHistory()
+                return Personality.respond(cmd, true)
+            }
+
+            if (cmd is Cmd.SeeScreen) {
+                if (!OnDeviceAiClient.isAvailable(this) && (!LlmRouter.hasAnyApiKey(this) || !NetworkUtils.isOnline(this))) {
+                    return "need an api key + internet, or an imported local model, to look at the screen, choom~"
+                }
+                val accessibilityService = CapriAccessibilityService.instance
+                    ?: return "accessibility service not enabled. please enable 'Capri' in Android Accessibility settings first, choom~"
+
+                withContext(Dispatchers.Main) { chatView?.visibility = View.INVISIBLE }
+                val (imageBytes, screenTextTree) = try {
+                    delay(250)
+                    accessibilityService.captureScreenBitmap() to accessibilityService.dumpScreenTextTree()
+                } finally {
+                    // Runs even if the capture throws, so the chat can never stay hidden.
+                    withContext(Dispatchers.Main) { chatView?.visibility = View.VISIBLE }
+                }
+
+                val question = cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }
+                val userPrompt = if (screenTextTree.isNotEmpty()) {
+                    "$question\n\n[Extracted On-Screen Text/Elements]:\n$screenTextTree"
+                } else {
+                    question
+                }
+                return askBrain(userPrompt, imageBytes) ?: "couldn't analyze what's on screen, choom~"
+            }
+
+            if (cmd is Cmd.Search) {
+                val url = "https://www.google.com/search?q=" + Uri.encode(cmd.query)
+                return try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    "searching '${cmd.query}' in your browser, choom."
+                } catch (e: Exception) {
+                    "no browser to search with, choom."
+                }
+            }
+
+            val success = IntentExecutor.execute(this, cmd)
             delay(300)
-            if (!opened) return Personality.respond(cmd, false)
-            pendingSend = cmd
-            return "chat with ${cmd.contact} is open with \"${cmd.message}\" ready. send it? (yes/no)"
-        }
-
-        if (cmd is Cmd.CheckNotifications) {
-            val listenerOn = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
-            if (!listenerOn) {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                return "opened notification access for you. flip capri on and come back, choom."
-            }
-            return com.dot.capri.monitor.CapriNotificationListenerService.getRecentSummary()
-        }
-
-        if (cmd is Cmd.WhatIsPlaying) {
-            val song = com.dot.capri.monitor.CapriNotificationListenerService.getCurrentPlayingSong()
-            if (song != null) {
-                return "currently playing: $song, choom~"
-            }
-            return "no media playing right now, or notification access is disabled."
-        }
-
-        if (cmd is Cmd.EasterEgg) {
-            val count = easterEggCounts.getOrPut(cmd.response) { 0 }
-            if (count >= 5) return "that's enough of that."
-            easterEggCounts[cmd.response] = count + 1
-            return cmd.response
-        }
-
-        if (cmd is Cmd.Write || cmd is Cmd.TypeText) {
-            val writeText = if (cmd is Cmd.Write) cmd.text else (cmd as Cmd.TypeText).text
-            val smartComposeRegex = Regex("^(?:about\\s+(.+)|write\\s+about\\s+(.+))$", RegexOption.IGNORE_CASE)
-            val match = smartComposeRegex.find(writeText)
-            if (match != null) {
-                val topic = (match.groups[1]?.value ?: match.groups[2]?.value ?: "").trim()
-                val prompt = "write a short message about: $topic. max 2 sentences. match a casual texting tone. no quotes, no preamble, just the message text."
-                val draft = withContext(Dispatchers.IO) {
-                    CloudAiClient.generateResponse(this@BubbleService, prompt).getOrNull()
-                }?.trim()?.removeSurrounding("\"")?.removeSurrounding("'")
-                if (!draft.isNullOrEmpty()) {
-                    pendingDraftText = draft
-                    return "$draft\n\nwant me to put it in the field?"
-                }
-                return "couldn't write about that."
-            }
-            return executeWriteCommand(writeText)
-        }
-
-        if (cmd is Cmd.Scroll) {
-            if (CapriAccessibilityService.instance == null) {
-                return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
-            }
-            var ok = true
-            repeat(cmd.count) {
-                ok = PhoneControl.scroll(cmd.direction) && ok
-                if (cmd.count > 1) delay(200)
-            }
-            return Personality.respond(cmd, ok)
-        }
-
-        if (cmd is Cmd.Tap) {
-            if (CapriAccessibilityService.instance == null) {
-                return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
-            }
-            val root = PhoneControl.foregroundRoot()
-            if (root != null) {
-                val items = PhoneControl.snapshot(root)
-                val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
-                if (matchItem != null) {
-                    val ok = PhoneControl.tap(matchItem)
-                    return Personality.respond(cmd, ok)
-                }
-            }
-            // Fallback: visual screen capture & task agent loop
-            return PhoneAgent.run(this, "click on ${cmd.target}", null) { setChatVisible(it) }
-        }
-
-        if (cmd is Cmd.LongPress) {
-            if (CapriAccessibilityService.instance == null) {
-                return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
-            }
-            val root = PhoneControl.foregroundRoot()
-            if (root != null) {
-                val items = PhoneControl.snapshot(root)
-                val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
-                if (matchItem != null) {
-                    val ok = PhoneControl.longPress(matchItem)
-                    return Personality.respond(cmd, ok)
-                }
-            }
-            return PhoneAgent.run(this, "long press ${cmd.target}", null) { setChatVisible(it) }
-        }
-
-        if (cmd is Cmd.ClearField) return executeClearFieldCommand()
-
-        if (cmd is Cmd.MuteProactivity) {
-            proactivityEngine?.muteFor(4)
-            return Personality.respond(cmd, true)
-        }
-
-        if (cmd is Cmd.UnmuteProactivity) {
-            proactivityEngine?.unmute()
-            return Personality.respond(cmd, true)
-        }
-
-        if (cmd is Cmd.ClearHistory) {
-            persistentChatHistory.clear()
-            CloudAiClient.clearHistory()
-            return Personality.respond(cmd, true)
-        }
-
-        if (cmd is Cmd.SeeScreen) {
-            if (!OnDeviceAiClient.isAvailable(this) && (!LlmRouter.hasAnyApiKey(this) || !NetworkUtils.isOnline(this))) {
-                return "need an api key + internet, or an imported local model, to look at the screen, choom~"
-            }
-            val accessibilityService = CapriAccessibilityService.instance
-                ?: return "accessibility service not enabled. please enable 'Capri' in Android Accessibility settings first, choom~"
-
-            withContext(Dispatchers.Main) { chatView?.visibility = View.INVISIBLE }
-            val (imageBytes, screenTextTree) = try {
-                delay(250)
-                accessibilityService.captureScreenBitmap() to accessibilityService.dumpScreenTextTree()
-            } finally {
-                // Runs even if the capture throws, so the chat can never stay hidden.
-                withContext(Dispatchers.Main) { chatView?.visibility = View.VISIBLE }
-            }
-
-            val question = cmd.prompt.ifBlank { "what is visible on this screen? read any text and describe it in character." }
-            val userPrompt = if (screenTextTree.isNotEmpty()) {
-                "$question\n\n[Extracted On-Screen Text/Elements]:\n$screenTextTree"
-            } else {
-                question
-            }
-            return askBrain(userPrompt, imageBytes) ?: "couldn't analyze what's on screen, choom~"
-        }
-
-        if (cmd is Cmd.Search) {
-            val url = "https://www.google.com/search?q=" + Uri.encode(cmd.query)
-            return try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                "searching '${cmd.query}' in your browser, choom."
-            } catch (e: Exception) {
-                "no browser to search with, choom."
-            }
+            if (success) return Personality.respond(cmd, true)
         }
 
         // Conversation goes API -> local model -> canned lines.
-        if (cmd is Cmd.Chat || cmd is Cmd.Mention || cmd is Cmd.Compliment || cmd is Cmd.Unknown) {
-            askBrain(text)?.let { return it }
-            return Personality.respond(cmd, cmd !is Cmd.Unknown)
-        }
-
-        // Device action (open, play, call, volume...). If it fails, let the model take a go at it,
-        // so "why" doesn't end in a failed "open why" line.
-        val success = IntentExecutor.execute(this, cmd)
-        delay(300)
-        if (success) return Personality.respond(cmd, true)
-
         askBrain(text)?.let { return it }
+
         return Personality.respond(cmd, false)
     }
 
