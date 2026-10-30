@@ -127,6 +127,16 @@ object CapriCursor {
             .also { wm = it }
     }
 
+    /**
+     * Accessibility overlays stay visible above launchers and most system screens.
+     * Falls back to the normal overlay type when the accessibility service isn't connected.
+     */
+    private fun overlayType(): Int =
+        if (com.dot.capri.CapriAccessibilityService.instance != null)
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        else
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+
     private fun ensureStage(context: Context) {
         if (stage != null) return
         val app = context.applicationContext
@@ -135,27 +145,37 @@ object CapriCursor {
         val density = app.resources.displayMetrics.density
         sizePx = (36 * density).toInt()
         val frame = FrameLayout(app)
-        val params = WindowManager.LayoutParams(
+        fun paramsFor(type: Int) = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
-        try {
-            manager.addView(frame, params)
-            stage = frame
-            // Measure where the stage really sits, once it has been laid out.
-            frame.post {
-                val loc = IntArray(2)
-                frame.getLocationOnScreen(loc)
-                originX = loc[0]
-                originY = loc[1]
-            }
+
+        val preferred = overlayType()
+        val added = try {
+            manager.addView(frame, paramsFor(preferred))
+            true
         } catch (_: Exception) {
+            false
+        }
+        if (!added && preferred != WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) {
+            // Fallback: normal overlay type.
+            try { manager.addView(frame, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)) } catch (_: Exception) { return }
+        } else if (!added) {
+            return
+        }
+        stage = frame
+        android.util.Log.d("CAPRI_CURSOR", "stage attached, type=${if (preferred == WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY) "accessibility" else "application"}")
+        frame.post {
+            val loc = IntArray(2)
+            frame.getLocationOnScreen(loc)
+            originX = loc[0]
+            originY = loc[1]
         }
     }
 
@@ -208,10 +228,11 @@ object CapriCursor {
             addView(status)
             addView(stop)
         }
-        val params = WindowManager.LayoutParams(
+        val preferred = overlayType()
+        fun paramsFor(type: Int) = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
@@ -220,12 +241,19 @@ object CapriCursor {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             y = (36 * density).toInt()
         }
-        try {
-            manager.addView(row, params)
-            pill = row
-            statusTv = status
+        val added = try {
+            manager.addView(row, paramsFor(preferred))
+            true
         } catch (_: Exception) {
+            false
         }
+        if (!added && preferred != WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) {
+            try { manager.addView(row, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)) } catch (_: Exception) { return }
+        } else if (!added) {
+            return
+        }
+        pill = row
+        statusTv = status
     }
 
     private fun place(c: Cursor, x: Float, y: Float) {
