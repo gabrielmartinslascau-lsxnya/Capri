@@ -45,15 +45,28 @@ object PhoneControl {
         return realScreenBounds(s)
     }
 
-    /** The app the user is looking at. Never returns one of Capri's own windows. */
+    // Windows that are never the app the user is working in.
+    private val IGNORED_PACKAGES = setOf("com.android.systemui")
+
     fun foregroundRoot(): AccessibilityNodeInfo? {
         val s = service() ?: return null
         val own = s.packageName
-        val fromWindows = s.windows
-            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION || it.type == AccessibilityWindowInfo.TYPE_SYSTEM || it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }
+
+        fun usable(n: AccessibilityNodeInfo?): Boolean {
+            val pkg = n?.packageName?.toString() ?: return false
+            return pkg != own && pkg !in IGNORED_PACKAGES
+        }
+
+        // The top app window is the one the user is looking at.
+        val top = s.windows
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
             .sortedByDescending { it.layer }
-            .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() != own } }
-        return fromWindows ?: s.rootInActiveWindow?.takeIf { it.packageName?.toString() != own }
+            .map { it.root }
+            .firstOrNull { usable(it) }
+        if (top != null) return top
+
+        val active = s.rootInActiveWindow
+        return if (usable(active)) active else null
     }
 
     /** A numbered list of things on screen she can act on. Password fields are never included. */
