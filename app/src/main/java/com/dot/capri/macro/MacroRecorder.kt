@@ -1,12 +1,12 @@
 package com.dot.capri.macro
 
 import android.content.Context
+import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 
 /**
  * Records what the user does in other apps while recording is on.
- * Uses labels (not screen coordinates), so replay still works when the layout shifts.
- * Events from Capri itself are ignored.
+ * Ignores events from Capri itself, Gboard/keyboards, and home launchers.
  */
 object MacroRecorder {
     @Volatile
@@ -43,10 +43,22 @@ object MacroRecorder {
         "saved '$keyword' with ${clean.size} steps. say '$keyword' to run it.$warn"
     }
 
+    private fun isIgnoredPackage(context: Context, pkg: String): Boolean {
+        if (pkg == context.packageName) return true
+        val lower = pkg.lowercase()
+        if (lower.contains("inputmethod") || lower.contains("gboard") ||
+            lower.contains("keyboard") || lower.contains("latin")) return true
+        if (lower.contains("launcher") || lower.contains("home") || lower == "com.google.android.apps.nexuslauncher") return true
+        val pm = context.packageManager
+        val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val homeInfo = pm.resolveActivity(homeIntent, 0)
+        return homeInfo?.activityInfo?.packageName == pkg
+    }
+
     fun onEvent(context: Context, event: AccessibilityEvent?) {
         if (event == null || !isRecording) return
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == context.packageName) return
+        if (isIgnoredPackage(context, pkg)) return
 
         synchronized(lock) {
             if (!isRecording) return
@@ -68,7 +80,7 @@ object MacroRecorder {
                     val label = labelOf(event)
                     val last = steps.lastOrNull()
                     if (last != null && last.type == "type" && last.label == label) {
-                        steps[steps.size - 1] = last.copy(text = text)   // one step per field, not per keystroke
+                        steps[steps.size - 1] = last.copy(text = text)
                     } else {
                         steps.add(MacroStep("type", pkg = pkg, label = label, text = text))
                     }

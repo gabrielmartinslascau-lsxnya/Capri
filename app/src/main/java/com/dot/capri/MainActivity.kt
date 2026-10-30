@@ -13,6 +13,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -464,6 +465,43 @@ class MainActivity : AppCompatActivity() {
         updateUsageStatsButton(usageStatsBtn)
         updateDebugTriggersInfo()
         updateLocalLlmStatus()
+        updateSavedMacrosList()
+    }
+
+    private fun updateSavedMacrosList() {
+        val container = findViewById<LinearLayout>(R.id.layout_saved_macros) ?: return
+        container.removeAllViews()
+        val macros = com.dot.capri.macro.MacroStore.all(this)
+        if (macros.isEmpty()) {
+            val emptyTv = TextView(this).apply {
+                text = "No saved macros yet. Say 'record macro <name>' in chat."
+                setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                textSize = 12f
+                setPadding(0, 4, 0, 8)
+            }
+            container.addView(emptyTv)
+            return
+        }
+
+        macros.forEach { macro ->
+            val btn = Button(this).apply {
+                text = "Replay: '${macro.keyword}' (${macro.steps.size} steps)"
+                setBackgroundColor(ContextCompat.getColor(context, R.color.input_bg))
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                textSize = 12f
+                setOnClickListener {
+                    if (!Settings.canDrawOverlays(this@MainActivity)) {
+                        requestOverlayPermission()
+                        return@setOnClickListener
+                    }
+                    lifecycleScope.launch {
+                        val result = com.dot.capri.macro.MacroRunner.run(this@MainActivity, macro) { }
+                        Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            container.addView(btn)
+        }
     }
 
     private fun importLocalModelUri(uri: Uri) {
