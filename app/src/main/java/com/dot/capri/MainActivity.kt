@@ -225,19 +225,6 @@ class MainActivity : AppCompatActivity() {
             updateLocalLlmStatus()
         }
 
-        val inputHfToken = findViewById<EditText>(R.id.input_hf_token)
-        val savedHfToken = prefs.getString(com.dot.capri.ai.OnDeviceAiClient.KEY_HF_TOKEN, "") ?: ""
-        if (savedHfToken.isNotEmpty()) {
-            inputHfToken?.setText(savedHfToken)
-        }
-        inputHfToken?.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                prefs.edit().putString(com.dot.capri.ai.OnDeviceAiClient.KEY_HF_TOKEN, s?.toString()?.trim() ?: "").apply()
-            }
-        })
-
         findViewById<Button>(R.id.btn_import_local_llm)?.setOnClickListener {
             importLocalModelLauncher.launch("*/*")
         }

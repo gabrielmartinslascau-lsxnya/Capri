@@ -2,7 +2,6 @@ package com.dot.capri.ai
 
 import android.app.ActivityManager
 import android.content.Context
-import android.net.Uri
 import android.os.BatteryManager
 import android.util.Log
 import com.google.ai.edge.litertlm.*
@@ -14,7 +13,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -33,17 +31,19 @@ object OnDeviceAiClient {
     const val KEY_LOCAL_LLM_ENABLED = "local_llm_enabled"
 
     private const val MODEL_FILE_NAME = "capri-local.litertlm"
-    const val DEFAULT_MODEL_URL = "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.litertlm"
+    // Open repo (no login, no gate). Apache 2.0. Multimodal Gemma 4 E2B.
+    const val DEFAULT_MODEL_URL = "https://huggingface.co/tibaf/gemma/resolve/main/gemma-4-E2B-it.litertlm"
     const val ALT_MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+    private const val EXPECTED_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
     private const val MIN_MODEL_BYTES = 5_000_000L
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
     private const val PREFER_GPU = true                   // set false if she crashes on load
-    private const val IDLE_RELEASE_MS = 10 * 60 * 1000L   // unload the model after 10 idle minutes
+    private const val IDLE_RELEASE_MS = 30 * 60 * 1000L   // keep the model warm for 30 idle minutes
     private const val GENERATION_TIMEOUT_MS = 60_000L
     private const val HISTORY_TURNS = 3
     private const val MAX_PROMPT_CHARS = 2000
     private const val MAX_HISTORY_CHARS = 300
-    private const val MAX_REPLY_TOKENS = 200
+    private const val MAX_REPLY_TOKENS = 120              // short replies = fast replies
 
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -81,7 +81,30 @@ object OnDeviceAiClient {
         }
     }
 
-    const val KEY_HF_TOKEN = "hf_token"
+    private fun sha256(file: File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(1 shl 20)
+            while (true) {
+                val n = input.read(buf)
+                if (n == -1) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /** Shrinks a screenshot to a 768px JPEG so the vision model stays fast. */
+    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 768): ByteArray {
+        val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+        val scale = minOf(1f, maxSide.toFloat() / maxOf(src.width, src.height))
+        val scaled = android.graphics.Bitmap.createScaledBitmap(
+            src, (src.width * scale).toInt().coerceAtLeast(1), (src.height * scale).toInt().coerceAtLeast(1), true
+        )
+        val out = java.io.ByteArrayOutputStream()
+        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+        return out.toByteArray()
+    }
 
     fun downloadLocalModel(
         context: Context,
@@ -92,8 +115,6 @@ object OnDeviceAiClient {
         val targetFile = modelFile(context)
         targetFile.parentFile?.mkdirs()
         val tempFile = File(targetFile.parentFile, "capri-local.litertlm.tmp")
-        val hfToken = context.getSharedPreferences("capri_prefs", Context.MODE_PRIVATE)
-            .getString(KEY_HF_TOKEN, "")?.trim().orEmpty()
 
         scope.launch(Dispatchers.IO) {
             suspend fun finish(ok: Boolean, msg: String) =
@@ -111,9 +132,6 @@ object OnDeviceAiClient {
                         connectTimeout = 15_000
                         readTimeout = 60_000
                         setRequestProperty("User-Agent", "Capri-Android-App")
-                        if (hfToken.isNotEmpty()) {
-                            setRequestProperty("Authorization", "Bearer $hfToken")
-                        }
                     }
                     conn = c
                     when (val code = c.responseCode) {
@@ -128,12 +146,7 @@ object OnDeviceAiClient {
                         }
                         in 200..299 -> response = c
                         401, 403 -> {
-                            val msg = if (hfToken.isEmpty()) {
-                                "Hugging Face authentication required (HTTP $code). Enter your HF User Access Token in settings, then tap Download!"
-                            } else {
-                                "Access denied (HTTP $code). Ensure your HF token has permission to access Gemma/LiteRT models."
-                            }
-                            finish(false, msg)
+                            finish(false, "This model needs login (HTTP $code). Download the .litertlm file in your browser, then tap Import local model.")
                             return@launch
                         }
                         404 -> {
@@ -188,6 +201,12 @@ object OnDeviceAiClient {
                     return@launch
                 }
 
+                if (modelUrl == DEFAULT_MODEL_URL && !sha256(tempFile).equals(EXPECTED_SHA256, ignoreCase = true)) {
+                    tempFile.delete()
+                    finish(false, "The download didn't match its checksum (corrupted or incomplete). Tap Auto-Download again.")
+                    return@launch
+                }
+
                 if (targetFile.exists() && !targetFile.delete()) {
                     finish(false, "Couldn't replace the old model file.")
                     return@launch
@@ -230,6 +249,7 @@ object OnDeviceAiClient {
                     EngineConfig(
                         modelPath = file.absolutePath,
                         backend = make(),
+                        visionBackend = make(),
                         cacheDir = context.cacheDir.path
                     )
                 )
@@ -286,10 +306,11 @@ object OnDeviceAiClient {
 
     // ---- generation --------------------------------------------------
 
-    suspend fun generateResponse(context: Context, prompt: String): Result<String> =
+    suspend fun generateResponse(context: Context, prompt: String, imageBytes: ByteArray? = null): Result<String> =
         withContext(Dispatchers.Default) {
             mutex.withLock {
                 idleJob?.cancel()
+                var imageFile: File? = null
                 try {
                     val eng = loadEngine(context)
                         ?: return@withLock Result.failure<String>(IllegalStateException("local model not ready"))
@@ -304,7 +325,6 @@ object OnDeviceAiClient {
                             )
                         },
                         samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.9),
-                        // If you use a model that has no thinking mode and this errors, delete the next line.
                         thinkingConfig = ThinkingConfig(enableThinking = false),
                         maxOutputToken = MAX_REPLY_TOKENS
                     )
@@ -312,8 +332,20 @@ object OnDeviceAiClient {
                     val sb = StringBuilder()
                     eng.createConversation(config).use { conversation ->
                         withTimeout(GENERATION_TIMEOUT_MS) {
-                            conversation.sendMessageAsync(prompt.take(MAX_PROMPT_CHARS))
-                                .collect { sb.append(it.toString()) }
+                            val flow = if (imageBytes != null) {
+                                imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
+                                    writeBytes(shrinkImage(imageBytes))
+                                }
+                                conversation.sendMessageAsync(
+                                    Contents.of(
+                                        Content.Text(prompt.take(MAX_PROMPT_CHARS)),
+                                        Content.ImageFile(imageFile.absolutePath)
+                                    )
+                                )
+                            } else {
+                                conversation.sendMessageAsync(prompt.take(MAX_PROMPT_CHARS))
+                            }
+                            flow.collect { sb.append(it.toString()) }
                         }
                     }
 
@@ -321,14 +353,16 @@ object OnDeviceAiClient {
                     if (reply.isBlank()) {
                         Result.failure(RuntimeException("empty local reply"))
                     } else {
-                        CloudAiClient.recordExchange(prompt, reply) // keep history shared across tiers
+                        CloudAiClient.recordExchange(prompt, reply)
                         Result.success(reply)
                     }
                 } catch (t: Throwable) {
                     if (t is CancellationException && t !is TimeoutCancellationException) throw t
                     Log.e(TAG, "local generation failed", t)
-                    Result.failure(t)
+                    closeEngine()
+                    Result.failure(if (t is Exception) t else RuntimeException(t.message))
                 } finally {
+                    imageFile?.delete()
                     scheduleRelease()
                 }
             }

@@ -855,7 +855,7 @@ class BubbleService : Service() {
 
         // Tier 2: on-device model (only if imported, enabled, and the phone has the RAM)
         if (OnDeviceAiClient.isAvailable(this)) {
-            val local = OnDeviceAiClient.generateResponse(this, prompt)
+            val local = OnDeviceAiClient.generateResponse(this, prompt, imageBytes)
             val text = local.getOrNull()?.takeIf { it.isNotBlank() }
             if (text != null) return executeEmbeddedActionTag(text)
             android.util.Log.w("CAPRI_BRAIN", "Local tier failed (${local.exceptionOrNull()?.message})")
