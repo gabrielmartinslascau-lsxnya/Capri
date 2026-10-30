@@ -9,6 +9,7 @@ data class MacroStep(
     val type: String,        // open | tap | type | scroll
     val pkg: String = "",
     val label: String = "",
+    val resId: String = "",
     val dir: String = "",
     val text: String = ""
 )
@@ -35,7 +36,7 @@ object MacroStore {
                         val s = sa.getJSONObject(j)
                         MacroStep(
                             s.getString("type"), s.optString("pkg"), s.optString("label"),
-                            s.optString("dir"), s.optString("text")
+                            s.optString("resId"), s.optString("dir"), s.optString("text")
                         )
                     }
                 )
@@ -53,7 +54,7 @@ object MacroStore {
             m.steps.forEach { s ->
                 sa.put(
                     JSONObject().put("type", s.type).put("pkg", s.pkg).put("label", s.label)
-                        .put("dir", s.dir).put("text", s.text)
+                        .put("resId", s.resId).put("dir", s.dir).put("text", s.text)
                 )
             }
             arr.put(JSONObject().put("keyword", m.keyword).put("steps", sa))
@@ -70,8 +71,10 @@ object MacroStore {
         after.forEach { m ->
             val sa = JSONArray()
             m.steps.forEach { s ->
-                sa.put(JSONObject().put("type", s.type).put("pkg", s.pkg).put("label", s.label)
-                    .put("dir", s.dir).put("text", s.text))
+                sa.put(
+                    JSONObject().put("type", s.type).put("pkg", s.pkg).put("label", s.label)
+                        .put("resId", s.resId).put("dir", s.dir).put("text", s.text)
+                )
             }
             arr.put(JSONObject().put("keyword", m.keyword).put("steps", sa))
         }

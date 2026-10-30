@@ -3,9 +3,11 @@ package com.dot.capri.macro
 import android.content.Context
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 
 /**
  * Records what the user does in other apps while recording is on.
+ * Uses event.source node inspection for exact child labels and resource IDs.
  * Ignores events from Capri itself, Gboard/keyboards, and home launchers.
  */
 object MacroRecorder {
@@ -70,19 +72,21 @@ object MacroRecorder {
                     }
                 }
                 AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                    val label = labelOf(event)
-                    if (label.isNotEmpty()) steps.add(MacroStep("tap", pkg = pkg, label = label))
+                    val (label, resId) = labelAndResIdOf(event)
+                    if (label.isNotEmpty() || resId.isNotEmpty()) {
+                        steps.add(MacroStep("tap", pkg = pkg, label = label, resId = resId))
+                    }
                 }
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
                     if (event.isPassword) return
                     val text = event.text.joinToString("")
                     if (text.isEmpty()) return
-                    val label = labelOf(event)
+                    val (label, resId) = labelAndResIdOf(event)
                     val last = steps.lastOrNull()
-                    if (last != null && last.type == "type" && last.label == label) {
+                    if (last != null && last.type == "type" && (last.label == label || last.resId == resId)) {
                         steps[steps.size - 1] = last.copy(text = text)
                     } else {
-                        steps.add(MacroStep("type", pkg = pkg, label = label, text = text))
+                        steps.add(MacroStep("type", pkg = pkg, label = label, resId = resId, text = text))
                     }
                 }
                 AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
@@ -96,9 +100,34 @@ object MacroRecorder {
         }
     }
 
-    private fun labelOf(event: AccessibilityEvent): String {
-        val fromText = event.text.joinToString(" ") { it.toString() }.trim()
-        if (fromText.isNotEmpty()) return fromText.take(60)
-        return event.contentDescription?.toString()?.trim()?.take(60).orEmpty()
+    private fun labelAndResIdOf(event: AccessibilityEvent): Pair<String, String> {
+        val node = event.source
+        val resId = node?.viewIdResourceName?.substringAfter(":id/", "").orEmpty()
+
+        if (node != null) {
+            val ownText = node.text?.toString()?.trim().orEmpty()
+            if (ownText.isNotEmpty()) return ownText.take(60) to resId
+
+            val desc = node.contentDescription?.toString()?.trim().orEmpty()
+            if (desc.isNotEmpty()) return desc.take(60) to resId
+
+            fun firstText(n: AccessibilityNodeInfo?, depth: Int = 0): String {
+                if (n == null || depth > 3) return ""
+                val t = n.text?.toString()?.trim().orEmpty()
+                if (t.isNotEmpty()) return t
+                val d = n.contentDescription?.toString()?.trim().orEmpty()
+                if (d.isNotEmpty()) return d
+                for (i in 0 until n.childCount) {
+                    val childText = firstText(n.getChild(i), depth + 1)
+                    if (childText.isNotEmpty()) return childText
+                }
+                return ""
+            }
+            val childT = firstText(node)
+            if (childT.isNotEmpty()) return childT.take(60) to resId
+        }
+
+        val fallbackText = event.text.firstOrNull()?.toString()?.trim().orEmpty()
+        return fallbackText.take(60) to resId
     }
 }

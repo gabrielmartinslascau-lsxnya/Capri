@@ -8,7 +8,7 @@ import com.dot.capri.agent.PhoneControl
 import com.dot.capri.intents.ScrollDirection
 import kotlinx.coroutines.delay
 
-/** Replays a saved macro by matching labels on the current screen. Stops and asks if a step can't be found. */
+/** Replays a saved macro by matching labels/IDs on the current screen. Stops and asks if a step can't be found. */
 object MacroRunner {
 
     suspend fun run(context: Context, macro: Macro, chatVisible: suspend (Boolean) -> Unit): String {
@@ -46,13 +46,20 @@ object MacroRunner {
             "tap" -> {
                 val root = PhoneControl.foregroundRoot() ?: return false
                 val items = PhoneControl.snapshot(root)
-                val item = items.firstOrNull { it.label.contains(step.label, ignoreCase = true) } ?: return false
+                val item = items.firstOrNull { 
+                    (step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true) ||
+                    (step.label.isNotEmpty() && it.label.contains(step.label, ignoreCase = true))
+                } ?: items.firstOrNull { step.label.isNotEmpty() && step.label.contains(it.label, ignoreCase = true) } ?: return false
                 PhoneControl.tap(item)
             }
             "type" -> {
                 val root = PhoneControl.foregroundRoot() ?: return false
                 val items = PhoneControl.snapshot(root)
-                val item = items.firstOrNull { it.label.contains(step.label, ignoreCase = true) } ?: return false
+                val item = items.firstOrNull { 
+                    (step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true) ||
+                    (step.label.isNotEmpty() && it.label.contains(step.label, ignoreCase = true)) ||
+                    it.kind == "input"
+                } ?: return false
                 PhoneControl.typeInto(context, item, step.text)
             }
             else -> false
@@ -61,8 +68,8 @@ object MacroRunner {
 
     private fun describe(step: MacroStep): String = when (step.type) {
         "open" -> "open ${step.pkg}"
-        "tap" -> "tap ${step.label}"
-        "type" -> "type into ${step.label}"
+        "tap" -> "tap ${step.label.ifEmpty { step.resId }}"
+        "type" -> "type into ${step.label.ifEmpty { step.resId }}"
         "scroll" -> "scroll ${step.dir}"
         else -> step.type
     }
