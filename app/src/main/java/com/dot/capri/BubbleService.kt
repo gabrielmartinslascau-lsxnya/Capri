@@ -966,7 +966,13 @@ class BubbleService : Service() {
                 val root = PhoneControl.foregroundRoot()
                 if (root != null) {
                     val items = PhoneControl.snapshot(root)
-                    val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
+                    val matchItem = items.firstOrNull { 
+                        it.node.viewIdResourceName?.endsWith(":id/${cmd.target}") == true
+                    } ?: items.firstOrNull { 
+                        it.label.equals(cmd.target, ignoreCase = true)
+                    } ?: items.firstOrNull { 
+                        it.label.contains(cmd.target, ignoreCase = true)
+                    }
                     if (matchItem != null) {
                         val ok = PhoneControl.tap(matchItem)
                         return Personality.respond(cmd, ok)
@@ -983,7 +989,13 @@ class BubbleService : Service() {
                 val root = PhoneControl.foregroundRoot()
                 if (root != null) {
                     val items = PhoneControl.snapshot(root)
-                    val matchItem = items.firstOrNull { it.label.contains(cmd.target, ignoreCase = true) }
+                    val matchItem = items.firstOrNull { 
+                        it.node.viewIdResourceName?.endsWith(":id/${cmd.target}") == true
+                    } ?: items.firstOrNull { 
+                        it.label.equals(cmd.target, ignoreCase = true)
+                    } ?: items.firstOrNull { 
+                        it.label.contains(cmd.target, ignoreCase = true)
+                    }
                     if (matchItem != null) {
                         val ok = PhoneControl.longPress(matchItem)
                         return Personality.respond(cmd, ok)
