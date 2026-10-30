@@ -81,6 +81,8 @@ object OnDeviceAiClient {
         }
     }
 
+    const val KEY_HF_TOKEN = "hf_token"
+
     fun downloadLocalModel(
         context: Context,
         modelUrl: String = DEFAULT_MODEL_URL,
@@ -90,6 +92,8 @@ object OnDeviceAiClient {
         val targetFile = modelFile(context)
         targetFile.parentFile?.mkdirs()
         val tempFile = File(targetFile.parentFile, "capri-local.litertlm.tmp")
+        val hfToken = context.getSharedPreferences("capri_prefs", Context.MODE_PRIVATE)
+            .getString(KEY_HF_TOKEN, "")?.trim().orEmpty()
 
         scope.launch(Dispatchers.IO) {
             suspend fun finish(ok: Boolean, msg: String) =
@@ -107,6 +111,9 @@ object OnDeviceAiClient {
                         connectTimeout = 15_000
                         readTimeout = 60_000
                         setRequestProperty("User-Agent", "Capri-Android-App")
+                        if (hfToken.isNotEmpty()) {
+                            setRequestProperty("Authorization", "Bearer $hfToken")
+                        }
                     }
                     conn = c
                     when (val code = c.responseCode) {
@@ -121,7 +128,12 @@ object OnDeviceAiClient {
                         }
                         in 200..299 -> response = c
                         401, 403 -> {
-                            finish(false, "This model needs a Hugging Face login (HTTP $code). Download the .litertlm file in your browser, then tap Import local model.")
+                            val msg = if (hfToken.isEmpty()) {
+                                "Hugging Face authentication required (HTTP $code). Enter your HF User Access Token in settings, then tap Download!"
+                            } else {
+                                "Access denied (HTTP $code). Ensure your HF token has permission to access Gemma/LiteRT models."
+                            }
+                            finish(false, msg)
                             return@launch
                         }
                         404 -> {

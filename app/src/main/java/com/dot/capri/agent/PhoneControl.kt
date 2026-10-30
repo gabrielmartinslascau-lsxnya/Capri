@@ -32,6 +32,14 @@ object PhoneControl {
 
     private fun service(): CapriAccessibilityService? = CapriAccessibilityService.instance
 
+    fun realScreenBounds(context: Context): Pair<Int, Int> {
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+        val metrics = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getRealMetrics(metrics)
+        return Pair(metrics.widthPixels, metrics.heightPixels)
+    }
+
     /** The app the user is looking at. Never returns one of Capri's own windows. */
     fun foregroundRoot(): AccessibilityNodeInfo? {
         val s = service() ?: return null

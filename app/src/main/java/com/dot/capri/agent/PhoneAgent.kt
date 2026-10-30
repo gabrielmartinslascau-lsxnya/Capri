@@ -53,13 +53,17 @@ object PhoneAgent {
         val say: String?
     )
 
-    private const val SYSTEM = """You are the hands of an Android assistant called Capri. You possess a glowing neon-pink cursor ring on screen that glides directly to target coordinates (x, y) when you tap or type.
+    private const val SYSTEM = """You are the hands of an Android assistant called Capri. You possess glowing neon-pink cursor rings on screen that glide directly to target coordinates (x, y) when you tap, type, or interact. You can spawn and control multiple cursors simultaneously (id: 1, 2, 3...).
 You operate the phone by reading on-screen elements AND looking at the live screenshot.
 Reply with ONLY a JSON object, nothing else. Actions:
 {"do":"tap","x":X,"y":Y}   (glides cursor to pixel (x, y) on screen and taps)
 {"do":"tap","id":N}       (taps element N from screen list)
 {"do":"type","id":N,"text":"..."}   (replaces the text in that field)
 {"do":"submit","id":N}  (presses enter, send, or search after typing)
+{"do":"spawn_cursor","id":N,"x":X,"y":Y}   (spawns cursor N at pixel (x, y))
+{"do":"move_cursor","id":N,"x":X,"y":Y}    (glides cursor N to pixel (x, y))
+{"do":"remove_cursor","id":N}             (removes cursor N)
+{"do":"clear_cursors"}                    (removes all active cursors)
 {"do":"scroll","dir":"down"}   (or "up", "left", "right")
 {"do":"back"}
 {"do":"home"}
@@ -69,7 +73,7 @@ Reply with ONLY a JSON object, nothing else. Actions:
 {"do":"fail","say":"why you can't do it"}
 Rules:
 - You can tap ANY position on screen by giving exact pixel coordinates {"do":"tap","x":X,"y":Y} from looking at the live screenshot, OR by id {"do":"tap","id":N}.
-- Your cursor automatically glides to (x, y) and pulses when you tap or type.
+- Always make sure target (x, y) coordinates stay strictly inside current screen bounds [0..WIDTH] and [0..HEIGHT].
 - Never guess passwords, codes, card numbers or personal details.
 - If the task is finished, answer done. If the screen doesn't show what you need, tap, scroll, go back, or open the right app.
 - Keep "say" to one short lowercase sentence, a little dry, like a sharp friend."""
@@ -114,8 +118,11 @@ Rules:
         log: List<String>,
         shot: ByteArray?
     ): String? {
+        val (screenW, screenH) = PhoneControl.realScreenBounds(context)
+        val orientation = if (screenW > screenH) "LANDSCAPE" else "PORTRAIT"
         val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\" at (${it.cx}, ${it.cy})" }
         val prompt = "TASK: $goal\n" +
+                "SCREEN ORIENTATION & BOUNDS: $orientation (${screenW}x${screenH})\n" +
                 "STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(8).joinToString(" > ")}\n" +
                 "FOREGROUND APP: $pkg\n" +
                 "SCREEN ELEMENTS:\n${screen.ifEmpty { "(nothing readable, use the screenshot)" }}"
@@ -235,6 +242,29 @@ Rules:
                             val ok = PhoneControl.submitTypedText(context, item)
                             log.add("submitted ${item.label}" + if (ok) "" else " (failed)")
                         }
+                    }
+                    "spawn_cursor" -> {
+                        val cid = a.id ?: 1
+                        val cx = a.x ?: (items.firstOrNull()?.cx ?: 500)
+                        val cy = a.y ?: (items.firstOrNull()?.cy ?: 500)
+                        CapriCursor.spawnCursor(context, cid, cx, cy)
+                        log.add("spawned cursor $cid at ($cx, $cy)")
+                    }
+                    "move_cursor" -> {
+                        val cid = a.id ?: 1
+                        val cx = a.x ?: 500
+                        val cy = a.y ?: 500
+                        CapriCursor.moveTo(cx, cy, id = cid)
+                        log.add("moved cursor $cid to ($cx, $cy)")
+                    }
+                    "remove_cursor" -> {
+                        val cid = a.id ?: 1
+                        CapriCursor.removeCursor(cid)
+                        log.add("removed cursor $cid")
+                    }
+                    "clear_cursors" -> {
+                        CapriCursor.hide()
+                        log.add("cleared all cursors")
                     }
                     "scroll" -> {
                         val dir = when (a.dir?.lowercase()) {

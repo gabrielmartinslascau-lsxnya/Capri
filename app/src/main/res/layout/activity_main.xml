@@ -158,6 +158,21 @@
             android:textColor="@color/text_primary"
             android:textSize="13sp" />
 
+        <EditText
+            android:id="@+id/input_hf_token"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_input_field"
+            android:hint="HuggingFace Token (hf_...) [for auto-download]"
+            android:inputType="textPassword"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:textSize="13sp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

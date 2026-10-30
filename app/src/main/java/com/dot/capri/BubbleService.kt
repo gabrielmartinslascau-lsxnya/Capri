@@ -691,7 +691,7 @@ class BubbleService : Service() {
     }
 
     private suspend fun executeEmbeddedActionTag(response: String): String {
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|PINCH|DUALTAP|DUAL_TAP|TASK):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|PINCH|DUALTAP|DUAL_TAP|SPAWN_CURSOR|MOVE_CURSOR|REMOVE_CURSOR|CLEAR_CURSORS|MULTITAP|TASK):([^]]*)\\]", RegexOption.IGNORE_CASE)
         val matches = actionRegex.findAll(response).toList()
         if (matches.isEmpty()) return response
 
@@ -701,6 +701,43 @@ class BubbleService : Service() {
             val (actionType, rawTarget) = match.destructured
             val target = rawTarget.trim()
             when (actionType.uppercase()) {
+                "SPAWN_CURSOR" -> {
+                    val parts = target.split(",").mapNotNull { it.trim().toIntOrNull() }
+                    if (parts.size >= 3) {
+                        CapriCursor.spawnCursor(this, parts[0], parts[1], parts[2])
+                    } else if (parts.size >= 2) {
+                        CapriCursor.spawnCursor(this, 1, parts[0], parts[1])
+                    }
+                }
+                "MOVE_CURSOR" -> {
+                    val parts = target.split(",").mapNotNull { it.trim().toIntOrNull() }
+                    if (parts.size >= 3) {
+                        CapriCursor.moveTo(parts[1], parts[2], id = parts[0])
+                    } else if (parts.size >= 2) {
+                        CapriCursor.moveTo(parts[0], parts[1], id = 1)
+                    }
+                }
+                "REMOVE_CURSOR" -> {
+                    val id = target.toIntOrNull() ?: 1
+                    CapriCursor.removeCursor(id)
+                }
+                "CLEAR_CURSORS" -> {
+                    CapriCursor.hide()
+                }
+                "MULTITAP" -> {
+                    val pairs = target.split("|").mapNotNull { pt ->
+                        val xy = pt.split(",").mapNotNull { it.trim().toIntOrNull() }
+                        if (xy.size >= 2) Pair(xy[0], xy[1]) else null
+                    }
+                    if (pairs.isNotEmpty()) {
+                        pairs.forEachIndexed { idx, p ->
+                            CapriCursor.spawnCursor(this, idx + 1, p.first, p.second)
+                        }
+                        CapriCursor.pulseAll()
+                        delay(250)
+                        CapriCursor.hide()
+                    }
+                }
                 "PINCH" -> {
                     val zoomIn = target.contains("in", ignoreCase = true) || target.contains("zoom_in", ignoreCase = true)
                     if (CapriAccessibilityService.instance != null) {
