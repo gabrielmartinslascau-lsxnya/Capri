@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.dot.capri.CapriAccessibilityService
+import com.dot.capri.ai.OnDeviceAiClient
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentExecutor
 import com.dot.capri.llm.LlmRequest
@@ -110,6 +111,9 @@ Rules:
         return null
     }
 
+    private fun useApi(context: Context): Boolean =
+        LlmRouter.hasAnyApiKey(context) && NetworkUtils.isOnline(context)
+
     private suspend fun askModel(
         context: Context,
         goal: String,
@@ -118,19 +122,18 @@ Rules:
         log: List<String>,
         shot: ByteArray?
     ): String? {
-        val (screenW, screenH) = PhoneControl.realScreenBounds(context)
-        val orientation = if (screenW > screenH) "LANDSCAPE" else "PORTRAIT"
-        val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\" at (${it.cx}, ${it.cy})" }
+        val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\"" }
         val prompt = "TASK: $goal\n" +
-                "SCREEN ORIENTATION & BOUNDS: $orientation (${screenW}x${screenH})\n" +
                 "STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(8).joinToString(" > ")}\n" +
                 "FOREGROUND APP: $pkg\n" +
                 "SCREEN ELEMENTS:\n${screen.ifEmpty { "(nothing readable, use the screenshot)" }}"
-        val result = LlmRouter.complete(
-            context,
-            LlmRequest(prompt = prompt, systemPrompt = SYSTEM, history = emptyList(), imageBytes = shot)
-        )
-        return result.getOrNull()
+        if (useApi(context)) {
+            return LlmRouter.complete(
+                context,
+                LlmRequest(prompt = prompt, systemPrompt = SYSTEM, history = emptyList(), imageBytes = shot)
+            ).getOrNull()
+        }
+        return OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM).getOrNull()
     }
 
     /**
@@ -146,8 +149,8 @@ Rules:
     ): String {
         val service = CapriAccessibilityService.instance
             ?: return "accessibility isn't connected. switch it on from my health screen, choom."
-        if (!LlmRouter.hasAnyApiKey(context) || !NetworkUtils.isOnline(context)) {
-            return "task mode needs an api key and internet, choom. the local model can't drive the phone yet."
+        if (!useApi(context) && !OnDeviceAiClient.isAvailable(context)) {
+            return "task mode needs an api key + internet, or the on-device model downloaded, choom."
         }
 
         val log = ArrayList<String>(resume?.log ?: emptyList())
@@ -184,9 +187,15 @@ Rules:
                 }
                 if (chosen == null) {
                     val shot = service.captureScreenBitmap()
-                    val reply = askModel(context, goal, pkg, items, log, shot)
+                    var reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
                     chosen = parseAct(reply)
+                    if (chosen == null) {
+                        Log.w(TAG, "unreadable reply, retrying: ${reply.take(120)}")
+                        delay(200)
+                        reply = askModel(context, goal, pkg, items, log, shot) ?: return "my brain didn't answer, choom. ${summary(log)}"
+                        chosen = parseAct(reply)
+                    }
                     if (chosen == null) {
                         log.add("unreadable reply")
                         steps++
@@ -205,6 +214,29 @@ Rules:
                 when (a.doWhat) {
                     "done" -> return a.say ?: "done."
                     "fail" -> return a.say ?: "couldn't do that, choom."
+                    "spawn_cursor" -> {
+                        val cid = a.id ?: 1
+                        val cx = a.x ?: (items.firstOrNull()?.cx ?: 500)
+                        val cy = a.y ?: (items.firstOrNull()?.cy ?: 500)
+                        CapriCursor.spawnCursor(context, cid, cx, cy)
+                        log.add("spawned cursor $cid at ($cx, $cy)")
+                    }
+                    "move_cursor" -> {
+                        val cid = a.id ?: 1
+                        val cx = a.x ?: 500
+                        val cy = a.y ?: 500
+                        CapriCursor.moveTo(cx, cy, id = cid)
+                        log.add("moved cursor $cid to ($cx, $cy)")
+                    }
+                    "remove_cursor" -> {
+                        val cid = a.id ?: 1
+                        CapriCursor.removeCursor(cid)
+                        log.add("removed cursor $cid")
+                    }
+                    "clear_cursors" -> {
+                        CapriCursor.hide()
+                        log.add("cleared all cursors")
+                    }
                     "tap" -> {
                         if (a.x != null && a.y != null) {
                             val fallbackItem = PhoneControl.UiItem(0, "tap", "button", a.x, a.y, root)
@@ -242,29 +274,6 @@ Rules:
                             val ok = PhoneControl.submitTypedText(context, item)
                             log.add("submitted ${item.label}" + if (ok) "" else " (failed)")
                         }
-                    }
-                    "spawn_cursor" -> {
-                        val cid = a.id ?: 1
-                        val cx = a.x ?: (items.firstOrNull()?.cx ?: 500)
-                        val cy = a.y ?: (items.firstOrNull()?.cy ?: 500)
-                        CapriCursor.spawnCursor(context, cid, cx, cy)
-                        log.add("spawned cursor $cid at ($cx, $cy)")
-                    }
-                    "move_cursor" -> {
-                        val cid = a.id ?: 1
-                        val cx = a.x ?: 500
-                        val cy = a.y ?: 500
-                        CapriCursor.moveTo(cx, cy, id = cid)
-                        log.add("moved cursor $cid to ($cx, $cy)")
-                    }
-                    "remove_cursor" -> {
-                        val cid = a.id ?: 1
-                        CapriCursor.removeCursor(cid)
-                        log.add("removed cursor $cid")
-                    }
-                    "clear_cursors" -> {
-                        CapriCursor.hide()
-                        log.add("cleared all cursors")
                     }
                     "scroll" -> {
                         val dir = when (a.dir?.lowercase()) {

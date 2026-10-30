@@ -48,6 +48,8 @@ object OnDeviceAiClient {
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var engine: Engine? = null
+    private var engineHasVision = false
+    @Volatile var lastError: String? = null
     private var idleJob: Job? = null
 
     // ---- availability ------------------------------------------------
@@ -73,12 +75,13 @@ object OnDeviceAiClient {
 
     fun statusLine(context: Context): String {
         val file = modelFile(context)
-        return when {
+        val base = when {
             !hasEnoughRam(context) -> "this phone doesn't have enough RAM for the local model."
             !file.exists() -> "no local model yet. tap Auto-Download or import a .litertlm file."
             !isEnabled(context) -> "local model imported but switched off."
             else -> "local model ready (${file.length() / 1_000_000} MB). used when the API is unavailable."
         }
+        return lastError?.let { "$base\nlast error: $it" } ?: base
     }
 
     private fun sha256(file: File): String {
@@ -235,30 +238,46 @@ object OnDeviceAiClient {
 
     // ---- engine lifecycle (always call with the mutex held) ----------
 
-    private fun loadEngine(context: Context): Engine? {
-        engine?.let { return it }
+    private fun loadEngine(context: Context, wantVision: Boolean): Engine? {
+        engine?.let { if (!wantVision || engineHasVision) return it }
+        closeEngine()
         val file = modelFile(context)
-        if (!file.exists()) return null
-
+        if (!file.exists()) {
+            lastError = "model file missing"
+            return null
+        }
         val backends: List<() -> Backend> =
             if (PREFER_GPU) listOf({ Backend.GPU() }, { Backend.CPU() }) else listOf({ Backend.CPU() })
+        val visionTries = if (wantVision) listOf(true, false) else listOf(false)
 
-        for (make in backends) {
-            try {
-                val e = Engine(
-                    EngineConfig(
-                        modelPath = file.absolutePath,
-                        backend = make(),
-                        visionBackend = make(),
-                        cacheDir = context.cacheDir.path
-                    )
-                )
-                e.initialize() // can take several seconds the first time
-                engine = e
-                Log.d(TAG, "engine ready")
-                return e
-            } catch (t: Throwable) {
-                Log.e(TAG, "engine init failed", t)
+        for (vision in visionTries) {
+            for (make in backends) {
+                try {
+                    val cfg = if (vision) {
+                        EngineConfig(
+                            modelPath = file.absolutePath,
+                            backend = make(),
+                            visionBackend = make(),
+                            cacheDir = context.cacheDir.path
+                        )
+                    } else {
+                        EngineConfig(
+                            modelPath = file.absolutePath,
+                            backend = make(),
+                            cacheDir = context.cacheDir.path
+                        )
+                    }
+                    val e = Engine(cfg)
+                    e.initialize()
+                    engine = e
+                    engineHasVision = vision
+                    lastError = null
+                    Log.d(TAG, "engine ready (vision=$vision)")
+                    return e
+                } catch (t: Throwable) {
+                    lastError = "engine init failed (vision=$vision): ${t.message ?: t.javaClass.simpleName}"
+                    Log.e(TAG, lastError!!, t)
+                }
             }
         }
         return null
@@ -267,6 +286,7 @@ object OnDeviceAiClient {
     private fun closeEngine() {
         runCatching { engine?.close() }
         engine = null
+        engineHasVision = false
     }
 
     private fun scheduleRelease() {
@@ -306,18 +326,25 @@ object OnDeviceAiClient {
 
     // ---- generation --------------------------------------------------
 
-    suspend fun generateResponse(context: Context, prompt: String, imageBytes: ByteArray? = null): Result<String> =
+    suspend fun generateResponse(
+        context: Context,
+        prompt: String,
+        imageBytes: ByteArray? = null,
+        systemOverride: String? = null
+    ): Result<String> =
         withContext(Dispatchers.Default) {
             mutex.withLock {
                 idleJob?.cancel()
                 var imageFile: File? = null
                 try {
-                    val eng = loadEngine(context)
-                        ?: return@withLock Result.failure<String>(IllegalStateException("local model not ready"))
+                    val eng = loadEngine(context, wantVision = imageBytes != null)
+                        ?: return@withLock Result.failure<String>(
+                            IllegalStateException(lastError ?: "local model not ready")
+                        )
 
-                    val history = CloudAiClient.recentHistory(HISTORY_TURNS)
+                    val history = if (systemOverride == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
                     val config = ConversationConfig(
-                        systemInstruction = Contents.of(buildSystemPrompt(context)),
+                        systemInstruction = Contents.of(systemOverride ?: buildSystemPrompt(context)),
                         initialMessages = history.flatMap { (u, c) ->
                             listOf(
                                 Message.user(u.take(MAX_HISTORY_CHARS)),
@@ -332,7 +359,8 @@ object OnDeviceAiClient {
                     val sb = StringBuilder()
                     eng.createConversation(config).use { conversation ->
                         withTimeout(GENERATION_TIMEOUT_MS) {
-                            val flow = if (imageBytes != null) {
+                            val useImage = imageBytes != null && engineHasVision
+                            val flow = if (useImage) {
                                 imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
                                     writeBytes(shrinkImage(imageBytes))
                                 }
@@ -350,15 +378,17 @@ object OnDeviceAiClient {
                     }
 
                     val reply = sb.toString().trim()
+                    lastError = null
                     if (reply.isBlank()) {
                         Result.failure(RuntimeException("empty local reply"))
                     } else {
-                        CloudAiClient.recordExchange(prompt, reply)
+                        if (systemOverride == null) CloudAiClient.recordExchange(prompt, reply)
                         Result.success(reply)
                     }
                 } catch (t: Throwable) {
                     if (t is CancellationException && t !is TimeoutCancellationException) throw t
-                    Log.e(TAG, "local generation failed", t)
+                    lastError = "generation failed: ${t.message ?: t.javaClass.simpleName}"
+                    Log.e(TAG, lastError!!, t)
                     closeEngine()
                     Result.failure(if (t is Exception) t else RuntimeException(t.message))
                 } finally {

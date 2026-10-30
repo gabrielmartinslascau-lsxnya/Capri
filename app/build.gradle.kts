@@ -26,8 +26,8 @@ android {
         applicationId = "com.dot.capri"
         minSdk = 29
         targetSdk = 34
-        versionCode = 17
-        versionName = "v9.2"
+        versionCode = 18
+        versionName = "v9.3"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
 
@@ -53,7 +53,7 @@ android {
 }
 
 base {
-    archivesName.set("Capri-v9.2")
+    archivesName.set("Capri-v9.3")
 }
 
 dependencies {

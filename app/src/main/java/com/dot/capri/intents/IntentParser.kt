@@ -333,10 +333,7 @@ object IntentParser {
             }
         }
 
-        if (!raw.contains(" ") && raw.length <= 25) {
-            return Cmd.Open(raw)
-        }
-
-        return Cmd.Unknown(raw)
+        val looksLikeAppName = Regex("^[a-zA-Z][a-zA-Z0-9 .&'\\-]{0,29}$").matches(raw)
+        return if (looksLikeAppName) Cmd.Open(raw) else Cmd.Unknown(raw)
     }
 }
