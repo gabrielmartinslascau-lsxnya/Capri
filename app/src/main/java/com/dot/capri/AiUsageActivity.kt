@@ -13,8 +13,12 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.dot.capri.llm.LlmRouter
 import com.dot.capri.llm.UsageTracker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AiUsageActivity : AppCompatActivity() {
 
@@ -56,6 +60,25 @@ class AiUsageActivity : AppCompatActivity() {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
         modelSpinner.adapter = adapter
+
+        if (providerName.lowercase() == "gemini") {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val apiKey = MainActivity.getApiKey(this@AiUsageActivity)
+                val fetched = com.dot.capri.llm.GeminiModelFetcher.fetchModels(apiKey)
+                if (fetched.isNotEmpty()) {
+                    val liveList = mutableListOf("Default (gemini-3.5-flash-lite)") + fetched
+                    withContext(Dispatchers.Main) {
+                        val liveAdapter = ArrayAdapter(this@AiUsageActivity, android.R.layout.simple_spinner_item, liveList).apply {
+                            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                        }
+                        modelSpinner.adapter = liveAdapter
+                        val currentModel = prefs.getString(modelKey, "") ?: ""
+                        val idx = liveList.indexOfFirst { it.equals(currentModel, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+                        modelSpinner.setSelection(idx)
+                    }
+                }
+            }
+        }
 
         val currentModel = prefs.getString(modelKey, "") ?: ""
         val selectionIndex = modelsList.indexOfFirst { it.equals(currentModel, ignoreCase = true) }.let { if (it >= 0) it else 0 }
