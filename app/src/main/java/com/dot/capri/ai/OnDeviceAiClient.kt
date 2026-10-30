@@ -37,7 +37,7 @@ object OnDeviceAiClient {
     private const val EXPECTED_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
     private const val MIN_MODEL_BYTES = 5_000_000L
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
-    private const val PREFER_GPU = true                   // set false if she crashes on load
+    private const val PREFER_GPU = false                  // false to avoid OpenCL / status code 2 errors on unsupported GPU drivers
     private const val IDLE_RELEASE_MS = 30 * 60 * 1000L   // keep the model warm for 30 idle minutes
     private const val GENERATION_TIMEOUT_MS = 60_000L
     private const val HISTORY_TURNS = 3
