@@ -895,6 +895,12 @@ class BubbleService : Service() {
 
         val cmd = IntentParser.parse(text)
 
+        // When an API key or Local LLM is connected, prioritize AI interpretation so local CMD regexes never steal intent
+        if (cmd !is Cmd.SeeScreen && (LlmRouter.hasAnyApiKey(this) || OnDeviceAiClient.isAvailable(this))) {
+            val brainReply = askBrain(text)
+            if (brainReply != null) return brainReply
+        }
+
         if (cmd !is Cmd.Unknown) {
             if (cmd is Cmd.Text && !cmd.message.isNullOrBlank() && CapriAccessibilityService.instance != null) {
                 val opened = IntentExecutor.execute(this, cmd)
