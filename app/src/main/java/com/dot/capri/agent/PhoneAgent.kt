@@ -79,24 +79,48 @@ Rules:
 - If the task is finished, answer done. If the screen doesn't show what you need, tap, scroll, go back, or open the right app.
 - Keep "say" to one short lowercase sentence, a little dry, like a sharp friend."""
 
-    private fun parseAct(raw: String): Act? {
-        val start = raw.indexOf('{')
-        val end = raw.lastIndexOf('}')
-        if (start < 0 || end <= start) return null
+    private fun parseAct(raw: String, screenW: Int, screenH: Int): Act? {
+        val cleaned = raw
+            .replace(Regex("```json\\s*", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("```\\s*", RegexOption.IGNORE_CASE), "")
+            .trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        if (start < 0 || end <= start) {
+            return parseTextFallback(cleaned, screenW, screenH)
+        }
         return try {
-            val o = JSONObject(raw.substring(start, end + 1))
+            val o = JSONObject(cleaned.substring(start, end + 1))
+            var x = if (o.has("x")) o.optInt("x") else null
+            var y = if (o.has("y")) o.optInt("y") else null
+            if (x != null && x <= 1000 && y != null && y <= 1000 && screenW > 1000) {
+                x = (x * screenW) / 1000
+                y = (y * screenH) / 1000
+            }
             Act(
                 doWhat = o.optString("do").lowercase(),
                 id = if (o.has("id")) o.optInt("id") else null,
-                x = if (o.has("x")) o.optInt("x") else null,
-                y = if (o.has("y")) o.optInt("y") else null,
+                x = x,
+                y = y,
                 text = o.optString("text").ifEmpty { null },
                 dir = o.optString("dir").ifEmpty { null },
                 app = o.optString("app").ifEmpty { null },
                 say = o.optString("say").ifEmpty { null }
             )
         } catch (e: Exception) {
-            null
+            parseTextFallback(cleaned, screenW, screenH)
+        }
+    }
+
+    private fun parseTextFallback(text: String, screenW: Int, screenH: Int): Act? {
+        val lower = text.lowercase()
+        return when {
+            lower.contains("done") || lower.contains("finish") -> Act("done", null, null, null, null, null, null, "done.")
+            lower.contains("home") -> Act("home", null, null, null, null, null, null, null)
+            lower.contains("back") -> Act("back", null, null, null, null, null, null, null)
+            lower.contains("scroll down") || lower.contains("swipe down") -> Act("scroll", null, null, null, null, "down", null, null)
+            lower.contains("scroll up") || lower.contains("swipe up") -> Act("scroll", null, null, null, null, "up", null, null)
+            else -> null
         }
     }
 
@@ -188,14 +212,15 @@ Rules:
                 if (chosen == null) {
                     CapriCursor.setStatus("observing...")
                     val shot = service.captureScreenBitmap()
+                    val (screenW, screenH) = PhoneControl.realScreenBounds(context)
                     var reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
-                    chosen = parseAct(reply)
+                    chosen = parseAct(reply, screenW, screenH)
                     if (chosen == null) {
                         Log.w(TAG, "unreadable reply, retrying: ${reply.take(120)}")
                         delay(200)
                         reply = askModel(context, goal, pkg, items, log, shot) ?: return "my brain didn't answer, choom. ${summary(log)}"
-                        chosen = parseAct(reply)
+                        chosen = parseAct(reply, screenW, screenH)
                     }
                     if (chosen == null) {
                         log.add("unreadable reply")

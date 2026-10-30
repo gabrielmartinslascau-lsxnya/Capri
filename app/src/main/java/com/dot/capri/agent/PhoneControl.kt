@@ -204,8 +204,7 @@ object PhoneControl {
             ScrollDirection.RIGHT -> listOf(w * 0.30f, cy, w * 0.70f, cy)// Scroll right: drag finger right
         }
 
-        CapriCursor.show(s)
-        CapriCursor.moveTo(fromX.toInt(), fromY.toInt()) // fully awaited before gesture dispatch
+        CapriCursor.spawnCursor(s, 1, fromX.toInt(), fromY.toInt()) // Spawn directly at start, zero diagonal movement!
         CapriCursor.pulse()
         delay(100)
 
