@@ -130,8 +130,12 @@ object PhoneControl {
 
     suspend fun scroll(direction: ScrollDirection): Boolean {
         val s = service() ?: return false
-        val w = s.resources.displayMetrics.widthPixels
-        val h = s.resources.displayMetrics.heightPixels
+        val root = foregroundRoot()
+        val windowRect = Rect()
+        root?.getBoundsInScreen(windowRect)
+
+        val w = if (windowRect.width() > 0) windowRect.width().toFloat() else s.resources.displayMetrics.widthPixels.toFloat()
+        val h = if (windowRect.height() > 0) windowRect.height().toFloat() else s.resources.displayMetrics.heightPixels.toFloat()
         val cx = w / 2f
         val cy = h / 2f
 
