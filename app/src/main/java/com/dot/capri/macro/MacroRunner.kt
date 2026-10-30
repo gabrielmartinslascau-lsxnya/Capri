@@ -8,7 +8,7 @@ import com.dot.capri.agent.PhoneControl
 import com.dot.capri.intents.ScrollDirection
 import kotlinx.coroutines.delay
 
-/** Replays a saved macro by matching labels/IDs on the current screen. Stops and asks if a step can't be found. */
+/** Replays a saved macro by matching labels/IDs/coordinates on the current screen with original delays. */
 object MacroRunner {
 
     suspend fun run(context: Context, macro: Macro, chatVisible: suspend (Boolean) -> Unit): String {
@@ -21,10 +21,10 @@ object MacroRunner {
         try {
             macro.steps.forEachIndexed { i, step ->
                 if (CapriCursor.cancelled) return "stopped at step ${i + 1} of ${macro.steps.size}."
+                if (step.delayMs > 0) delay(step.delayMs)
                 if (!runStep(context, step)) {
                     return "stuck at step ${i + 1} (${describe(step)}). want me to take over, or re-record it?"
                 }
-                delay(400)
             }
             return "done with '${macro.keyword}', choom."
         } finally {
@@ -35,11 +35,13 @@ object MacroRunner {
 
     private suspend fun runStep(context: Context, step: MacroStep): Boolean {
         return when (step.type) {
+            "home" -> PhoneControl.home()
             "open" -> {
+                if (step.pkg.isEmpty()) return PhoneControl.home()
                 val intent = context.packageManager.getLaunchIntentForPackage(step.pkg) ?: return false
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                delay(1500)
+                delay(1200)
                 true
             }
             "scroll" -> PhoneControl.scroll(if (step.dir == "up") ScrollDirection.UP else ScrollDirection.DOWN)
@@ -49,8 +51,16 @@ object MacroRunner {
                 val item = items.firstOrNull { 
                     (step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true) ||
                     (step.label.isNotEmpty() && it.label.contains(step.label, ignoreCase = true))
-                } ?: items.firstOrNull { step.label.isNotEmpty() && step.label.contains(it.label, ignoreCase = true) } ?: return false
-                PhoneControl.tap(item)
+                } ?: items.firstOrNull { step.label.isNotEmpty() && step.label.contains(it.label, ignoreCase = true) }
+
+                if (item != null) {
+                    PhoneControl.tap(item)
+                } else if (step.cx > 0 && step.cy > 0) {
+                    val fallbackItem = PhoneControl.UiItem(1, step.label.ifEmpty { "tap" }, "button", step.cx, step.cy, root)
+                    PhoneControl.tap(fallbackItem)
+                } else {
+                    false
+                }
             }
             "type" -> {
                 val root = PhoneControl.foregroundRoot() ?: return false
@@ -67,6 +77,7 @@ object MacroRunner {
     }
 
     private fun describe(step: MacroStep): String = when (step.type) {
+        "home" -> "go home"
         "open" -> "open ${step.pkg}"
         "tap" -> "tap ${step.label.ifEmpty { step.resId }}"
         "type" -> "type into ${step.label.ifEmpty { step.resId }}"

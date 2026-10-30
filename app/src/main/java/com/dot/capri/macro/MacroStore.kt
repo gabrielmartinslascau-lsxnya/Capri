@@ -6,12 +6,15 @@ import org.json.JSONObject
 import java.io.File
 
 data class MacroStep(
-    val type: String,        // open | tap | type | scroll
+    val type: String,        // home | open | tap | type | scroll
     val pkg: String = "",
     val label: String = "",
     val resId: String = "",
+    val cx: Int = 0,
+    val cy: Int = 0,
     val dir: String = "",
-    val text: String = ""
+    val text: String = "",
+    val delayMs: Long = 400
 )
 
 data class Macro(val keyword: String, val steps: List<MacroStep>)
@@ -36,7 +39,8 @@ object MacroStore {
                         val s = sa.getJSONObject(j)
                         MacroStep(
                             s.getString("type"), s.optString("pkg"), s.optString("label"),
-                            s.optString("resId"), s.optString("dir"), s.optString("text")
+                            s.optString("resId"), s.optInt("cx"), s.optInt("cy"),
+                            s.optString("dir"), s.optString("text"), s.optLong("delayMs", 400)
                         )
                     }
                 )
@@ -54,7 +58,8 @@ object MacroStore {
             m.steps.forEach { s ->
                 sa.put(
                     JSONObject().put("type", s.type).put("pkg", s.pkg).put("label", s.label)
-                        .put("resId", s.resId).put("dir", s.dir).put("text", s.text)
+                        .put("resId", s.resId).put("cx", s.cx).put("cy", s.cy)
+                        .put("dir", s.dir).put("text", s.text).put("delayMs", s.delayMs)
                 )
             }
             arr.put(JSONObject().put("keyword", m.keyword).put("steps", sa))
@@ -73,7 +78,8 @@ object MacroStore {
             m.steps.forEach { s ->
                 sa.put(
                     JSONObject().put("type", s.type).put("pkg", s.pkg).put("label", s.label)
-                        .put("resId", s.resId).put("dir", s.dir).put("text", s.text)
+                        .put("resId", s.resId).put("cx", s.cx).put("cy", s.cy)
+                        .put("dir", s.dir).put("text", s.text).put("delayMs", s.delayMs)
                 )
             }
             arr.put(JSONObject().put("keyword", m.keyword).put("steps", sa))

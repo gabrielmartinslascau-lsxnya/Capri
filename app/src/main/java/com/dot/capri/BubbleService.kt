@@ -873,7 +873,7 @@ class BubbleService : Service() {
             .find(trimmedInput)
         if (recordMatch != null) {
             val name = recordMatch.groupValues[1].trim()
-            com.dot.capri.macro.MacroRecorder.start(name)
+            com.dot.capri.macro.MacroRecorder.start(name, this)
             return "recording macro '$name'. do the steps in your apps, then say 'stop recording' when you're done, choom."
         }
 
