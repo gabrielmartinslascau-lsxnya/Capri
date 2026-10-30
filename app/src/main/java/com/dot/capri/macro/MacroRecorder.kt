@@ -5,13 +5,12 @@ import android.content.Intent
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.agent.PhoneControl
 
 /**
  * Records what the user does while recording is on.
- * Captures initial location, normalized (relX, relY) coordinates, labels, IDs, and delays.
- * Ignores events from Capri itself or keyboards.
+ * Captures initial location (app vs launcher), exact (cx, cy) coordinates, labels, IDs, and delays.
+ * Ignores ONLY Capri itself and keyboards. Homescreen and launcher interactions ARE recorded.
  */
 object MacroRecorder {
     @Volatile
@@ -52,7 +51,7 @@ object MacroRecorder {
         }
         steps.clear()
         if (clean.isEmpty()) {
-            if (CapriAccessibilityService.instance == null) {
+            if (com.dot.capri.CapriAccessibilityService.instance == null) {
                 return@synchronized "accessibility isn't connected, choom. turn on Capri in Accessibility settings first, then record!"
             }
             return@synchronized "recorded nothing for '$keyword'. make sure accessibility is on and try again."
