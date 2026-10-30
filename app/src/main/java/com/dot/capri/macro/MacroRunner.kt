@@ -49,9 +49,12 @@ object MacroRunner {
                 val root = PhoneControl.foregroundRoot() ?: return false
                 val items = PhoneControl.snapshot(root)
                 val item = items.firstOrNull { 
-                    (step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true) ||
-                    (step.label.isNotEmpty() && it.label.contains(step.label, ignoreCase = true))
-                } ?: items.firstOrNull { step.label.isNotEmpty() && step.label.contains(it.label, ignoreCase = true) }
+                    step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true
+                } ?: items.firstOrNull { 
+                    step.label.isNotEmpty() && it.label.equals(step.label, ignoreCase = true)
+                } ?: items.firstOrNull { 
+                    step.label.length >= 3 && it.label.contains(step.label, ignoreCase = true)
+                }
 
                 if (item != null) {
                     PhoneControl.tap(item)
@@ -66,11 +69,21 @@ object MacroRunner {
                 val root = PhoneControl.foregroundRoot() ?: return false
                 val items = PhoneControl.snapshot(root)
                 val item = items.firstOrNull { 
-                    (step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true) ||
-                    (step.label.isNotEmpty() && it.label.contains(step.label, ignoreCase = true)) ||
+                    step.resId.isNotEmpty() && it.node.viewIdResourceName?.endsWith(":id/${step.resId}") == true
+                } ?: items.firstOrNull { 
+                    step.label.isNotEmpty() && it.label.equals(step.label, ignoreCase = true)
+                } ?: items.firstOrNull { 
                     it.kind == "input"
-                } ?: return false
-                PhoneControl.typeInto(context, item, step.text)
+                }
+
+                if (item != null) {
+                    PhoneControl.typeInto(context, item, step.text)
+                } else if (step.cx > 0 && step.cy > 0) {
+                    val fallbackItem = PhoneControl.UiItem(1, step.label.ifEmpty { "type" }, "input", step.cx, step.cy, root)
+                    PhoneControl.typeInto(context, fallbackItem, step.text)
+                } else {
+                    false
+                }
             }
             else -> false
         }

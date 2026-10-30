@@ -98,7 +98,9 @@ object MacroRecorder {
                 }
                 AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                     val (label, resId, cx, cy) = nodeDetailsOf(event)
-                    steps.add(MacroStep("tap", pkg = pkg, label = label, resId = resId, cx = cx, cy = cy, delayMs = elapsed))
+                    if (label.isNotEmpty() || resId.isNotEmpty() || (cx > 0 && cy > 0)) {
+                        steps.add(MacroStep("tap", pkg = pkg, label = label, resId = resId, cx = cx, cy = cy, delayMs = elapsed))
+                    }
                 }
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
                     if (event.isPassword) return
@@ -108,14 +110,20 @@ object MacroRecorder {
                     val last = steps.lastOrNull()
                     if (last != null && last.type == "type" && (last.label == label || last.resId == resId)) {
                         steps[steps.size - 1] = last.copy(text = text)
+                    } else if (last != null && last.type == "tap" && (last.label == label || last.resId == resId || (Math.abs(last.cx - cx) < 100 && Math.abs(last.cy - cy) < 100))) {
+                        steps[steps.size - 1] = MacroStep("type", pkg = pkg, label = label, resId = resId, cx = cx, cy = cy, text = text, delayMs = last.delayMs)
                     } else {
                         steps.add(MacroStep("type", pkg = pkg, label = label, resId = resId, cx = cx, cy = cy, text = text, delayMs = elapsed))
                     }
                 }
                 AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
                     val y = event.scrollY
-                    if (lastScrollY >= 0 && y != lastScrollY) {
-                        steps.add(MacroStep("scroll", pkg = pkg, dir = if (y > lastScrollY) "down" else "up", delayMs = elapsed))
+                    if (lastScrollY >= 0 && Math.abs(y - lastScrollY) > 50) {
+                        val dir = if (y > lastScrollY) "down" else "up"
+                        val last = steps.lastOrNull()
+                        if (last == null || last.type != "scroll" || last.dir != dir) {
+                            steps.add(MacroStep("scroll", pkg = pkg, dir = dir, delayMs = elapsed))
+                        }
                     }
                     lastScrollY = y
                 }
