@@ -27,6 +27,8 @@ sealed interface Cmd {
     data class Scroll(val direction: ScrollDirection, val count: Int = 1) : Cmd
     data class Tap(val target: String) : Cmd
     data class LongPress(val target: String) : Cmd
+    data class Pinch(val zoomIn: Boolean) : Cmd
+    data class DualTap(val x1: Int, val y1: Int, val x2: Int, val y2: Int) : Cmd
     data class SetDefaultApp(val category: String, val appName: String) : Cmd
     data class Chat(val text: String) : Cmd
     data class Compliment(val text: String) : Cmd

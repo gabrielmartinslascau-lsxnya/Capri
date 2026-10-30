@@ -168,6 +168,79 @@ object PhoneControl {
     suspend fun scroll(down: Boolean): Boolean =
         scroll(if (down) ScrollDirection.DOWN else ScrollDirection.UP)
 
+    suspend fun multiStrokeGesture(path1: Path, path2: Path, durationMs: Long): Boolean {
+        val s = service() ?: return false
+        return suspendCancellableCoroutine { cont ->
+            val stroke1 = GestureDescription.StrokeDescription(path1, 0, durationMs)
+            val stroke2 = GestureDescription.StrokeDescription(path2, 0, durationMs)
+            val gesture = GestureDescription.Builder()
+                .addStroke(stroke1)
+                .addStroke(stroke2)
+                .build()
+            val accepted = s.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(true)
+                }
+
+                override fun onCancelled(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(false)
+                }
+            }, null)
+            if (!accepted && cont.isActive) cont.resume(false)
+        }
+    }
+
+    suspend fun pinch(zoomIn: Boolean): Boolean {
+        val s = service() ?: return false
+        val root = foregroundRoot()
+        val windowRect = Rect()
+        root?.getBoundsInScreen(windowRect)
+
+        val w = if (windowRect.width() > 0) windowRect.width().toFloat() else s.resources.displayMetrics.widthPixels.toFloat()
+        val h = if (windowRect.height() > 0) windowRect.height().toFloat() else s.resources.displayMetrics.heightPixels.toFloat()
+        val cy = h / 2f
+
+        val (x1From, x1To, x2From, x2To) = if (zoomIn) {
+            listOf(w * 0.40f, w * 0.15f, w * 0.60f, w * 0.85f)
+        } else {
+            listOf(w * 0.15f, w * 0.40f, w * 0.85f, w * 0.60f)
+        }
+
+        CapriCursor.showDual(s, x1From.toInt(), cy.toInt(), x2From.toInt(), cy.toInt())
+        delay(150)
+
+        val path1 = Path().apply { moveTo(x1From, cy); lineTo(x1To, cy) }
+        val path2 = Path().apply { moveTo(x2From, cy); lineTo(x2To, cy) }
+
+        var ok = false
+        coroutineScope {
+            val animJob = launch {
+                CapriCursor.glideDualPaths(x1From, cy, x1To, cy, x2From, cy, x2To, cy, 400)
+            }
+            val gestureJob = async { multiStrokeGesture(path1, path2, 400) }
+            ok = gestureJob.await()
+            animJob.join()
+        }
+
+        delay(250)
+        CapriCursor.hideDual()
+        return ok
+    }
+
+    suspend fun dualTap(x1: Int, y1: Int, x2: Int, y2: Int): Boolean {
+        val s = service() ?: return false
+        CapriCursor.showDual(s, x1, y1, x2, y2)
+        CapriCursor.pulse()
+
+        val path1 = Path().apply { moveTo(x1.toFloat(), y1.toFloat()) }
+        val path2 = Path().apply { moveTo(x2.toFloat(), y2.toFloat()) }
+
+        val ok = multiStrokeGesture(path1, path2, 60)
+        delay(300)
+        CapriCursor.hideDual()
+        return ok
+    }
+
     /** Puts `text` into a field (replaces what is there) and automatically hits enter/submit if possible. */
     suspend fun typeInto(context: Context, item: UiItem, text: String): Boolean {
         if (!MainActivity.isAllowTyping(context)) return false

@@ -235,6 +235,12 @@ object Personality {
                 listOf("holding down '{t}' for you, choom~", "long pressing '{t}' right away!")
                     .map { it.replace("{t}", cmd.target) }
             }
+            is Cmd.Pinch -> {
+                listOf(if (cmd.zoomIn) "zooming in for you, choom~" else "zooming out for you, netrunner~")
+            }
+            is Cmd.DualTap -> {
+                listOf("dual tapping screen points at the same time, choom~")
+            }
             is Cmd.WhatIsPlaying -> {
                 listOf("checking what's playing right now...", "let me check your media player, choom~")
             }

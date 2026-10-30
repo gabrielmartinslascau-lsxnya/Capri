@@ -47,6 +47,8 @@ object IntentParser {
     }
     private val tapRegex = Regex("^(?:click|click\\s+on|tap|press|touch)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val longPressRegex = Regex("^(?:long\\s+press|press\\s+and\\s+hold|hold|click\\s+and\\s+hold|tap\\s+and\\s+hold)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val pinchInRegex = Regex("^(?:pinch|zoom|zoom\\s+in|pinch\\s+in)$", RegexOption.IGNORE_CASE)
+    private val pinchOutRegex = Regex("^(?:zoom\\s+out|pinch\\s+out)$", RegexOption.IGNORE_CASE)
     private val whatIsPlayingRegex = Regex("^(?:what(?:'s|\\s+is)\\s+(?:playing|this\\s+song|current\\s+song|track|song\\s+playing)|what\\s+song\\s+is\\s+(?:this|playing)|who(?:'s|\\s+is)\\s+singing)$", RegexOption.IGNORE_CASE)
     private val volUpRegex = Regex("^(?:volume\\s+up|louder|turn\\s+it\\s+up|increase\\s+volume|make\\s+it\\s+louder)$", RegexOption.IGNORE_CASE)
     private val volDownRegex = Regex("^(?:volume\\s+down|quieter|turn\\s+it\\s+down|decrease\\s+volume|lower\\s+volume)$", RegexOption.IGNORE_CASE)
@@ -167,6 +169,13 @@ object IntentParser {
         }
         if (whatIsPlayingRegex.matches(raw) || whatIsPlayingRegex.matches(cleaned)) {
             return Cmd.WhatIsPlaying
+        }
+
+        if (pinchInRegex.matches(raw) || pinchInRegex.matches(cleaned)) {
+            return Cmd.Pinch(zoomIn = true)
+        }
+        if (pinchOutRegex.matches(raw) || pinchOutRegex.matches(cleaned)) {
+            return Cmd.Pinch(zoomIn = false)
         }
 
         if (scrollDownRegex.matches(raw) || scrollDownRegex.matches(cleaned)) {

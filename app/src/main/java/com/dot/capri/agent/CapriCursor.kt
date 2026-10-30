@@ -20,9 +20,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /**
- * Capri's visible "hand": a glowing ring that glides to where she is about to tap,
- * plus a small STOP pill at the top. The ring never takes touches, so her own taps go through it.
- * Tapping STOP sets `cancelled`, which the agent loop checks every step.
+ * Capri's visible "hand": glowing cursor rings that glide to target coordinates,
+ * plus a small STOP pill at the top. Supports dual cursors for multi-touch (pinching, gameplay).
  */
 object CapriCursor {
 
@@ -35,6 +34,8 @@ object CapriCursor {
     @Volatile private var wm: WindowManager? = null
     @Volatile private var dot: View? = null
     @Volatile private var dotParams: WindowManager.LayoutParams? = null
+    @Volatile private var dot2: View? = null
+    @Volatile private var dotParams2: WindowManager.LayoutParams? = null
     @Volatile private var pill: TextView? = null
     @Volatile private var sizePx = 0
 
@@ -115,13 +116,55 @@ object CapriCursor {
         }
     }
 
+    fun showDual(context: Context, x1: Int, y1: Int, x2: Int, y2: Int) {
+        show(context)
+        main.post {
+            val app = context.applicationContext
+            val manager = wm ?: (app.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
+            if (dot2 != null) return@post
+
+            val baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+
+            val half = sizePx / 2
+            val dotView2 = DotView(app)
+            val dp2 = WindowManager.LayoutParams(
+                sizePx, sizePx,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                baseFlags,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = x2 - half
+                y = y2 - half
+            }
+            manager.addView(dotView2, dp2)
+            dot2 = dotView2
+            dotParams2 = dp2
+        }
+    }
+
+    fun hideDual() {
+        main.post {
+            dot2?.let { runCatching { wm?.removeView(it) } }
+            dot2 = null
+            dotParams2 = null
+        }
+        hide()
+    }
+
     fun hide() {
         main.post {
             dot?.let { runCatching { wm?.removeView(it) } }
+            dot2?.let { runCatching { wm?.removeView(it) } }
             pill?.let { runCatching { wm?.removeView(it) } }
             dot = null
+            dot2 = null
             pill = null
             dotParams = null
+            dotParams2 = null
         }
     }
 
@@ -199,10 +242,54 @@ object CapriCursor {
         }
     }
 
+    suspend fun glideDualPaths(
+        x1From: Float, y1From: Float, x1To: Float, y1To: Float,
+        x2From: Float, y2From: Float, x2To: Float, y2To: Float,
+        durationMs: Long
+    ) {
+        val view1 = dot ?: return
+        val params1 = dotParams ?: return
+        val view2 = dot2
+        val params2 = dotParams2
+        val half = sizePx / 2
+
+        suspendCancellableCoroutine<Unit> { cont ->
+            val anim = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = durationMs
+                addUpdateListener {
+                    val f = it.animatedValue as Float
+                    params1.x = (x1From + (x1To - x1From) * f - half).toInt()
+                    params1.y = (y1From + (y1To - y1From) * f - half).toInt()
+                    try { wm?.updateViewLayout(view1, params1) } catch (e: Exception) {}
+
+                    if (view2 != null && params2 != null) {
+                        params2.x = (x2From + (x2To - x2From) * f - half).toInt()
+                        params2.y = (y2From + (y2To - y2From) * f - half).toInt()
+                        try { wm?.updateViewLayout(view2, params2) } catch (e: Exception) {}
+                    }
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+
+                    override fun onAnimationCancel(animation: Animator) {
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+                })
+            }
+            main.post { anim.start() }
+            cont.invokeOnCancellation { main.post { anim.cancel() } }
+        }
+    }
+
     fun pulse() {
         main.post {
             dot?.animate()?.scaleX(1.7f)?.scaleY(1.7f)?.setDuration(110)?.withEndAction {
                 dot?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(140)?.start()
+            }?.start()
+            dot2?.animate()?.scaleX(1.7f)?.scaleY(1.7f)?.setDuration(110)?.withEndAction {
+                dot2?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(140)?.start()
             }?.start()
         }
     }

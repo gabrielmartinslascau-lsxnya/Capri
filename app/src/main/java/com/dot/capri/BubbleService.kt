@@ -692,12 +692,24 @@ class BubbleService : Service() {
 
     private suspend fun executeEmbeddedActionTag(response: String): String {
         var cleanResponse = response
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|TASK):([^]]+)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|PINCH|DUALTAP|DUAL_TAP|TASK):([^]]+)\\]", RegexOption.IGNORE_CASE)
         val match = actionRegex.find(response)
         if (match != null) {
             val (actionType, rawTarget) = match.destructured
             val target = rawTarget.trim()
             when (actionType.uppercase()) {
+                "PINCH" -> {
+                    val zoomIn = target.contains("in", ignoreCase = true) || target.contains("zoom_in", ignoreCase = true)
+                    if (CapriAccessibilityService.instance != null) {
+                        PhoneControl.pinch(zoomIn)
+                    }
+                }
+                "DUALTAP", "DUAL_TAP" -> {
+                    val coords = target.split(",").mapNotNull { it.trim().toIntOrNull() }
+                    if (coords.size >= 4 && CapriAccessibilityService.instance != null) {
+                        PhoneControl.dualTap(coords[0], coords[1], coords[2], coords[3])
+                    }
+                }
                 "SCROLL" -> {
                     val parts = target.split(":")
                     val dirStr = parts[0].trim().uppercase()
@@ -1008,6 +1020,22 @@ class BubbleService : Service() {
                     }
                 }
                 return PhoneAgent.run(this, "long press ${cmd.target}", null) { setChatVisible(it) }
+            }
+
+            if (cmd is Cmd.Pinch) {
+                if (CapriAccessibilityService.instance == null) {
+                    return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+                }
+                val ok = PhoneControl.pinch(cmd.zoomIn)
+                return Personality.respond(cmd, ok)
+            }
+
+            if (cmd is Cmd.DualTap) {
+                if (CapriAccessibilityService.instance == null) {
+                    return "accessibility service isn't connected. enable Capri in Android Accessibility settings first, choom~"
+                }
+                val ok = PhoneControl.dualTap(cmd.x1, cmd.y1, cmd.x2, cmd.y2)
+                return Personality.respond(cmd, ok)
             }
 
             if (cmd is Cmd.ClearField) return executeClearFieldCommand()
