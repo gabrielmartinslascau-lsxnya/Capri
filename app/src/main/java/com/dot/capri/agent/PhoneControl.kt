@@ -126,10 +126,8 @@ object PhoneControl {
     suspend fun tap(item: UiItem): Boolean {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
-        item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val clicked = item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        if (clicked) return true
-        return tapAt(item.cx, item.cy)
+        if (item.node.isClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        return dispatchTap(item.cx, item.cy)
     }
 
     suspend fun longPress(item: UiItem, durationMs: Long = 800): Boolean {
@@ -142,87 +140,96 @@ object PhoneControl {
     }
 
     suspend fun tapAt(x: Int, y: Int): Boolean {
-        val s = service() ?: return false
         CapriCursor.moveTo(x, y)
         CapriCursor.pulse()
-        delay(80)
-
-        // Tier 1: Hit-test snapshot items for a node containing (x, y)
         val root = foregroundRoot()
-        if (root != null) {
-            val items = snapshot(root, max = 100)
-            val rect = Rect()
-            val hitItem = items.firstOrNull { item ->
-                item.node.getBoundsInScreen(rect)
-                rect.contains(x, y)
-            }
-            if (hitItem != null) {
-                hitItem.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                if (hitItem.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    return true
-                }
-            }
-        }
+        val target = root?.let { smallestClickableAt(it, x, y) }
+        if (target != null && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        return dispatchTap(x, y)
+    }
 
-        // Tier 2: Direct gesture dispatch at (x, y)
-        val gestureSuccess = suspendCancellableCoroutine<Boolean> { cont ->
-            val path = Path().apply {
-                moveTo(x.toFloat(), y.toFloat())
-                lineTo(x.toFloat(), y.toFloat())
-            }
-            val stroke = GestureDescription.StrokeDescription(path, 0, 80)
-            val gesture = GestureDescription.Builder()
-                .addStroke(stroke)
-                .build()
-            val accepted = s.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
-                override fun onCompleted(g: GestureDescription?) {
-                    if (cont.isActive) cont.resume(true)
-                }
-                override fun onCancelled(g: GestureDescription?) {
-                    if (cont.isActive) cont.resume(false)
-                }
-            }, null)
-            if (!accepted && cont.isActive) cont.resume(false)
-        }
-        if (gestureSuccess) return true
+    private suspend fun dispatchTap(x: Int, y: Int): Boolean =
+        dispatch(Path().apply { moveTo(x.toFloat(), y.toFloat()); lineTo(x.toFloat(), y.toFloat()) }, 60)
 
-        // Tier 3: Root click action fallback
-        return root?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+    private fun smallestClickableAt(root: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestArea = Long.MAX_VALUE
+        val r = Rect()
+        fun walk(n: AccessibilityNodeInfo?, depth: Int) {
+            if (n == null || depth > 40 || !n.isVisibleToUser) return
+            n.getBoundsInScreen(r)
+            if (n.isClickable && r.contains(x, y)) {
+                val area = r.width().toLong() * r.height()
+                if (area in 1 until bestArea) {
+                    best = n
+                    bestArea = area
+                }
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+        }
+        walk(root, 0)
+        return best
     }
 
     suspend fun scroll(direction: ScrollDirection): Boolean {
         val s = service() ?: return false
+        val root = foregroundRoot()
+        val scrollable = root?.let { largestScrollable(it) }
+        val forward = direction == ScrollDirection.DOWN || direction == ScrollDirection.RIGHT
+        val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        if (scrollable != null && scrollable.performAction(action)) {
+            CapriCursor.pulse()
+            return true
+        }
+
+        // Fallback: a finger drag across the middle of the screen.
         val (realW, realH) = realScreenBounds(s)
         val w = realW.toFloat()
         val h = realH.toFloat()
         val cx = w / 2f
         val cy = h / 2f
-        val (fromX, fromY, toX, toY) = when (direction) {
-            ScrollDirection.DOWN -> listOf(cx, h * 0.70f, cx, h * 0.30f)   // finger moves UP
-            ScrollDirection.UP -> listOf(cx, h * 0.30f, cx, h * 0.70f)     // finger moves DOWN
-            ScrollDirection.RIGHT -> listOf(w * 0.80f, cy, w * 0.20f, cy)  // finger moves LEFT
-            ScrollDirection.LEFT -> listOf(w * 0.20f, cy, w * 0.80f, cy)   // finger moves RIGHT
+        val (fx, fy, tx, ty) = when (direction) {
+            ScrollDirection.DOWN -> listOf(cx, h * 0.70f, cx, h * 0.30f)
+            ScrollDirection.UP -> listOf(cx, h * 0.30f, cx, h * 0.70f)
+            ScrollDirection.RIGHT -> listOf(w * 0.80f, cy, w * 0.20f, cy)
+            ScrollDirection.LEFT -> listOf(w * 0.20f, cy, w * 0.80f, cy)
         }
-        return swipe(fromX, fromY, toX, toY, 450)
+        return swipe(fx, fy, tx, ty, 450)
+    }
+
+    /** The largest visible scrollable container, usually the main list or page. */
+    private fun largestScrollable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestArea = 0L
+        val r = Rect()
+        fun walk(n: AccessibilityNodeInfo?, depth: Int) {
+            if (n == null || depth > 40 || !n.isVisibleToUser) return
+            if (n.isScrollable) {
+                n.getBoundsInScreen(r)
+                val area = r.width().toLong() * r.height()
+                if (area > bestArea) {
+                    best = n
+                    bestArea = area
+                }
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+        }
+        walk(root, 0)
+        return best
     }
 
     /** Drags from (x1,y1) to (x2,y2). The cursor is placed at the start first, so there's no diagonal jump. */
-    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 450): Boolean {
-        val s = service() ?: return false
-        CapriCursor.spawnCursor(s, 1, x1.toInt(), y1.toInt())
+    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 350): Boolean {
+        service() ?: return false
         CapriCursor.pulse()
-        delay(120)
         val path = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
-        var ok = false
-        coroutineScope {
-            val animJob = launch { CapriCursor.glideAlongPath(x1, y1, x2, y2, ms) }
-            val gestureJob = async { dispatch(path, ms) }
-            ok = gestureJob.await()
-            animJob.join()
+        return coroutineScope {
+            val anim = launch { CapriCursor.glideAlongPath(x1, y1, x2, y2, ms) }
+            val ok = async { dispatch(path, ms) }.await()
+            anim.join()
+            ok
         }
-        delay(200)
-        CapriCursor.hide()
-        return ok
     }
 
     /** Press and hold at a pixel for `ms` milliseconds. */
@@ -290,7 +297,6 @@ object PhoneControl {
         }
 
         delay(250)
-        CapriCursor.hideDual()
         return ok
     }
 
@@ -304,7 +310,6 @@ object PhoneControl {
 
         val ok = multiStrokeGesture(path1, path2, 60)
         delay(300)
-        CapriCursor.hideDual()
         return ok
     }
 
@@ -385,7 +390,7 @@ object PhoneControl {
             delay(600)
             return ok
         } finally {
-            CapriCursor.hide()
+            // keep pill up
         }
     }
 }

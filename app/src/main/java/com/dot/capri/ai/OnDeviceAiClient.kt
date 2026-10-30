@@ -49,6 +49,7 @@ object OnDeviceAiClient {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var engine: Engine? = null
     private var engineHasVision = false
+    @Volatile private var visionBroken = false
     @Volatile var lastError: String? = null
     private var idleJob: Job? = null
 
@@ -97,8 +98,8 @@ object OnDeviceAiClient {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Shrinks a screenshot to a 1024px JPEG so grid labels stay readable. */
-    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 1024): ByteArray {
+    /** Shrinks a screenshot to a 768px JPEG so grid labels stay readable and fast. */
+    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 768): ByteArray {
         val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
         val scale = minOf(1f, maxSide.toFloat() / maxOf(src.width, src.height))
         val scaled = android.graphics.Bitmap.createScaledBitmap(
@@ -239,7 +240,7 @@ object OnDeviceAiClient {
     // ---- engine lifecycle (always call with the mutex held) ----------
 
     private fun loadEngine(context: Context, wantVision: Boolean): Engine? {
-        engine?.let { if (!wantVision || engineHasVision) return it }
+        engine?.let { if (!wantVision || engineHasVision || visionBroken) return it }
         closeEngine()
         val file = modelFile(context)
         if (!file.exists()) {
@@ -248,7 +249,7 @@ object OnDeviceAiClient {
         }
         val backends: List<() -> Backend> =
             if (PREFER_GPU) listOf({ Backend.GPU() }, { Backend.CPU() }) else listOf({ Backend.CPU() })
-        val visionTries = if (wantVision) listOf(true, false) else listOf(false)
+        val visionTries = if (wantVision && !visionBroken) listOf(true, false) else listOf(false)
 
         for (vision in visionTries) {
             for (make in backends) {
@@ -275,6 +276,7 @@ object OnDeviceAiClient {
                     Log.d(TAG, "engine ready (vision=$vision)")
                     return e
                 } catch (t: Throwable) {
+                    if (vision) visionBroken = true
                     lastError = "engine init failed (vision=$vision): ${t.message ?: t.javaClass.simpleName}"
                     Log.e(TAG, lastError!!, t)
                 }
@@ -326,6 +328,57 @@ object OnDeviceAiClient {
 
     // ---- generation --------------------------------------------------
 
+    private suspend fun generateOnce(
+        context: Context,
+        prompt: String,
+        imageBytes: ByteArray?,
+        systemOverride: String?
+    ): String {
+        val eng = loadEngine(context, wantVision = imageBytes != null && !visionBroken)
+            ?: throw IllegalStateException(lastError ?: "local model not ready")
+
+        val history = if (systemOverride == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
+        val config = ConversationConfig(
+            systemInstruction = Contents.of(systemOverride ?: buildSystemPrompt(context)),
+            initialMessages = history.flatMap { (u, c) ->
+                listOf(
+                    Message.user(u.take(MAX_HISTORY_CHARS)),
+                    Message.model(c.take(MAX_HISTORY_CHARS))
+                )
+            },
+            samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.9),
+            thinkingConfig = ThinkingConfig(enableThinking = false),
+            maxOutputToken = MAX_REPLY_TOKENS
+        )
+
+        var imageFile: File? = null
+        val sb = StringBuilder()
+        try {
+            eng.createConversation(config).use { conversation ->
+                withTimeout(GENERATION_TIMEOUT_MS) {
+                    val useImage = imageBytes != null && engineHasVision
+                    val flow = if (useImage) {
+                        imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
+                            writeBytes(shrinkImage(imageBytes))
+                        }
+                        conversation.sendMessageAsync(
+                            Contents.of(
+                                Content.Text(prompt.take(MAX_PROMPT_CHARS)),
+                                Content.ImageFile(imageFile.absolutePath)
+                            )
+                        )
+                    } else {
+                        conversation.sendMessageAsync(prompt.take(MAX_PROMPT_CHARS))
+                    }
+                    flow.collect { sb.append(it.toString()) }
+                }
+            }
+        } finally {
+            imageFile?.delete()
+        }
+        return sb.toString().trim()
+    }
+
     suspend fun generateResponse(
         context: Context,
         prompt: String,
@@ -335,49 +388,8 @@ object OnDeviceAiClient {
         withContext(Dispatchers.Default) {
             mutex.withLock {
                 idleJob?.cancel()
-                var imageFile: File? = null
                 try {
-                    val eng = loadEngine(context, wantVision = imageBytes != null)
-                        ?: return@withLock Result.failure<String>(
-                            IllegalStateException(lastError ?: "local model not ready")
-                        )
-
-                    val history = if (systemOverride == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
-                    val config = ConversationConfig(
-                        systemInstruction = Contents.of(systemOverride ?: buildSystemPrompt(context)),
-                        initialMessages = history.flatMap { (u, c) ->
-                            listOf(
-                                Message.user(u.take(MAX_HISTORY_CHARS)),
-                                Message.model(c.take(MAX_HISTORY_CHARS))
-                            )
-                        },
-                        samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.9),
-                        thinkingConfig = ThinkingConfig(enableThinking = false),
-                        maxOutputToken = MAX_REPLY_TOKENS
-                    )
-
-                    val sb = StringBuilder()
-                    eng.createConversation(config).use { conversation ->
-                        withTimeout(GENERATION_TIMEOUT_MS) {
-                            val useImage = imageBytes != null && engineHasVision
-                            val flow = if (useImage) {
-                                imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
-                                    writeBytes(shrinkImage(imageBytes))
-                                }
-                                conversation.sendMessageAsync(
-                                    Contents.of(
-                                        Content.Text(prompt.take(MAX_PROMPT_CHARS)),
-                                        Content.ImageFile(imageFile.absolutePath)
-                                    )
-                                )
-                            } else {
-                                conversation.sendMessageAsync(prompt.take(MAX_PROMPT_CHARS))
-                            }
-                            flow.collect { sb.append(it.toString()) }
-                        }
-                    }
-
-                    val reply = sb.toString().trim()
+                    val reply = generateOnce(context, prompt, imageBytes, systemOverride)
                     lastError = null
                     if (reply.isBlank()) {
                         Result.failure(RuntimeException("empty local reply"))
@@ -389,10 +401,8 @@ object OnDeviceAiClient {
                     if (t is CancellationException && t !is TimeoutCancellationException) throw t
                     lastError = "generation failed: ${t.message ?: t.javaClass.simpleName}"
                     Log.e(TAG, lastError!!, t)
-                    closeEngine()
                     Result.failure(if (t is Exception) t else RuntimeException(t.message))
                 } finally {
-                    imageFile?.delete()
                     scheduleRelease()
                 }
             }

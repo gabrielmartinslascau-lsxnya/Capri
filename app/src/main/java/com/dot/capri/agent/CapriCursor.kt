@@ -20,7 +20,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -30,10 +29,8 @@ import kotlin.coroutines.resume
  * Capri's on-screen cursors and STOP pill.
  *
  * One full-screen, click-through stage holds every cursor ring. Moving a ring is a view
- * translation, so there is no window-manager call per animation frame.
- * The STOP pill is the only touchable window. It stays up for the whole run and is removed
- * only by hide(), never between steps.
- *
+ * translation, so there is no window-manager call per frame.
+ * The STOP pill (top of screen) is the only touchable window. It stays up for a whole run.
  * All view work runs on the main thread.
  */
 object CapriCursor {
@@ -51,6 +48,10 @@ object CapriCursor {
     private var pill: LinearLayout? = null
     private var statusTv: TextView? = null
 
+    // Where the stage really sits on screen. Usually (0,0), but insets or cutouts can shift it.
+    private var originX = 0
+    private var originY = 0
+
     private val cursors = HashMap<Int, Cursor>()
 
     private class DotView(context: Context, colorHex: Int) : View(context) {
@@ -67,6 +68,46 @@ object CapriCursor {
             val r = width / 2f
             canvas.drawCircle(r, r, r - 4f, ring)
             canvas.drawCircle(r, r, r / 3f, core)
+        }
+    }
+
+    /** The "thinking" bars. They animate while the pill is on screen. */
+    private class AnimatedBarsView(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFF2D6B.toInt()
+            style = Paint.Style.FILL
+        }
+        private var phase = 0f
+        private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 800
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            addUpdateListener {
+                phase = it.animatedValue as Float
+                invalidate()
+            }
+        }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            if (!animator.isStarted) animator.start()
+        }
+
+        override fun onDetachedFromWindow() {
+            animator.cancel()
+            super.onDetachedFromWindow()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val barWidth = 4f
+            val gap = 3f
+            val maxH = height.toFloat()
+            for (i in 0..3) {
+                val wave = kotlin.math.abs(kotlin.math.sin((phase * Math.PI * 2) + (i * 0.7)).toFloat())
+                val h = maxH * (0.25f + 0.75f * wave)
+                val left = i * (barWidth + gap)
+                canvas.drawRect(left, maxH - h, left + barWidth, maxH, paint)
+            }
         }
     }
 
@@ -106,6 +147,13 @@ object CapriCursor {
         try {
             manager.addView(frame, params)
             stage = frame
+            // Measure where the stage really sits, once it has been laid out.
+            frame.post {
+                val loc = IntArray(2)
+                frame.getLocationOnScreen(loc)
+                originX = loc[0]
+                originY = loc[1]
+            }
         } catch (_: Exception) {
         }
     }
@@ -116,11 +164,16 @@ object CapriCursor {
         val manager = windowManager(app)
         val density = app.resources.displayMetrics.density
 
+        val bars = AnimatedBarsView(app).apply {
+            layoutParams = LinearLayout.LayoutParams((22 * density).toInt(), (14 * density).toInt()).apply {
+                leftMargin = (4 * density).toInt()
+            }
+        }
         val status = TextView(app).apply {
             text = "working..."
             setTextColor(Color.WHITE)
             textSize = 12f
-            setPadding(0, 0, (10 * density).toInt(), 0)
+            setPadding((8 * density).toInt(), 0, (10 * density).toInt(), 0)
         }
         val stop = TextView(app).apply {
             text = "STOP"
@@ -150,6 +203,7 @@ object CapriCursor {
             val ph = (12 * density).toInt()
             val pv = (6 * density).toInt()
             setPadding(ph, pv, ph, pv)
+            addView(bars)
             addView(status)
             addView(stop)
         }
@@ -162,9 +216,8 @@ object CapriCursor {
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            // Bottom centre, above the navigation bar, so it never covers the top of the screen.
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = (120 * density).toInt()
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = (36 * density).toInt()
         }
         try {
             manager.addView(row, params)
@@ -178,8 +231,8 @@ object CapriCursor {
         c.x = x
         c.y = y
         val half = sizePx / 2f
-        c.view.translationX = x - half
-        c.view.translationY = y - half
+        c.view.translationX = x - half - originX
+        c.view.translationY = y - half - originY
     }
 
     private fun spawnNow(context: Context, id: Int, x: Int, y: Int, colorHex: Int) {
@@ -204,7 +257,7 @@ object CapriCursor {
         stage?.removeView(c.view)
     }
 
-    /** Runs a ValueAnimator that moves one cursor. Must be called on the main thread. */
+    /** Animates one cursor. Must run on the main thread. */
     private suspend fun animate(c: Cursor, fx: Float, fy: Float, tx: Float, ty: Float, ms: Long) {
         suspendCancellableCoroutine<Unit> { cont ->
             c.animator?.cancel()
@@ -271,7 +324,7 @@ object CapriCursor {
         removeCursorNow(2)
     }
 
-    /** Removes everything. Call this once, when a run ends. Never call it between steps. */
+    /** Removes everything. Call this once, when a run ends. Never between steps. */
     fun hide() = onMain {
         cursors.values.forEach { it.animator?.cancel() }
         cursors.clear()
@@ -308,7 +361,7 @@ object CapriCursor {
         }
     }
 
-    /** Two drags at the same time (pinch, two-finger scroll). Runs in parallel, not one after the other. */
+    /** Two drags at the same time. Runs in parallel. */
     suspend fun glideDualPaths(
         x1From: Float, y1From: Float, x1To: Float, y1To: Float,
         x2From: Float, y2From: Float, x2To: Float, y2To: Float,

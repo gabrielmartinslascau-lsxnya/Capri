@@ -180,16 +180,22 @@ Rules:
         val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\"" }
         val prompt = "TASK: $goal\n" +
                 "SCREEN SIZE: ${PhoneControl.screenSize()?.let { "${it.first}x${it.second}" } ?: "unknown"}\n" +
+                "SCREENSHOT: ${if (shot != null) "attached, grid shown" else "none, use element ids"}\n" +
                 "STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(8).joinToString(" > ")}\n" +
                 "FOREGROUND APP: $pkg\n" +
                 "SCREEN ELEMENTS:\n${screen.ifEmpty { "(nothing readable, use the screenshot)" }}"
-        if (useApi(context)) {
-            return LlmRouter.complete(
+
+        val t0 = System.currentTimeMillis()
+        val reply = if (useApi(context)) {
+            LlmRouter.complete(
                 context,
                 LlmRequest(prompt = prompt, systemPrompt = SYSTEM, history = emptyList(), imageBytes = shot)
             ).getOrNull()
+        } else {
+            OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM).getOrNull()
         }
-        return OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM).getOrNull()
+        Log.d(TAG, "model call ${System.currentTimeMillis() - t0} ms, image=${shot != null}, elements=${items.size}")
+        return reply
     }
 
     suspend fun run(
@@ -238,14 +244,17 @@ Rules:
                 }
                 if (chosen == null) {
                     CapriCursor.setStatus("observing...")
-                    val shot = annotate(service.captureScreenBitmap())
+                    // Send the screenshot only when the element list is too thin to act on.
+                    // Images are the slowest part of a step on a phone.
+                    val shot = if (items.size < 5) annotate(service.captureScreenBitmap()) else null
                     var reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
                     chosen = parseAct(reply, screenW, screenH)
-                    if (chosen == null) {
+                    // Retry only on the API tier. A second on-device call doubles the wait.
+                    if (chosen == null && useApi(context)) {
                         Log.w(TAG, "unreadable reply, retrying: ${reply.take(120)}")
-                        delay(200)
-                        reply = askModel(context, goal, pkg, items, log, shot) ?: return "my brain didn't answer, choom. ${summary(log)}"
+                        reply = askModel(context, goal, pkg, items, log, shot)
+                            ?: return "my brain didn't answer, choom. ${summary(log)}"
                         chosen = parseAct(reply, screenW, screenH)
                     }
                     if (chosen == null) {
@@ -384,7 +393,7 @@ Rules:
                     else -> log.add("unknown action")
                 }
                 steps++
-                delay(200)
+                delay(300)
             }
             return "that took too many steps, choom. ${summary(log)}"
         } finally {
