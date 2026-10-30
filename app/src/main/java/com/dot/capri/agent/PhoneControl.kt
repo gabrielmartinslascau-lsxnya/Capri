@@ -138,7 +138,29 @@ object PhoneControl {
 
     suspend fun tapAt(x: Int, y: Int): Boolean {
         val s = service() ?: return false
-        return suspendCancellableCoroutine { cont ->
+        CapriCursor.moveTo(x, y)
+        CapriCursor.pulse()
+        delay(80)
+
+        // Tier 1: Hit-test snapshot items for a node containing (x, y)
+        val root = foregroundRoot()
+        if (root != null) {
+            val items = snapshot(root, max = 100)
+            val rect = Rect()
+            val hitItem = items.firstOrNull { item ->
+                item.node.getBoundsInScreen(rect)
+                rect.contains(x, y)
+            }
+            if (hitItem != null) {
+                hitItem.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                if (hitItem.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return true
+                }
+            }
+        }
+
+        // Tier 2: Direct gesture dispatch at (x, y)
+        val gestureSuccess = suspendCancellableCoroutine<Boolean> { cont ->
             val path = Path().apply {
                 moveTo(x.toFloat(), y.toFloat())
                 lineTo(x.toFloat(), y.toFloat())
@@ -157,6 +179,10 @@ object PhoneControl {
             }, null)
             if (!accepted && cont.isActive) cont.resume(false)
         }
+        if (gestureSuccess) return true
+
+        // Tier 3: Root click action fallback
+        return root?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
     }
 
     suspend fun scroll(direction: ScrollDirection): Boolean {
