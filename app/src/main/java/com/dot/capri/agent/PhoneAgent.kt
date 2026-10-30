@@ -172,7 +172,7 @@ Rules:
                     }
                 }
                 if (chosen == null) {
-                    val shot = if (items.size < 5) service.captureScreenBitmap() else null
+                    val shot = service.captureScreenBitmap()
                     val reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
                     chosen = parseAct(reply)

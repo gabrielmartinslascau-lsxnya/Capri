@@ -130,6 +130,8 @@ class IntentParserTest {
             "whats on screen",
             "what's on my screen",
             "can you see my screen",
+            "can ya see my screen",
+            "can u see my screen",
             "what do you see",
             "can you see this",
             "look at my screen",

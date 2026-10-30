@@ -15,8 +15,8 @@ object IntentParser {
         "^(?:" +
         "what(?:'s|s|\\s+is)\\s+(?:on\\s+(?:my\\s+|the\\s+)?screen|here|this)|" +
         "what\\s+(?:do\\s+you\\s+see|am\\s+i\\s+looking\\s+at)|" +
-        "(?:can|could|would)?\\s*(?:you\\s+)?(?:see|look\\s+at|read|describe|analyze|scan|peek|check)\\s+(?:at\\s+)?(?:my\\s+|the\\s+)?screen|" +
-        "(?:can|could)?\\s*(?:you\\s+)?see\\s+this|" +
+        "(?:can|could|would)?\\s*(?:you|ya|u|ya'll)?\\s*(?:see|look\\s+at|read|describe|analyze|scan|peek|check)\\s+(?:at\\s+)?(?:my\\s+|the\\s+)?(?:screen|phone|display)|" +
+        "(?:can|could)?\\s*(?:you|ya|u)?\\s*see\\s+(?:this|my\\s+screen)|" +
         "(?:take\\s+a\\s+)?look\\s+(?:at\\s+)?(?:my\\s+|the\\s+)?screen|" +
         "tell\\s+me\\s+what\\s+you\\s+see|" +
         "screen\\s+(?:capture|read|scan|check)" +
