@@ -122,26 +122,41 @@ object PhoneControl {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
         item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val gestureOk = dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, 60)
-        if (gestureOk) return true
-        return item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        val clicked = item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        if (clicked) return true
+        return tapAt(item.cx, item.cy)
     }
 
     suspend fun longPress(item: UiItem, durationMs: Long = 800): Boolean {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
         item.node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val gestureOk = dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()) }, durationMs)
+        val gestureOk = dispatch(Path().apply { moveTo(item.cx.toFloat(), item.cy.toFloat()); lineTo(item.cx.toFloat(), item.cy.toFloat()) }, durationMs)
         if (gestureOk) return true
         return item.node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
     }
 
     suspend fun tapAt(x: Int, y: Int): Boolean {
-        service() ?: return false
-        val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
-        val gestureOk = dispatch(path, 80)
-        if (gestureOk) return true
-        return false
+        val s = service() ?: return false
+        return suspendCancellableCoroutine { cont ->
+            val path = Path().apply {
+                moveTo(x.toFloat(), y.toFloat())
+                lineTo(x.toFloat(), y.toFloat())
+            }
+            val stroke = GestureDescription.StrokeDescription(path, 0, 80)
+            val gesture = GestureDescription.Builder()
+                .addStroke(stroke)
+                .build()
+            val accepted = s.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(true)
+                }
+                override fun onCancelled(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(false)
+                }
+            }, null)
+            if (!accepted && cont.isActive) cont.resume(false)
+        }
     }
 
     suspend fun scroll(direction: ScrollDirection): Boolean {
@@ -164,15 +179,15 @@ object PhoneControl {
         }
 
         CapriCursor.show(s)
-        CapriCursor.moveTo(fromX.toInt(), fromY.toInt())
+        CapriCursor.moveTo(fromX.toInt(), fromY.toInt()) // fully awaited before gesture dispatch
         CapriCursor.pulse()
-        delay(150)
+        delay(100)
 
         val path = Path().apply { moveTo(fromX, fromY); lineTo(toX, toY) }
         var ok = false
         coroutineScope {
-            val animJob = launch { CapriCursor.glideAlongPath(fromX, fromY, toX, toY, 500) }
-            val gestureJob = async { dispatch(path, 500) }
+            val animJob = launch { CapriCursor.glideAlongPath(fromX, fromY, toX, toY, 450) }
+            val gestureJob = async { dispatch(path, 450) }
             ok = gestureJob.await()
             animJob.join()
         }
