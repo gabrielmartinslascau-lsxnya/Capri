@@ -78,9 +78,13 @@ Reply with ONLY a JSON object. Actions:
 {"do":"home"}
 {"do":"open","app":"app name"}
 {"do":"wait"}
+{"do":"spawn_cursor","id":2,"x":X,"y":Y}     spawn or place cursor ID (1=Pink/Red, 2=Green, 3=Blue, etc.) at (X, Y)
+{"do":"move_cursor","id":2,"x":X,"y":Y}      glide cursor ID to (X, Y)
+{"do":"remove_cursor","id":2}              remove cursor ID
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
 Critical Instructions:
+- MULTI-CURSOR AWARENESS: You have multiple color-coded cursors active on screen (Cursor 1 is Pink-Red, Cursor 2 is Green, Cursor 3 is Blue, Cursor 4 is Yellow, etc.). Use spawn_cursor and move_cursor to position and coordinate them when playing games or handling multi-touch controls.
 - DO NOT GIVE UP RANDOMLY: Never call "fail" simply because a transition is slow, an app is opening, or a target isn't on screen immediately. If the screen is loading or updating, output {"do":"wait"}. If an element is off-screen, scroll or navigate to find it. Only use "fail" if the requested task is strictly impossible or prohibited.
 - DO NOT GUESS CLICKS: Do not tap random grid cells, unverified IDs, or blank spaces to "explore". Every tap must target a verified element label from SCREEN ELEMENTS or an explicitly visible visual control in the screenshot grid.
 - Every "tap" and "type" action must include "label": the exact label of the element you are acting on, copied from SCREEN ELEMENTS.

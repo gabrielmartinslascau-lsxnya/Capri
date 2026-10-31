@@ -10,4 +10,5 @@
 - [x] Task 10 (`v10.25`): Precise Millisecond & Adaptive Visual Hold Precision
 - [x] Task 11 (`v10.26`): Adaptive Sliced Holding with Visual Early-Release Polling
 - [x] Task 12 (`v10.27`): True Continuous Unbroken Hold Fix & Dynamic Landscape Screenshot Coordinate Mapping
+- [x] Task 13 (`v10.28`): LLM Multi-Cursor Prompt Awareness & Default Dual-Cursor Startup
 - [x] Build and verify (`app:assembleDebug`)
