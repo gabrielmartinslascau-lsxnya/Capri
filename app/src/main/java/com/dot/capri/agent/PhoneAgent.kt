@@ -482,15 +482,35 @@ Critical Instructions:
                         delay(500)
                     }
                     "hold" -> {
-                        CapriCursor.setStatus("holding down...")
-                        val duration = a.durationMs ?: 3000L
+                        CapriCursor.setStatus("holding adaptively...")
+                        val totalDuration = a.durationMs ?: 3000L
                         val item = items.firstOrNull { it.id == a.id }
-                        val ok = when {
-                            item != null -> PhoneControl.hold(item, duration)
-                            a.x != null && a.y != null -> PhoneControl.holdAt(a.x, a.y, duration)
-                            else -> false
+                        val targetX = item?.cx ?: a.x ?: (screenW / 2)
+                        val targetY = item?.cy ?: a.y ?: (screenH / 2)
+
+                        var elapsed = 0L
+                        val sliceMs = 400L
+                        var success = true
+
+                        while (elapsed < totalDuration && !CapriCursor.cancelled) {
+                            val chunk = (totalDuration - elapsed).coerceAtMost(sliceMs)
+                            val ok = PhoneControl.holdAt(targetX, targetY, chunk)
+                            if (!ok) {
+                                success = false
+                                break
+                            }
+                            elapsed += chunk
+                            val freshRoot = PhoneControl.foregroundRoot()
+                            if (freshRoot != null) {
+                                val freshItems = PhoneControl.snapshot(freshRoot)
+                                if (a.id != null && freshItems.none { it.id == a.id }) {
+                                    log.add("target completed early at ${elapsed}ms")
+                                    break
+                                }
+                            }
+                            delay(50)
                         }
-                        log.add("held down for ${duration}ms" + if (ok) "" else " (failed)")
+                        log.add("held adaptively for ${elapsed}ms" + if (success) "" else " (failed)")
                     }
                     "wait" -> log.add("waited")
                     else -> log.add("unknown action")
