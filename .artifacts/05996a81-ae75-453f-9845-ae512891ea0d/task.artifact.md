@@ -20,4 +20,5 @@
 - [x] Task 20 (`v10.35`): Card & Game Item Placement Rules (PvZ) & Post-Gesture Render Settle Window (`400ms`)
 - [x] Task 21 (`v10.36`): Top-Margin System Gesture Shielding (Notification Pull-Down Prevention) & Draggable Top-Right STOP Pill
 - [x] Task 22 (`v10.37`): Streamlined Decisive System Prompt & Removal of Restrictive Game Label Mismatch Blocks
+- [x] Task 23 (`v10.38`): Automatic API Retry on Transient Null Responses & Landscape Hardware Buffer Auto-Rotation
 - [x] Build and verify (`app:assembleDebug`)

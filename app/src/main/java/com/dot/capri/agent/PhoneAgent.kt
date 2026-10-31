@@ -293,16 +293,20 @@ Direct Instructions:
                 if (chosen == null) {
                     CapriCursor.setStatus("observing...")
                     val shot = if (items.size < 5) annotate(service.captureScreenBitmap()) else null
-                    var reply = askModel(context, goal, pkg, items, log, shot)
-                        ?: return "my brain didn't answer, choom. ${summary(log)}"
-                    chosen = parseAct(reply, lastShotWidth, lastShotHeight)
-                    if (chosen == null && useApi(context)) {
-                        Log.w(TAG, "unreadable reply, retrying: ${reply.take(120)}")
+                    var reply: String? = null
+                    repeat(3) {
                         reply = askModel(context, goal, pkg, items, log, shot)
-                            ?: return "my brain didn't answer, choom. ${summary(log)}"
-                        chosen = parseAct(reply, lastShotWidth, lastShotHeight)
+                        if (reply != null) return@repeat
+                        delay(500)
                     }
+                    if (reply == null) {
+                        log.add("brain unresponsive, retrying")
+                        delay(1000)
+                        continue
+                    }
+                    chosen = parseAct(reply, lastShotWidth, lastShotHeight)
                     if (chosen == null) {
+                        Log.w(TAG, "unreadable reply: ${reply.take(120)}")
                         log.add("unreadable reply")
                         steps++
                         continue

@@ -64,9 +64,17 @@ class CapriAccessibilityService : AccessibilityService() {
                         try {
                             val hwBuffer = screenshot.hardwareBuffer
                             val bitmap = Bitmap.wrapHardwareBuffer(hwBuffer, screenshot.colorSpace)
-                            val mutableBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                            var mutableBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
                             hwBuffer.close()
                             if (mutableBitmap != null) {
+                                val display = (getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager)?.defaultDisplay
+                                val rotation = display?.rotation ?: android.view.Surface.ROTATION_0
+                                if ((rotation == android.view.Surface.ROTATION_90 || rotation == android.view.Surface.ROTATION_270) && mutableBitmap.width < mutableBitmap.height) {
+                                    val matrix = android.graphics.Matrix()
+                                    matrix.postRotate(if (rotation == android.view.Surface.ROTATION_90) 270f else 90f)
+                                    mutableBitmap = Bitmap.createBitmap(mutableBitmap, 0, 0, mutableBitmap.width, mutableBitmap.height, matrix, true)
+                                }
+
                                 val maxDim = 960
                                 val srcW = mutableBitmap.width
                                 val srcH = mutableBitmap.height
