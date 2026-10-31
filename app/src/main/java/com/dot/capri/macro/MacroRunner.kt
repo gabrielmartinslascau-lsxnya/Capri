@@ -85,10 +85,10 @@ object MacroRunner {
                 }
 
                 if (item != null) {
-                    PhoneControl.typeInto(context, item, step.text)
+                    PhoneControl.typeInto(context, item, step.text, submit = false)
                 } else if (targetX > 0 && targetY > 0) {
                     val fallbackItem = PhoneControl.UiItem(1, step.label.ifEmpty { "type" }, "input", targetX, targetY, root)
-                    PhoneControl.typeInto(context, fallbackItem, step.text)
+                    PhoneControl.typeInto(context, fallbackItem, step.text, submit = false)
                 } else {
                     false
                 }

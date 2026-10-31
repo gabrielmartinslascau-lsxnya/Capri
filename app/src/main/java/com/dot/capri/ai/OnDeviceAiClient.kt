@@ -118,6 +118,7 @@ object OnDeviceAiClient {
     ) {
         val targetFile = modelFile(context)
         targetFile.parentFile?.mkdirs()
+        // Stored in persistent app internal storage (filesDir), never in temporary cache.
         val tempFile = File(targetFile.parentFile, "capri-local.litertlm.tmp")
 
         scope.launch(Dispatchers.IO) {
@@ -126,6 +127,8 @@ object OnDeviceAiClient {
 
             var conn: java.net.HttpURLConnection? = null
             try {
+                val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
+
                 // Follow redirects by hand so every hop's status code is visible.
                 var url = java.net.URL(modelUrl)
                 var response: java.net.HttpURLConnection? = null
@@ -136,6 +139,9 @@ object OnDeviceAiClient {
                         connectTimeout = 15_000
                         readTimeout = 60_000
                         setRequestProperty("User-Agent", "Capri-Android-App")
+                        if (existingBytes > 0) {
+                            setRequestProperty("Range", "bytes=$existingBytes-")
+                        }
                     }
                     conn = c
                     when (val code = c.responseCode) {
@@ -148,7 +154,7 @@ object OnDeviceAiClient {
                             url = java.net.URL(url, loc)
                             c.disconnect()
                         }
-                        in 200..299 -> response = c
+                        200, 206 -> response = c
                         401, 403 -> {
                             finish(false, "This model needs login (HTTP $code). Download the .litertlm file in your browser, then tap Import local model.")
                             return@launch
@@ -168,12 +174,19 @@ object OnDeviceAiClient {
                     }
                 }
                 val resp = response
+                val isPartial = (resp.responseCode == 206)
+                val serverLen = resp.contentLengthLong
 
-                val total = resp.contentLengthLong
-                var done = 0L
+                val startBytes = if (isPartial) existingBytes else {
+                    tempFile.delete()
+                    0L
+                }
+                val total = if (isPartial && serverLen > 0) startBytes + serverLen else serverLen
+                var done = startBytes
                 var lastPct = -1
+
                 resp.inputStream.use { input ->
-                    tempFile.outputStream().use { out ->
+                    java.io.FileOutputStream(tempFile, isPartial).use { out ->
                         val buf = ByteArray(64 * 1024)
                         while (true) {
                             val n = input.read(buf)

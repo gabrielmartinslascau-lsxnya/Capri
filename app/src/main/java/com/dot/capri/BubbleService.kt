@@ -36,6 +36,7 @@ import androidx.core.content.ContextCompat
 import com.dot.capri.accessibility.ScreenWriter
 import com.dot.capri.accessibility.WriteResult
 import com.dot.capri.agent.CapriCursor
+import com.dot.capri.agent.ControlRegions
 import com.dot.capri.agent.DeviceTasks
 import com.dot.capri.agent.PhoneAgent
 import com.dot.capri.agent.PhoneControl
@@ -157,14 +158,10 @@ class BubbleService : Service() {
             .setOngoing(true)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val fgsTypes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            }
-            startForeground(NOTIFICATION_ID, notification, fgsTypes)
+        // Android 14+ requires a declared type. This is a floating assistant, so specialUse.
+        // mediaPlayback is not used: Android 15+ restricts it and the app does not play media.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -845,7 +842,7 @@ class BubbleService : Service() {
         (LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)) || OnDeviceAiClient.isAvailable(this)
 
     private suspend fun handleReply(reply: String): String {
-        val task = Regex("\\[ACTION:TASK:(.+?)\\]", RegexOption.DOT_MATCHES_ALL).find(reply)
+        val task = Regex("\\[ACTION:TASK:(.+)\\]", RegexOption.DOT_MATCHES_ALL).find(reply)
         if (task != null) {
             val goal = task.groupValues[1].trim()
             return PhoneAgent.run(this, goal, null) { flag -> setChatVisible(flag) }
@@ -969,18 +966,20 @@ class BubbleService : Service() {
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
         }
 
-        // Brain first.
+        // "calibrate attack 0.9 0.55" stores a button as fractions of the screen (0..1).
+        Regex("^calibrate\\s+([a-z0-9_]+)\\s+([01](?:\\.\\d+)?)\\s+([01](?:\\.\\d+)?)$", RegexOption.IGNORE_CASE)
+            .find(trimmedInput)?.let { m ->
+                ControlRegions.set(this, m.groupValues[1], m.groupValues[2].toFloat(), m.groupValues[3].toFloat())
+                return "saved ${m.groupValues[1].lowercase()} at ${m.groupValues[2]}, ${m.groupValues[3]}."
+            }
+        if (trimmedInput.equals("regions", ignoreCase = true)) {
+            return ControlRegions.names(this).ifEmpty { "no regions yet. say: calibrate attack 0.9 0.55" }
+        }
+
+        // Brain first. There is no keyword fallback: without a brain she says so.
         if (brainAvailable()) {
             return askBrain(text) ?: "i didn't get an answer, try again."
         }
-
-        val cmd = IntentParser.parse(text)
-        if (cmd !is Cmd.Unknown) {
-            val success = IntentExecutor.execute(this, cmd)
-            delay(300)
-            return Personality.respond(cmd, success)
-        }
-
         return noBrainReply()
 
 

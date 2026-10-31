@@ -259,7 +259,7 @@ object CapriCursor {
         ).apply {
             gravity = Gravity.TOP or Gravity.END
             x = (16 * density).toInt()
-            y = (12 * density).toInt()
+            y = (20 * density).toInt()
         }
         try { manager.addView(row, paramsFor(preferred)) } catch (_: Exception) {
             try { manager.addView(row, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)) } catch (_: Exception) { return }

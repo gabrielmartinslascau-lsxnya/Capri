@@ -12,9 +12,11 @@ object LlmRouter {
     const val KEY_ACTIVE_PROVIDER = "active_provider"
     const val KEY_ANTHROPIC_API_KEY = "user_anthropic_api_key"
     const val KEY_OPENROUTER_API_KEY = "user_openrouter_api_key"
+    const val KEY_GROQ_API_KEY = "user_groq_api_key"
     const val KEY_GEMINI_MODEL_OVERRIDE = "gemini_model_override"
     const val KEY_ANTHROPIC_MODEL_OVERRIDE = "anthropic_model_override"
     const val KEY_OPENROUTER_MODEL_OVERRIDE = "openrouter_model_override"
+    const val KEY_GROQ_MODEL_OVERRIDE = "groq_model_override"
 
     // Was 10/hour, which is why she went silent after a few messages. Raise or lower freely.
     private const val MAX_CALLS_PER_HOUR = 300
@@ -45,7 +47,8 @@ object LlmRouter {
         val geminiKey = MainActivity.getApiKey(context)
         val anthropicKey = prefs.getString(KEY_ANTHROPIC_API_KEY, "")?.trim() ?: ""
         val openRouterKey = prefs.getString(KEY_OPENROUTER_API_KEY, "")?.trim() ?: ""
-        return geminiKey.isNotBlank() || anthropicKey.isNotBlank() || openRouterKey.isNotBlank()
+        val groqKey = prefs.getString(KEY_GROQ_API_KEY, "")?.trim() ?: ""
+        return geminiKey.isNotBlank() || anthropicKey.isNotBlank() || openRouterKey.isNotBlank() || groqKey.isNotBlank()
     }
 
     fun getActiveProviderName(context: Context): String {
@@ -54,15 +57,18 @@ object LlmRouter {
         val geminiKey = MainActivity.getApiKey(context)
         val anthropicKey = prefs.getString(KEY_ANTHROPIC_API_KEY, "")?.trim() ?: ""
         val openRouterKey = prefs.getString(KEY_OPENROUTER_API_KEY, "")?.trim() ?: ""
+        val groqKey = prefs.getString(KEY_GROQ_API_KEY, "")?.trim() ?: ""
 
         val resolved = when (selected.lowercase()) {
             "anthropic" -> if (anthropicKey.isNotBlank()) "Anthropic" else if (geminiKey.isNotBlank()) "Gemini" else "Local"
             "openrouter" -> if (openRouterKey.isNotBlank()) "OpenRouter" else if (geminiKey.isNotBlank()) "Gemini" else "Local"
+            "groq" -> if (groqKey.isNotBlank()) "Groq" else if (geminiKey.isNotBlank()) "Gemini" else "Local"
             "gemini" -> if (geminiKey.isNotBlank()) "Gemini" else "Local"
             else -> when {
                 geminiKey.isNotBlank() -> "Gemini"
                 anthropicKey.isNotBlank() -> "Anthropic"
                 openRouterKey.isNotBlank() -> "OpenRouter"
+                groqKey.isNotBlank() -> "Groq"
                 else -> "Local"
             }
         }
@@ -75,15 +81,18 @@ object LlmRouter {
         val geminiKey = MainActivity.getApiKey(context)
         val anthropicKey = prefs.getString(KEY_ANTHROPIC_API_KEY, "")?.trim() ?: ""
         val openRouterKey = prefs.getString(KEY_OPENROUTER_API_KEY, "")?.trim() ?: ""
+        val groqKey = prefs.getString(KEY_GROQ_API_KEY, "")?.trim() ?: ""
 
         val geminiModel = prefs.getString(KEY_GEMINI_MODEL_OVERRIDE, "")?.trim()
         val anthropicModel = prefs.getString(KEY_ANTHROPIC_MODEL_OVERRIDE, "")?.trim()
         val openRouterModel = prefs.getString(KEY_OPENROUTER_MODEL_OVERRIDE, "")?.trim()
+        val groqModel = prefs.getString(KEY_GROQ_MODEL_OVERRIDE, "")?.trim()
 
         return when (getActiveProviderName(context)) {
             "Gemini" -> GeminiProvider(context, geminiKey, geminiModel)
             "Anthropic" -> AnthropicProvider(anthropicKey, anthropicModel)
             "OpenRouter" -> OpenRouterProvider(openRouterKey, openRouterModel)
+            "Groq" -> GroqProvider(groqKey, groqModel)
             else -> null
         }
     }

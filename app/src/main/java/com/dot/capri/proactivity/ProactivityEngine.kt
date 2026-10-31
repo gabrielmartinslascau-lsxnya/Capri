@@ -244,7 +244,7 @@ class ProactivityEngine(
         if (now - lastMoodCommentAt < MOOD_QUIET_COOLDOWN_MS) return
         if (now - lastCommentAt < COMMENT_COOLDOWN_MS) return
 
-        val line = ProactivityGenerator.generateComment(mood, "", 0)
+        val line = ProactivityGenerator.generateMoodLine(mood, currentForegroundApp)
         lastMoodCommentAt = now
         lastCommentAt = now
         Log.d(TAG, "FIRED MoodQuiet \"$line\"")
@@ -296,14 +296,8 @@ class ProactivityEngine(
         for (trigger in triggersList) {
             val event = trigger.evaluate(context, currentApp, now, quickMode)
             if (event != null) {
-                val hourOfDay = cal.get(Calendar.HOUR_OF_DAY)
-                val daypart = when {
-                    hourOfDay < 12 -> "morning"
-                    hourOfDay < 17 -> "afternoon"
-                    else -> "evening"
-                }
-                val mood = getCurrentMood()
-                val comment = ProactivityGenerator.generateComment(mood, daypart, trigger.getFireCountToday())
+                // The trigger wrote this line for the app in front of you. Mood does not replace it.
+                val comment = event.comment
                 Log.d(TAG, "FIRED ${trigger.id} \"$comment\"")
                 lastCommentAt = now
                 onTriggerComment(comment)

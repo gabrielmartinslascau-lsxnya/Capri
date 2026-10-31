@@ -56,18 +56,25 @@ object PhoneAgent {
         val y2: Int?,
         val label: String? = null,
         val plan: String? = null,
-        val durationMs: Long? = null
+        val durationMs: Long? = null,
+        val region: String? = null,
+        val holdMs: Long? = null,
+        val dx: Int? = null,
+        val dy: Int? = null
     )
 
     private val SYSTEM = """
 You are Capri, an AI agent controlling an Android phone. You perceive the screen through the annotated grid screenshot.
-Columns are A to F (left to right), rows 1 to 10 (top to bottom). Cell labels are shown in dark badges in each cell's top-left corner.
+Columns are A to F (left to right), rows 1 to 10 (top to bottom). The screenshot also features a 0.0 to 1.0 percentage coordinate overlay (yellow reference lines and axis labels at 0.2, 0.4, 0.6, 0.8). You can use grid cells (cell/cell2) or specify exact pixel/percentage coordinates (x, y, x2, y2) by estimating from the overlay axes for precise grounding.
 
 Actions (reply with ONLY a JSON object):
 {"do":"tap","cell":"C4"}                     tap grid cell C4 (or "id":N if element is in list)
 {"do":"swipe","cell":"A1","cell2":"C4"}      drag/swipe from cell A1 to cell C4 (e.g. planting cards in PvZ)
 {"do":"hold","cell":"C4","duration_ms":5000} hold down cell C4 for exact duration (default 5000ms)
 {"do":"double_tap","cell":"C4"}              double tap cell C4
+{"do":"press_region","region":"attack","duration_ms":60000} press a calibrated CONTROL REGION for duration_ms. Use it for game buttons: mining, attacking, jumping, sprinting. A long hold is fine.
+{"do":"drag","cell":"C4","cell2":"F4","hold_ms":300,"duration_ms":600} press cell C4, hold hold_ms, move to cell F4 over duration_ms, release. Use for dragging a plant card onto the lawn or moving items.
+{"do":"look","dx":120,"dy":-40,"duration_ms":250} turn the camera by dx,dy pixels from the look zone. Positive dx turns right, negative left, positive dy turns down. Use it to aim at a block or target.
 {"do":"type","id":N,"text":"..."}            type into field N
 {"do":"scroll","dir":"down"}                 scroll (down, up, left, right)
 {"do":"back"}
@@ -83,6 +90,36 @@ Direct Instructions:
 - If the user's goal is accomplished, output {"do":"done","say":"..."} immediately. If a screen is loading or transitioning, output {"do":"wait"}.
 - Never repeat the exact same action if the result is already visible on screen.
 - Keep "say" to one short lowercase sentence.
+""".trimIndent()
+
+    // Smaller action set for the on-device model: element ids and labels only.
+    private val SYSTEM_LOCAL = """
+You control an Android phone by reading the numbered element list. Reply with ONLY one JSON object.
+Actions:
+{"do":"tap","id":N,"label":"exact label of element N"}
+{"do":"tap_nth","n":N}
+{"do":"press_region","region":"attack","duration_ms":3000}
+{"do":"look","dx":120,"dy":-40}
+{"do":"drag","cell":"C4","cell2":"F4"}
+{"do":"tap","cell":"C4"}
+{"do":"type","id":N,"label":"exact label","text":"..."}
+{"do":"scroll","dir":"up|down|left|right"}
+{"do":"open","app":"app name"}
+{"do":"back"}
+{"do":"home"}
+{"do":"wait"}
+{"do":"done","say":"short summary"}
+{"do":"fail","say":"why"}
+Rules:
+- In first-person games, aim first: use look until the target is at the centre of the screen, then press_region attack. Never press attack while the target is off-centre.
+- Mining or breaking a block: press_region attack with a duration long enough to finish, then check the screen. Do not repeat attack in short bursts.
+- Placing cards in PvZ: use drag from the card cell to the lawn cell.
+- Use CONTROL REGIONS names exactly as listed.
+- Use only ids and labels that appear in SCREEN ELEMENTS. Copy the label exactly.
+- One action per reply. Never guess.
+- Pick the element that matches the goal. If nothing matches, scroll down or answer fail.
+- Do not repeat an action that did not change the screen. Use wait once if the screen is loading.
+- Only type text the user gave you.
 """.trimIndent()
 
     /** A cheap fingerprint of what is on screen right now. */
@@ -147,6 +184,23 @@ Direct Instructions:
             canvas.drawLine(0f, y, w, y, cyanLine)
         }
 
+        // Percentage coordinate overlay (0.0 to 1.0 at 0.2 intervals with thin blue lines & axis labels)
+        val percentPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF2196F3.toInt()
+            textSize = (bmp.height / 50f).coerceAtLeast(14f)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        val percentLine = android.graphics.Paint().apply { color = 0xAA2196F3.toInt(); strokeWidth = 1.0f }
+
+        for (p in listOf(0.2f, 0.4f, 0.6f, 0.8f)) {
+            val px = w * p
+            val py = h * p
+            canvas.drawLine(px, 0f, px, h, percentLine)
+            canvas.drawText(String.format(java.util.Locale.US, "%.1f", p), px + 4f, 25f, percentPaint)
+            canvas.drawLine(0f, py, w, py, percentLine)
+            canvas.drawText(String.format(java.util.Locale.US, "%.1f", p), 8f, py - 4f, percentPaint)
+        }
+
         val badgePadding = 6f
         for (col in 0..5) {
             for (row in 0..9) {
@@ -206,7 +260,11 @@ Direct Instructions:
                 y2 = y2?.coerceIn(0, screenH - 1),
                 label = o.optString("label").ifEmpty { null },
                 plan = o.optString("plan").ifEmpty { null },
-                durationMs = dur
+                durationMs = dur,
+                region = o.optString("region").ifEmpty { null },
+                holdMs = if (o.has("hold_ms")) o.optLong("hold_ms") else null,
+                dx = if (o.has("dx")) o.optInt("dx") else null,
+                dy = if (o.has("dy")) o.optInt("dy") else null
             )
         } catch (e: Exception) {
             null
@@ -241,6 +299,7 @@ Direct Instructions:
         val prompt = "TASK: $goal\n" +
                 "SCREEN SIZE: ${PhoneControl.screenSize()?.let { "${it.first}x${it.second}" } ?: "unknown"}\n" +
                 "SCREENSHOT: ${if (shot != null) "attached, grid shown" else "none, use element ids"}\n" +
+                "CONTROL REGIONS: ${ControlRegions.names(context).ifEmpty { "none calibrated" }}\n" +
                 "STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(8).joinToString(" > ")}\n" +
                 "FOREGROUND APP: $pkg\n" +
                 "SCREEN ELEMENTS:\n${screen.ifEmpty { "(nothing readable, use the screenshot)" }}"
@@ -252,7 +311,7 @@ Direct Instructions:
                 LlmRequest(prompt = prompt, systemPrompt = SYSTEM, history = emptyList(), imageBytes = shot)
             ).getOrNull()
         } else {
-            OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM).getOrNull()
+            OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM_LOCAL).getOrNull()
         }
         Log.d(TAG, "model call ${System.currentTimeMillis() - t0} ms, image=${shot != null}, elements=${items.size}")
         return reply
@@ -275,6 +334,8 @@ Direct Instructions:
         var confirmedAction: Pending? = resume
         var noChangeStreak = 0
         val sentTexts = HashSet<String>()
+        var lastSpot = ""
+        var spotRepeats = 0
 
         chatVisible(false)
         CapriCursor.show(context)
@@ -301,7 +362,7 @@ Direct Instructions:
                 }
                 if (chosen == null) {
                     CapriCursor.setStatus("observing...")
-                    val shot = if (items.size < 5) annotate(service.captureScreenBitmap()) else null
+                    val shot = annotate(service.captureScreenBitmap()) // val shot = if (items.size < 5)
                     var reply: String? = null
                     repeat(3) {
                         reply = askModel(context, goal, pkg, items, log, shot)
@@ -322,6 +383,14 @@ Direct Instructions:
                     }
                 }
                 val a: Act = chosen
+
+                // The same action on the same spot again and again is a loop, not progress.
+                val spot = "${a.doWhat}|${a.id}|${a.x}|${a.y}|${a.x2}|${a.y2}|${a.region}|${a.dx}|${a.dy}|${a.durationMs}"
+                val repeatable = a.doWhat in setOf("wait", "press_region", "hold", "look", "drag", "double_tap")
+                if (!repeatable && spot == lastSpot) spotRepeats++ else { spotRepeats = 0; lastSpot = spot }
+                if (spotRepeats >= 2) {
+                    return "i kept doing the same thing in the same place, so I stopped. ${summary(log)}"
+                }
 
                 a.plan?.let {
                     if (plan == null) {
@@ -486,6 +555,41 @@ Direct Instructions:
                         }
                         log.add("held continuously for ${duration}ms" + if (ok) "" else " (failed)")
                     }
+                    "press_region" -> {
+                        CapriCursor.setStatus("pressing ${a.region}...")
+                        val p = a.region?.let { ControlRegions.resolve(context, it) }
+                        if (p == null) {
+                            log.add("press_region: unknown region '${a.region}'")
+                        } else {
+                            val ms = (a.durationMs ?: 300L).coerceIn(50L, 120_000L)
+                            val ok = PhoneControl.holdAt(p.first, p.second, ms)
+                            log.add("pressed ${a.region} for ${ms}ms" + if (ok) "" else " (failed)")
+                        }
+                    }
+                    "drag" -> {
+                        val fx = a.x; val fy = a.y; val tx = a.x2; val ty = a.y2
+                        if (fx == null || fy == null || tx == null || ty == null) {
+                            log.add("drag: missing coordinates (use cell, cell2 or x,y,x2,y2)")
+                        } else {
+                            CapriCursor.setStatus("dragging...")
+                            val ok = PhoneControl.dragWithHold(
+                                fx, fy, tx, ty,
+                                holdMs = a.holdMs ?: 300L,
+                                moveMs = a.durationMs ?: 600L
+                            )
+                            log.add("dragged ($fx,$fy) to ($tx,$ty)" + if (ok) "" else " (failed)")
+                        }
+                    }
+                    "look" -> {
+                        CapriCursor.setStatus("looking...")
+                        val dx = a.dx ?: 0
+                        val dy = a.dy ?: 0
+                        val origin: Pair<Int, Int> = ControlRegions.resolve(context, "look")
+                            ?: PhoneControl.screenSize()?.let { (w, h) -> Pair(w * 3 / 4, h / 2) }
+                            ?: Pair(900, 600)
+                        val ok = PhoneControl.look(origin.first, origin.second, dx, dy, a.durationMs ?: 250L)
+                        log.add("looked ($dx,$dy)" + if (ok) "" else " (failed)")
+                    }
                     "wait" -> log.add("waited")
                     else -> log.add("unknown action")
                 }
@@ -494,7 +598,7 @@ Direct Instructions:
                 if (items.size < 5) {
                     delay(400) // Allow game frame animations/renders to settle before taking fresh screenshot
                 }
-                val isContinuousAction = a.doWhat in setOf("hold", "long_press", "swipe", "scroll", "multitap", "multi_touch", "wait")
+                val isContinuousAction = a.doWhat in setOf("hold", "long_press", "swipe", "scroll", "multitap", "multi_touch", "wait", "press_region", "look", "drag")
                 val changed = waitForChange(before)
                 if (changed || isContinuousAction) {
                     noChangeStreak = 0
@@ -502,8 +606,8 @@ Direct Instructions:
                     noChangeStreak++
                     log.add("no change on screen")
                     delay(500)
-                    if (noChangeStreak >= 4) {
-                        noChangeStreak = 0 // Never give up on static screens
+                    if (noChangeStreak >= 3) {
+                        return "nothing changed on screen after three tries, so I stopped. ${summary(log)}"
                     }
                 }
             }

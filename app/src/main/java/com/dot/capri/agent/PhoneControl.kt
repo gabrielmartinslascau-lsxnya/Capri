@@ -21,6 +21,49 @@ import kotlin.coroutines.resume
 /** Everything Capri can do to the screen: look at it, tap, swipe, scroll, type, press send. */
 object PhoneControl {
 
+    /** One stroke, dispatched on its own. Used for strokes that must continue into the next one. */
+    private suspend fun dispatchStroke(stroke: GestureDescription.StrokeDescription): Boolean {
+        val s = service() ?: return false
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+        return suspendCancellableCoroutine { cont ->
+            val accepted = s.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(true)
+                }
+
+                override fun onCancelled(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(false)
+                }
+            }, null)
+            if (!accepted && cont.isActive) cont.resume(false)
+        }
+    }
+
+    /** Press at A, hold holdMs, move to B over moveMs, release. The finger stays down between strokes. */
+    suspend fun dragWithHold(ax: Int, ay: Int, bx: Int, by: Int, holdMs: Long, moveMs: Long): Boolean {
+        val (sax, say) = clampToScreen(ax, ay)
+        val (sbx, sby) = clampToScreen(bx, by)
+        val max = GestureDescription.getMaxGestureDuration()
+        CapriCursor.moveTo(sax, say)
+        CapriCursor.pulse()
+        val holdPath = Path().apply { moveTo(sax.toFloat(), say.toFloat()); lineTo(sax.toFloat(), say.toFloat()) }
+        val movePath = Path().apply { moveTo(sax.toFloat(), say.toFloat()); lineTo(sbx.toFloat(), sby.toFloat()) }
+        val first = GestureDescription.StrokeDescription(holdPath, 0L, holdMs.coerceIn(1L, max - 1), true)
+        if (!dispatchStroke(first)) return false
+        val second = first.continueStroke(movePath, 0L, moveMs.coerceIn(50L, max - 1), false)
+        return dispatchStroke(second)
+    }
+
+    /** Turns the camera: a drag from (zoneX, zoneY) by (dx, dy) pixels. */
+    suspend fun look(zoneX: Int, zoneY: Int, dx: Int, dy: Int, ms: Long = 250L): Boolean {
+        val (sx, sy) = clampToScreen(zoneX, zoneY)
+        val (ex, ey) = clampToScreen(zoneX + dx, zoneY + dy)
+        CapriCursor.moveTo(sx, sy)
+        CapriCursor.pulse()
+        val path = Path().apply { moveTo(sx.toFloat(), sy.toFloat()); lineTo(ex.toFloat(), ey.toFloat()) }
+        return dispatch(path, ms)
+    }
+
     class UiItem(
         val id: Int,
         val label: String,
