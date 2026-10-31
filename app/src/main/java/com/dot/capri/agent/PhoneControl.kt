@@ -47,8 +47,9 @@ object PhoneControl {
 
     fun clampToScreen(x: Int, y: Int): Pair<Int, Int> {
         val s = screenSize() ?: return Pair(x, y)
+        val topMargin = (s.second * 0.08f).toInt().coerceAtLeast(100)
         val clampedX = x.coerceIn(0, s.first - 1)
-        val clampedY = y.coerceIn(0, (s.second - 100).coerceAtLeast(100))
+        val clampedY = y.coerceIn(topMargin, (s.second - 100).coerceAtLeast(topMargin + 100))
         return Pair(clampedX, clampedY)
     }
 
@@ -354,10 +355,12 @@ object PhoneControl {
     /** Drags from (x1,y1) to (x2,y2). The cursor is placed at the start first, so there's no diagonal jump. */
     suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 700): Boolean {
         service() ?: return false
+        val (safeX1, safeY1) = clampToScreen(x1.toInt(), y1.toInt())
+        val (safeX2, safeY2) = clampToScreen(x2.toInt(), y2.toInt())
         CapriCursor.pulse()
-        val path = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
+        val path = Path().apply { moveTo(safeX1.toFloat(), safeY1.toFloat()); lineTo(safeX2.toFloat(), safeY2.toFloat()) }
         return coroutineScope {
-            val anim = launch { CapriCursor.glideAlongPath(x1, y1, x2, y2, ms) }
+            val anim = launch { CapriCursor.glideAlongPath(safeX1.toFloat(), safeY1.toFloat(), safeX2.toFloat(), safeY2.toFloat(), ms) }
             val ok = async { dispatch(path, ms) }.await()
             anim.join()
             ok

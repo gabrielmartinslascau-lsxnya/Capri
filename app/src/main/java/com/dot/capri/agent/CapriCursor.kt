@@ -236,6 +236,33 @@ object CapriCursor {
             addView(bars)
             addView(status)
             addView(stop)
+
+            setOnTouchListener(object : View.OnTouchListener {
+                private var initialX = 0
+                private var initialY = 0
+                private var initialTouchX = 0f
+                private var initialTouchY = 0f
+
+                override fun onTouch(v: View, event: android.view.MotionEvent): Boolean {
+                    val params = layoutParams as? WindowManager.LayoutParams ?: return false
+                    when (event.action) {
+                        android.view.MotionEvent.ACTION_DOWN -> {
+                            initialX = params.x
+                            initialY = params.y
+                            initialTouchX = event.rawX
+                            initialTouchY = event.rawY
+                            return false
+                        }
+                        android.view.MotionEvent.ACTION_MOVE -> {
+                            params.x = initialX - (event.rawX - initialTouchX).toInt()
+                            params.y = initialY + (event.rawY - initialTouchY).toInt()
+                            try { manager.updateViewLayout(v, params) } catch (_: Exception) {}
+                            return true
+                        }
+                    }
+                    return false
+                }
+            })
         }
         val preferred = overlayType()
         fun paramsFor(type: Int) = WindowManager.LayoutParams(
@@ -247,8 +274,9 @@ object CapriCursor {
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (36 * density).toInt()
+            gravity = Gravity.TOP or Gravity.END
+            x = (16 * density).toInt()
+            y = (12 * density).toInt()
         }
         val added = try {
             manager.addView(row, paramsFor(preferred))

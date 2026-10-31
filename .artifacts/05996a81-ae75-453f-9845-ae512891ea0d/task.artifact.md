@@ -18,4 +18,5 @@
 - [x] Task 18 (`v10.33`): High-Contrast Grid Badges, Anti-Repetition Rules, & Native Double Tap Action Support
 - [x] Task 19 (`v10.34`): Fast 960px In-Memory Scaling, 70% Fast JPEG Compression, & 300ms Reduced Settlement Window
 - [x] Task 20 (`v10.35`): Card & Game Item Placement Rules (PvZ) & Post-Gesture Render Settle Window (`400ms`)
+- [x] Task 21 (`v10.36`): Top-Margin System Gesture Shielding (Notification Pull-Down Prevention) & Draggable Top-Right STOP Pill
 - [x] Build and verify (`app:assembleDebug`)
