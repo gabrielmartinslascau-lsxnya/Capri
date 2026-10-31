@@ -207,9 +207,19 @@ object CapriCursor {
                 cornerRadius = 100f
                 setColor(0xEEFF2D6B.toInt())
             }
+            isClickable = true
+            isFocusable = true
             setOnClickListener {
                 cancelled = true
                 text = "stopping..."
+            }
+            setOnTouchListener { view, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    cancelled = true
+                    text = "stopping..."
+                    view.performClick()
+                }
+                false
             }
         }
         val row = LinearLayout(app).apply {
@@ -259,8 +269,8 @@ object CapriCursor {
         c.x = x
         c.y = y
         val half = sizePx / 2f
-        c.view.translationX = x - half - originX
-        c.view.translationY = y - half - originY
+        c.view.translationX = x - half
+        c.view.translationY = y - half
     }
 
     private fun spawnNow(context: Context, id: Int, x: Int, y: Int, colorHex: Int) {
