@@ -147,13 +147,17 @@ class CapriVoiceInteractionSession(context: Context) : VoiceInteractionSession(c
 
         scope.launch {
             val response = withContext(Dispatchers.IO) {
-                val cmd = IntentParser.parse(text)
-                if (cmd !is Cmd.Unknown) {
-                    IntentExecutor.execute(context, cmd)
-                    Personality.respond(cmd, true)
+                val service = BubbleService.instance
+                if (service != null) {
+                    service.processCommand(text)
                 } else {
-                    val cloud = CloudAiClient.generateResponse(context, text)
-                    cloud.getOrDefault("w-well... i didn't catch that, choom~")
+                    val cmd = IntentParser.parse(text)
+                    if (cmd !is Cmd.Unknown) {
+                        IntentExecutor.execute(context, cmd)
+                        Personality.respond(cmd, true)
+                    } else {
+                        "i can't reach a brain right now, choom."
+                    }
                 }
             }
             thinkingContainer?.visibility = View.GONE

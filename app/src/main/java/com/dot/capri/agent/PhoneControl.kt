@@ -45,6 +45,13 @@ object PhoneControl {
         return realScreenBounds(s)
     }
 
+    fun clampToScreen(x: Int, y: Int): Pair<Int, Int> {
+        val s = screenSize() ?: return Pair(x, y)
+        val clampedX = x.coerceIn(0, s.first - 1)
+        val clampedY = y.coerceIn(0, (s.second - 100).coerceAtLeast(100))
+        return Pair(clampedX, clampedY)
+    }
+
     // Windows that are never the app the user is working in.
     private val IGNORED_PACKAGES = setOf("com.android.systemui")
 
@@ -154,16 +161,19 @@ object PhoneControl {
     }
 
     suspend fun tapAt(x: Int, y: Int): Boolean {
-        CapriCursor.moveTo(x, y)
+        val (safeX, safeY) = clampToScreen(x, y)
+        CapriCursor.moveTo(safeX, safeY)
         CapriCursor.pulse()
         val root = foregroundRoot()
-        val target = root?.let { smallestClickableAt(it, x, y) }
+        val target = root?.let { smallestClickableAt(it, safeX, safeY) }
         if (target != null && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-        return dispatchTap(x, y)
+        return dispatchTap(safeX, safeY)
     }
 
-    private suspend fun dispatchTap(x: Int, y: Int): Boolean =
-        dispatch(Path().apply { moveTo(x.toFloat(), y.toFloat()); lineTo(x.toFloat(), y.toFloat()) }, 60)
+    private suspend fun dispatchTap(x: Int, y: Int): Boolean {
+        val (safeX, safeY) = clampToScreen(x, y)
+        return dispatch(Path().apply { moveTo(safeX.toFloat(), safeY.toFloat()); lineTo(safeX.toFloat(), safeY.toFloat()) }, 60)
+    }
 
     private fun smallestClickableAt(root: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
         var best: AccessibilityNodeInfo? = null

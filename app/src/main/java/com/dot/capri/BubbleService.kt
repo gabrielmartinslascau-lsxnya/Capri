@@ -908,7 +908,7 @@ class BubbleService : Service() {
         }
     }
 
-    private suspend fun processCommand(text: String): String {
+    internal suspend fun processCommand(text: String): String {
         val trimmedInput = text.trim()
 
         if (pendingDraftText != null) {
@@ -985,10 +985,18 @@ class BubbleService : Service() {
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
         }
 
-        // Brain first. The keyword parser below is never used.
+        // Brain first.
         if (brainAvailable()) {
             return askBrain(text) ?: "i didn't get an answer, try again."
         }
+
+        val cmd = IntentParser.parse(text)
+        if (cmd !is Cmd.Unknown) {
+            val success = IntentExecutor.execute(this, cmd)
+            delay(300)
+            return Personality.respond(cmd, success)
+        }
+
         return noBrainReply()
 
 
