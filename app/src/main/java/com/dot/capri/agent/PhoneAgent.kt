@@ -16,7 +16,6 @@ import org.json.JSONObject
 object PhoneAgent {
 
     private const val TAG = "CAPRI_AGENT"
-    private const val MAX_STEPS = 15
     private const val TOTAL_TIMEOUT_MS = 180_000L
 
     private val RISKY = Regex(

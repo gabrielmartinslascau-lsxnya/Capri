@@ -1,0 +1,2 @@
+- [x] Task 1 (`v10.16`): Dead Code Cleanup & Codebase Hygiene
+- [x] Build and verify (`app:assembleDebug`)
