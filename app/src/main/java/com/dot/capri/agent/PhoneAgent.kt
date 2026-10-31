@@ -51,7 +51,9 @@ object PhoneAgent {
         val x: Int?,
         val y: Int?,
         val x2: Int?,
-        val y2: Int?
+        val y2: Int?,
+        val label: String? = null,
+        val plan: String? = null
     )
 
     private val SYSTEM = """
@@ -75,6 +77,10 @@ Reply with ONLY a JSON object. Actions:
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
 Rules:
+- Every "tap" and "type" action must include "label": the exact label of the element you are acting on, copied from SCREEN ELEMENTS.
+- On your first action of a task, include "plan": one short sentence describing how you will do it.
+- Choose only an element that matches the goal. Never press things to explore the screen. If nothing matches, answer fail.
+- An id is only valid with its matching label. Do not guess ids.
 - Pick an element from the list by its label or id when one matches. Use a grid cell only when nothing in the list matches.
 - Never choose by colour. Choose by the label, the id, or what the element does.
 - If the screen doesn't show what you need, scroll down, go back, or open the right app.
@@ -149,11 +155,21 @@ Rules:
                 x = x?.coerceIn(0, w - 1),
                 y = y?.coerceIn(0, h - 1),
                 x2 = x2?.coerceIn(0, w - 1),
-                y2 = y2?.coerceIn(0, h - 1)
+                y2 = y2?.coerceIn(0, h - 1),
+                label = o.optString("label").ifEmpty { null },
+                plan = o.optString("plan").ifEmpty { null }
             )
         } catch (e: Exception) {
             null
         }
+    }
+
+    /** Loose match: either label contains the other, ignoring case. */
+    private fun labelMatches(actual: String, claimed: String): Boolean {
+        val x = actual.lowercase().trim()
+        val c = claimed.lowercase().trim()
+        if (x.isEmpty() || c.isEmpty()) return false
+        return x.contains(c) || c.contains(x)
     }
 
     private fun summary(log: List<String>): String =
@@ -223,8 +239,10 @@ Rules:
         CapriCursor.show(context)
         delay(250)
         var failStreak = 0
+        var plan: String? = null
+        val maxSteps = if (useApi(context)) 12 else 6   // the on-device model gets fewer steps
         try {
-            while (steps < MAX_STEPS) {
+            while (steps < maxSteps) {
                 if (CapriCursor.cancelled) return "stopped. ${summary(log)}"
                 if (System.currentTimeMillis() - started > TOTAL_TIMEOUT_MS) return "ran out of time. ${summary(log)}"
 
@@ -266,6 +284,27 @@ Rules:
                     }
                 }
                 val a: Act = chosen
+
+                a.plan?.let {
+                    if (plan == null) {
+                        plan = it
+                        log.add("plan: $it")
+                    }
+                }
+
+                // The model must name the element it's acting on. A tap whose label doesn't
+                // match the id it picked is a guess, so it's refused.
+                val targetItem = a.id?.let { id -> items.firstOrNull { it.id == id } }
+                val claimed = a.label
+                if (a.doWhat == "tap" && targetItem != null && claimed != null &&
+                    !labelMatches(targetItem.label, claimed)
+                ) {
+                    failStreak++
+                    log.add("label mismatch: wanted '$claimed', id ${a.id} is '${targetItem.label}'")
+                    if (failStreak >= 2) return "i kept grabbing the wrong thing, choom. ${summary(log)}"
+                    steps++
+                    continue
+                }
 
                 // A tap on an element that isn't on screen is a failed step, not a retry.
                 val missing = a.doWhat == "tap" && a.id != null && a.x == null && items.none { it.id == a.id }
@@ -380,10 +419,15 @@ Rules:
                             "down" -> com.dot.capri.intents.ScrollDirection.DOWN
                             "left" -> com.dot.capri.intents.ScrollDirection.LEFT
                             "right" -> com.dot.capri.intents.ScrollDirection.RIGHT
-                            else -> com.dot.capri.intents.ScrollDirection.DOWN
+                            else -> {
+                                log.add("scroll: unknown direction '${a.dir}'")
+                                null
+                            }
                         }
-                        PhoneControl.scroll(dir)
-                        log.add("scrolled ${a.dir ?: "down"}")
+                        if (dir != null) {
+                            PhoneControl.scroll(dir)
+                            log.add("scrolled ${a.dir}")
+                        }
                     }
                     "tap_nth" -> {
                         CapriCursor.setStatus("finding item ${a.id}...")

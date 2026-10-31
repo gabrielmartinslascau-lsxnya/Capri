@@ -741,7 +741,7 @@ class BubbleService : Service() {
                     CapriCursor.removeCursor(id)
                 }
                 "CLEAR_CURSORS" -> {
-                    CapriCursor.hide()
+                    // CapriCursor.hide() removed per patch rule 2c
                 }
                 "MULTITAP" -> {
                     val pairs = target.split("|").mapNotNull { pt ->
@@ -754,7 +754,6 @@ class BubbleService : Service() {
                         }
                         CapriCursor.pulseAll()
                         delay(250)
-                        CapriCursor.hide()
                     }
                 }
                 "PINCH" -> {

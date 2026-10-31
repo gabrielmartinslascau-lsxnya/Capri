@@ -42,7 +42,6 @@ object CapriCursor {
     private val main = Handler(Looper.getMainLooper())
     private var wm: WindowManager? = null
     private var appCtx: Context? = null
-    @Volatile private var runActive = false
     private var sizePx = 0
 
     private var stage: FrameLayout? = null
@@ -333,7 +332,6 @@ object CapriCursor {
 
     /** Starts a run's overlay. The cancel flag is cleared only when no overlay is up yet. */
     fun show(context: Context) = onMain {
-        runActive = true
         val newRun = stage == null
         ensurePill(context)
         if (newRun) cancelled = false
@@ -341,10 +339,10 @@ object CapriCursor {
             val m = context.applicationContext.resources.displayMetrics
             spawnNow(context, 1, m.widthPixels / 2, m.heightPixels / 2, 0xFFFF2D6B.toInt())
         }
+        pulse()
     }
 
     fun showDual(context: Context, x1: Int, y1: Int, x2: Int, y2: Int) = onMain {
-        runActive = true
         ensurePill(context)
         spawnNow(context, 1, x1, y1, 0xFFFF2D6B.toInt())
         spawnNow(context, 2, x2, y2, 0xFFFF2D6B.toInt())
@@ -357,7 +355,6 @@ object CapriCursor {
 
     /** Removes everything. Call this once, when a run ends. Never between steps. */
     fun hide() = onMain {
-        runActive = false
         cancelled = false
         cursors.values.forEach { it.animator?.cancel() }
         cursors.clear()
@@ -373,7 +370,6 @@ object CapriCursor {
         withContext(Dispatchers.Main) {
             val c = cursors[id]
             if (c == null) {
-                if (!runActive) return@withContext
                 val ctx = appCtx ?: return@withContext
                 spawnNow(ctx, id, x, y, 0xFFFF2D6B.toInt())
                 return@withContext
@@ -386,7 +382,6 @@ object CapriCursor {
     suspend fun glideAlongPath(fromX: Float, fromY: Float, toX: Float, toY: Float, durationMs: Long, id: Int = 1) {
         withContext(Dispatchers.Main) {
             val c = cursors[id] ?: run {
-                if (!runActive) return@withContext
                 val ctx = appCtx ?: return@withContext
                 spawnNow(ctx, id, fromX.toInt(), fromY.toInt(), 0xFFFF2D6B.toInt())
                 cursors[id] ?: return@withContext

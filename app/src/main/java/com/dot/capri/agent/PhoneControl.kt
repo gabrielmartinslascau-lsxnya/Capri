@@ -188,7 +188,8 @@ object PhoneControl {
     suspend fun scroll(direction: ScrollDirection): Boolean {
         val s = service() ?: return false
         val root = foregroundRoot()
-        val scrollable = root?.let { largestScrollable(it) }
+        val vertical = direction == ScrollDirection.UP || direction == ScrollDirection.DOWN
+        val scrollable = root?.let { largestScrollable(it, vertical) }
         val forward = direction == ScrollDirection.DOWN || direction == ScrollDirection.RIGHT
         val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
         else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
@@ -217,8 +218,12 @@ object PhoneControl {
         return swipe(fx, fy, tx, ty, 700)
     }
 
-    /** The largest visible scrollable container, usually the main list or page. */
-    private fun largestScrollable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    /**
+     * The largest visible scrollable container whose shape matches the scroll direction.
+     * vertical = true  -> taller than wide (lists, feeds, the app drawer)
+     * vertical = false -> wider than tall (launcher pages, carousels)
+     */
+    private fun largestScrollable(root: AccessibilityNodeInfo, vertical: Boolean): AccessibilityNodeInfo? {
         var best: AccessibilityNodeInfo? = null
         var bestArea = 0L
         val r = Rect()
@@ -226,10 +231,13 @@ object PhoneControl {
             if (n == null || depth > 40 || !n.isVisibleToUser) return
             if (n.isScrollable) {
                 n.getBoundsInScreen(r)
-                val area = r.width().toLong() * r.height()
-                if (area > bestArea) {
-                    best = n
-                    bestArea = area
+                val tall = r.height() >= r.width()
+                if (tall == vertical) {
+                    val area = r.width().toLong() * r.height()
+                    if (area > bestArea) {
+                        best = n
+                        bestArea = area
+                    }
                 }
             }
             for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
