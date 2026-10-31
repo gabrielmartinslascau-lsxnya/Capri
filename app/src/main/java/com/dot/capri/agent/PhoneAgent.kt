@@ -177,10 +177,21 @@ Direct Instructions:
             val o = JSONObject(cleaned.substring(start, end + 1))
             val cell1 = o.optString("cell").ifEmpty { null }?.let { cellToXY(it, w, h) }
             val cell2 = o.optString("cell2").ifEmpty { null }?.let { cellToXY(it, w, h) }
-            val x = if (o.has("x")) o.optInt("x") else cell1?.first
-            val y = if (o.has("y")) o.optInt("y") else cell1?.second
-            val x2 = if (o.has("x2")) o.optInt("x2") else cell2?.first
-            val y2 = if (o.has("y2")) o.optInt("y2") else cell2?.second
+
+            val (screenW, screenH) = PhoneControl.screenSize() ?: (w to h)
+            val scaleX = screenW.toFloat() / w.toFloat()
+            val scaleY = screenH.toFloat() / h.toFloat()
+
+            val rawX = if (o.has("x")) o.optInt("x") else cell1?.first
+            val rawY = if (o.has("y")) o.optInt("y") else cell1?.second
+            val rawX2 = if (o.has("x2")) o.optInt("x2") else cell2?.first
+            val rawY2 = if (o.has("y2")) o.optInt("y2") else cell2?.second
+
+            val x = rawX?.let { (it * scaleX).toInt() }
+            val y = rawY?.let { (it * scaleY).toInt() }
+            val x2 = rawX2?.let { (it * scaleX).toInt() }
+            val y2 = rawY2?.let { (it * scaleY).toInt() }
+
             val dur = if (o.has("duration_ms")) o.optLong("duration_ms") else if (o.has("duration")) o.optLong("duration") else null
             Act(
                 doWhat = o.optString("do").lowercase(),
@@ -189,10 +200,10 @@ Direct Instructions:
                 dir = o.optString("dir").ifEmpty { null },
                 app = o.optString("app").ifEmpty { null },
                 say = o.optString("say").ifEmpty { null },
-                x = x?.coerceIn(0, w - 1),
-                y = y?.coerceIn(0, h - 1),
-                x2 = x2?.coerceIn(0, w - 1),
-                y2 = y2?.coerceIn(0, h - 1),
+                x = x?.coerceIn(0, screenW - 1),
+                y = y?.coerceIn(0, screenH - 1),
+                x2 = x2?.coerceIn(0, screenW - 1),
+                y2 = y2?.coerceIn(0, screenH - 1),
                 label = o.optString("label").ifEmpty { null },
                 plan = o.optString("plan").ifEmpty { null },
                 durationMs = dur
