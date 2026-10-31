@@ -68,27 +68,24 @@ Reply with ONLY a JSON object. Actions:
 {"do":"type","id":N,"text":"..."}            type into field N and press Enter
 {"do":"submit","id":N}                       press Enter on field N
 {"do":"scroll","dir":"down"}                 show MORE content below. dir is down, up, left or right. "right" shows content further right.
-{"do":"tap_nth","n":3}    tap the Nth labelled item on screen, counted top to bottom, left to right. Use this for "the 3rd app", "the first icon", etc. Never count items yourself.
+{"do":"tap_nth","n":3}                       tap the Nth labelled item on screen, counted top to bottom, left to right.
 {"do":"back"}
 {"do":"home"}
 {"do":"open","app":"app name"}
 {"do":"wait"}
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
-Rules:
+Critical Instructions:
+- DO NOT GIVE UP RANDOMLY: Never call "fail" simply because a transition is slow, an app is opening, or a target isn't on screen immediately. If the screen is loading or updating, output {"do":"wait"}. If an element is off-screen, scroll or navigate to find it. Only use "fail" if the requested task is strictly impossible or prohibited.
+- DO NOT GUESS CLICKS: Do not tap random grid cells, unverified IDs, or blank spaces to "explore". Every tap must target a verified element label from SCREEN ELEMENTS or an explicitly visible visual control in the screenshot grid.
 - Every "tap" and "type" action must include "label": the exact label of the element you are acting on, copied from SCREEN ELEMENTS.
 - On your first action of a task, include "plan": one short sentence describing how you will do it.
-- Choose only an element that matches the goal. Never press things to explore the screen. If nothing matches, answer fail.
 - An id is only valid with its matching label. Do not guess ids.
-- Pick an element from the list by its label or id when one matches. Use a grid cell only when nothing in the list matches.
-- Never choose by colour. Choose by the label, the id, or what the element does.
+- Pick an element from the list by its label or id when one matches. Use a grid cell only when a visual control is clearly visible in the screenshot grid and not in the element list.
 - If the screen doesn't show what you need, scroll down, go back, or open the right app.
-- Don't repeat an action when the screen did not change.
+- Don't repeat an action when the screen did not change; use "wait" to let the screen settle.
 - Never guess passwords, codes, card numbers or personal details.
-- Only type text the user asked you to type. Never write your own introduction, identity, or chat replies into another app. If the user asked for a reply and gave no words, ask for the words with fail.
-- Never repeat an action whose result you can already see on screen. After a type or a tap, look at SCREEN ELEMENTS first. If the result is not there yet, use "wait".
-- One action per step. Don't chain guesses.
-- Before typing a message, check that you are in the right chat (the label of the contact is on screen).
+- Only type text the user asked you to type.
 - Keep "say" to one short lowercase sentence.
 """.trimIndent()
 
@@ -261,7 +258,8 @@ Rules:
         delay(250)
         var failStreak = 0
         var plan: String? = null
-        val maxSteps = if (useApi(context)) 12 else 6   // the on-device model gets fewer steps
+        val maxSteps = if (useApi(context)) 18 else 10   // allow sufficient steps to navigate & settle
+
         try {
             while (steps < maxSteps) {
                 if (CapriCursor.cancelled) return "stopped. ${summary(log)}"
@@ -285,13 +283,10 @@ Rules:
                 }
                 if (chosen == null) {
                     CapriCursor.setStatus("observing...")
-                    // Send the screenshot only when the element list is too thin to act on.
-                    // Images are the slowest part of a step on a phone.
                     val shot = if (items.size < 5) annotate(service.captureScreenBitmap()) else null
                     var reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
                     chosen = parseAct(reply, screenW, screenH)
-                    // Retry only on the API tier. A second on-device call doubles the wait.
                     if (chosen == null && useApi(context)) {
                         Log.w(TAG, "unreadable reply, retrying: ${reply.take(120)}")
                         reply = askModel(context, goal, pkg, items, log, shot)
@@ -322,7 +317,7 @@ Rules:
                 ) {
                     failStreak++
                     log.add("label mismatch: wanted '$claimed', id ${a.id} is '${targetItem.label}'")
-                    if (failStreak >= 2) return "i kept grabbing the wrong thing, choom. ${summary(log)}"
+                    if (failStreak >= 3) return "i kept grabbing the wrong thing, choom. ${summary(log)}"
                     steps++
                     continue
                 }
@@ -332,7 +327,7 @@ Rules:
                 if (missing) {
                     failStreak++
                     log.add("no element ${a.id} on screen")
-                    if (failStreak >= 2) return "couldn't find that on screen, choom. ${summary(log)}"
+                    if (failStreak >= 3) return "couldn't find that on screen, choom. ${summary(log)}"
                     steps++
                     continue
                 }
@@ -498,8 +493,10 @@ Rules:
                 } else {
                     noChangeStreak++
                     log.add("no change on screen")
-                    if (noChangeStreak >= 2) {
-                        return "nothing changed on screen after two tries, so I stopped. ${summary(log)}"
+                    if (noChangeStreak == 1 || noChangeStreak == 2) {
+                        delay(600) // Give screen animations or app loads an extra settling window
+                    } else if (noChangeStreak >= 3) {
+                        return "nothing changed on screen after three tries, so I stopped. ${summary(log)}"
                     }
                 }
             }
