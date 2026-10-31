@@ -2,4 +2,5 @@
 - [x] Task 2 (`v10.17`): Align `CapriVoiceInteractionSession.kt` with Brain-First routing
 - [x] Task 3 (`v10.18`): Implement offline fallback for simple single-intent commands when no LLM brain is available
 - [x] Task 4 (`v10.19`): Soft keyboard & screen inset protection in `PhoneControl.kt`/`PhoneAgent.kt`
+- [x] Task 5 (`v10.20`): Multi-Cursor Color Palette & Multi-Touch Gesture Pipeline (`MULTITAP` / `MULTI_TOUCH`)
 - [x] Build and verify (`app:assembleDebug`)

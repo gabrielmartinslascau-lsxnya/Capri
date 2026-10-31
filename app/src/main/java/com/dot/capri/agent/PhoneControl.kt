@@ -175,6 +175,45 @@ object PhoneControl {
         return dispatch(Path().apply { moveTo(safeX.toFloat(), safeY.toFloat()); lineTo(safeX.toFloat(), safeY.toFloat()) }, 60)
     }
 
+    suspend fun dispatchMultiTouch(points: List<Pair<Int, Int>>, durationMs: Long = 100L): Boolean {
+        val s = service() ?: return false
+        if (points.isEmpty()) return false
+        val safeMs = durationMs.coerceIn(50L, GestureDescription.getMaxGestureDuration())
+        val builder = GestureDescription.Builder()
+
+        for ((x, y) in points) {
+            val (safeX, safeY) = clampToScreen(x, y)
+            val path = Path().apply {
+                moveTo(safeX.toFloat(), safeY.toFloat())
+                lineTo(safeX.toFloat(), safeY.toFloat())
+            }
+            builder.addStroke(GestureDescription.StrokeDescription(path, 0L, safeMs))
+        }
+
+        val gesture = builder.build()
+        return suspendCancellableCoroutine { cont ->
+            val accepted = s.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(true)
+                }
+
+                override fun onCancelled(g: GestureDescription?) {
+                    if (cont.isActive) cont.resume(false)
+                }
+            }, null)
+            if (!accepted && cont.isActive) cont.resume(false)
+        }
+    }
+
+    suspend fun tapMulti(points: List<Pair<Int, Int>>, durationMs: Long = 100L): Boolean {
+        val s = service() ?: return false
+        if (points.isEmpty()) return false
+        CapriCursor.showMulti(s, points)
+        delay(80)
+        CapriCursor.pulseAll()
+        return dispatchMultiTouch(points, durationMs)
+    }
+
     private fun smallestClickableAt(root: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
         var best: AccessibilityNodeInfo? = null
         var bestArea = Long.MAX_VALUE

@@ -313,13 +313,31 @@ object CapriCursor {
         }
     }
 
+    val PALETTE = intArrayOf(
+        0xFFFF2A55.toInt(), // 1: Default Pink-Red
+        0xFF00E676.toInt(), // 2: Bright Green
+        0xFF29B6F6.toInt(), // 3: Bright Blue
+        0xFFFFD600.toInt(), // 4: Bright Yellow
+        0xFFFF1744.toInt(), // 5: Crimson Red
+        0xFF009688.toInt(), // 6: Teal Green
+        0xFF3F51B5.toInt(), // 7: Royal Blue
+        0xFFFF9100.toInt(), // 8: Amber Yellow
+        0xFFE040FB.toInt(), // 9: Pink Magenta
+        0xFF00E5FF.toInt()  // 10: Electric Cyan
+    )
+
+    fun cursorColorFor(id: Int): Int {
+        val index = ((id - 1) % PALETTE.size + PALETTE.size) % PALETTE.size
+        return PALETTE[index]
+    }
+
     // ---------------- public API (same names as before) ----------------
 
     fun setStatus(msg: String) = onMain {
         statusTv?.text = msg
     }
 
-    fun spawnCursor(context: Context, id: Int = 1, x: Int, y: Int, colorHex: Int = 0xFFFF2D6B.toInt()) {
+    fun spawnCursor(context: Context, id: Int = 1, x: Int, y: Int, colorHex: Int = cursorColorFor(id)) {
         onMain {
             ensurePill(context)
             spawnNow(context, id, x, y, colorHex)
@@ -344,8 +362,16 @@ object CapriCursor {
 
     fun showDual(context: Context, x1: Int, y1: Int, x2: Int, y2: Int) = onMain {
         ensurePill(context)
-        spawnNow(context, 1, x1, y1, 0xFFFF2D6B.toInt())
-        spawnNow(context, 2, x2, y2, 0xFFFF2D6B.toInt())
+        spawnNow(context, 1, x1, y1, cursorColorFor(1))
+        spawnNow(context, 2, x2, y2, cursorColorFor(2))
+    }
+
+    fun showMulti(context: Context, points: List<Pair<Int, Int>>) = onMain {
+        ensurePill(context)
+        points.forEachIndexed { index, (x, y) ->
+            val id = index + 1
+            spawnNow(context, id, x, y, cursorColorFor(id))
+        }
     }
 
     /** Removes only the second cursor. The stage and STOP pill stay up for the rest of the run. */

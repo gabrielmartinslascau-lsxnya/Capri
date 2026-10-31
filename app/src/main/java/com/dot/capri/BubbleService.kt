@@ -744,17 +744,13 @@ class BubbleService : Service() {
                 "CLEAR_CURSORS" -> {
                     // CapriCursor.hide() removed per patch rule 2c
                 }
-                "MULTITAP" -> {
+                "MULTITAP", "MULTI_TOUCH", "MULTITOUCH" -> {
                     val pairs = target.split("|").mapNotNull { pt ->
                         val xy = pt.split(",").mapNotNull { it.trim().toIntOrNull() }
                         if (xy.size >= 2) Pair(xy[0], xy[1]) else null
                     }
                     if (pairs.isNotEmpty()) {
-                        pairs.forEachIndexed { idx, p ->
-                            CapriCursor.spawnCursor(this, idx + 1, p.first, p.second)
-                        }
-                        CapriCursor.pulseAll()
-                        delay(250)
+                        PhoneControl.tapMulti(pairs)
                     }
                 }
                 "PINCH" -> {
