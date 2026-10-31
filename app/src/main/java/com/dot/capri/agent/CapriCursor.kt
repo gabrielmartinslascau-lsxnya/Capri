@@ -353,11 +353,16 @@ object CapriCursor {
         val newRun = stage == null
         ensurePill(context)
         if (newRun) cancelled = false
+        val m = context.applicationContext.resources.displayMetrics
+        val cx = m.widthPixels / 2
+        val cy = m.heightPixels / 2
         if (!cursors.containsKey(1)) {
-            val m = context.applicationContext.resources.displayMetrics
-            spawnNow(context, 1, m.widthPixels / 2, m.heightPixels / 2, 0xFFFF2D6B.toInt())
+            spawnNow(context, 1, cx - 120, cy, cursorColorFor(1))
         }
-        pulse()
+        if (!cursors.containsKey(2)) {
+            spawnNow(context, 2, cx + 120, cy, cursorColorFor(2))
+        }
+        pulseAll()
     }
 
     fun showDual(context: Context, x1: Int, y1: Int, x2: Int, y2: Int) = onMain {

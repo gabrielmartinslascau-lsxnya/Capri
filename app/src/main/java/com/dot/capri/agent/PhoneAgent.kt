@@ -28,6 +28,9 @@ object PhoneAgent {
         "com.paypal.android.p2pmobile"
     )
 
+    private var lastShotWidth = 1080
+    private var lastShotHeight = 2400
+
     class Pending(
         val goal: String,
         val kind: String,
@@ -120,6 +123,8 @@ Critical Instructions:
     private fun annotate(bytes: ByteArray?): ByteArray? {
         if (bytes == null) return null
         val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+        lastShotWidth = src.width
+        lastShotHeight = src.height
         val bmp = src.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
         val canvas = android.graphics.Canvas(bmp)
         val line = android.graphics.Paint().apply { color = 0x88FF2D6B.toInt(); strokeWidth = 2f }
@@ -254,7 +259,6 @@ Critical Instructions:
         var confirmedAction: Pending? = resume
         var noChangeStreak = 0
         val sentTexts = HashSet<String>()
-        val (screenW, screenH) = PhoneControl.screenSize() ?: (1080 to 2400)
 
         chatVisible(false)
         CapriCursor.show(context)
@@ -285,12 +289,12 @@ Critical Instructions:
                     val shot = if (items.size < 5) annotate(service.captureScreenBitmap()) else null
                     var reply = askModel(context, goal, pkg, items, log, shot)
                         ?: return "my brain didn't answer, choom. ${summary(log)}"
-                    chosen = parseAct(reply, screenW, screenH)
+                    chosen = parseAct(reply, lastShotWidth, lastShotHeight)
                     if (chosen == null && useApi(context)) {
                         Log.w(TAG, "unreadable reply, retrying: ${reply.take(120)}")
                         reply = askModel(context, goal, pkg, items, log, shot)
                             ?: return "my brain didn't answer, choom. ${summary(log)}"
-                        chosen = parseAct(reply, screenW, screenH)
+                        chosen = parseAct(reply, lastShotWidth, lastShotHeight)
                     }
                     if (chosen == null) {
                         log.add("unreadable reply")
@@ -482,35 +486,15 @@ Critical Instructions:
                         delay(500)
                     }
                     "hold" -> {
-                        CapriCursor.setStatus("holding adaptively...")
-                        val totalDuration = a.durationMs ?: 3000L
+                        CapriCursor.setStatus("holding continuously...")
+                        val duration = a.durationMs ?: 3000L
                         val item = items.firstOrNull { it.id == a.id }
-                        val targetX = item?.cx ?: a.x ?: (screenW / 2)
-                        val targetY = item?.cy ?: a.y ?: (screenH / 2)
-
-                        var elapsed = 0L
-                        val sliceMs = 400L
-                        var success = true
-
-                        while (elapsed < totalDuration && !CapriCursor.cancelled) {
-                            val chunk = (totalDuration - elapsed).coerceAtMost(sliceMs)
-                            val ok = PhoneControl.holdAt(targetX, targetY, chunk)
-                            if (!ok) {
-                                success = false
-                                break
-                            }
-                            elapsed += chunk
-                            val freshRoot = PhoneControl.foregroundRoot()
-                            if (freshRoot != null) {
-                                val freshItems = PhoneControl.snapshot(freshRoot)
-                                if (a.id != null && freshItems.none { it.id == a.id }) {
-                                    log.add("target completed early at ${elapsed}ms")
-                                    break
-                                }
-                            }
-                            delay(50)
+                        val ok = when {
+                            item != null -> PhoneControl.hold(item, duration)
+                            a.x != null && a.y != null -> PhoneControl.holdAt(a.x, a.y, duration)
+                            else -> false
                         }
-                        log.add("held adaptively for ${elapsed}ms" + if (success) "" else " (failed)")
+                        log.add("held continuously for ${duration}ms" + if (ok) "" else " (failed)")
                     }
                     "wait" -> log.add("waited")
                     else -> log.add("unknown action")
