@@ -857,6 +857,18 @@ class BubbleService : Service() {
         return cleanResponse
     }
 
+    private fun brainAvailable(): Boolean =
+        (LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)) || OnDeviceAiClient.isAvailable(this)
+
+    private suspend fun handleReply(reply: String): String {
+        val task = Regex("\\[ACTION:TASK:(.+?)\\]", RegexOption.DOT_MATCHES_ALL).find(reply)
+        if (task != null) {
+            val goal = task.groupValues[1].trim()
+            return PhoneAgent.run(this, goal, null) { flag -> setChatVisible(flag) }
+        }
+        return executeEmbeddedActionTag(reply).ifBlank { "on it, choom." }
+    }
+
     // 3-way brain: API -> local model -> null (caller falls back to commands / canned lines)
     private suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
         var apiError: String? = null
@@ -867,7 +879,7 @@ class BubbleService : Service() {
                 CloudAiClient.generateResponse(this@BubbleService, prompt, imageBytes)
             }
             val text = result.getOrNull()?.takeIf { it.isNotBlank() }
-            if (text != null) return executeEmbeddedActionTag(text)
+            if (text != null) return handleReply(text)
             apiError = result.exceptionOrNull()?.message ?: "empty reply"
             android.util.Log.w("CAPRI_BRAIN", "API tier failed ($apiError), trying local")
         }
@@ -876,7 +888,7 @@ class BubbleService : Service() {
         if (OnDeviceAiClient.isAvailable(this)) {
             val local = OnDeviceAiClient.generateResponse(this, prompt, imageBytes)
             val text = local.getOrNull()?.takeIf { it.isNotBlank() }
-            if (text != null) return executeEmbeddedActionTag(text)
+            if (text != null) return handleReply(text)
             android.util.Log.w("CAPRI_BRAIN", "Local tier failed (${local.exceptionOrNull()?.message})")
         }
 
@@ -972,6 +984,12 @@ class BubbleService : Service() {
             PhoneAgent.pending = null
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
         }
+
+        // Brain first. The keyword parser below is never used.
+        if (brainAvailable()) {
+            return askBrain(text) ?: "i didn't get an answer, try again."
+        }
+        return noBrainReply()
 
         val cmd = IntentParser.parse(text)
 
