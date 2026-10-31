@@ -14,4 +14,5 @@
 - [x] Task 14 (`v10.29`): Robust Stop Button Touch/Click Handling & Absolute Screen Cursor Alignment
 - [x] Task 15 (`v10.30`): Landscape Window Inset Alignment & 20px Touch Slop Tolerance for Small Buttons
 - [x] Task 16 (`v10.31`): Cursor Right-Shift Alignment Correction (`-12f`) & Extended 5000ms Default Hold Duration
+- [x] Task 17 (`v10.32`): Removal of Static-Screen Abort Error (`"nothing changed on screen so I stopped"`)
 - [x] Build and verify (`app:assembleDebug`)

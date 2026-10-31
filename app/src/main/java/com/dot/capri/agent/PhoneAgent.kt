@@ -512,10 +512,9 @@ Critical Instructions:
                 } else {
                     noChangeStreak++
                     log.add("no change on screen")
-                    if (noChangeStreak <= 3) {
-                        delay(600) // Give screen animations or app loads an extra settling window
-                    } else {
-                        return "nothing changed on screen, so I stopped to avoid an infinite loop. ${summary(log)}"
+                    delay(500)
+                    if (noChangeStreak >= 4) {
+                        noChangeStreak = 0 // Never give up on static screens
                     }
                 }
             }
