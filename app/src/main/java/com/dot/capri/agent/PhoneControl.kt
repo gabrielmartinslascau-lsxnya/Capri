@@ -160,6 +160,18 @@ object PhoneControl {
         return item.node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
     }
 
+    suspend fun holdAt(x: Int, y: Int, durationMs: Long = 3000L): Boolean {
+        val (safeX, safeY) = clampToScreen(x, y)
+        CapriCursor.moveTo(safeX, safeY)
+        CapriCursor.pulse()
+        val path = Path().apply { moveTo(safeX.toFloat(), safeY.toFloat()); lineTo(safeX.toFloat(), safeY.toFloat()) }
+        return dispatch(path, durationMs)
+    }
+
+    suspend fun hold(item: UiItem, durationMs: Long = 3000L): Boolean {
+        return holdAt(item.cx, item.cy, durationMs)
+    }
+
     suspend fun tapAt(x: Int, y: Int): Boolean {
         val (safeX, safeY) = clampToScreen(x, y)
         CapriCursor.moveTo(safeX, safeY)

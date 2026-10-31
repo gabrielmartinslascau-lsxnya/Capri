@@ -52,7 +52,8 @@ object PhoneAgent {
         val x2: Int?,
         val y2: Int?,
         val label: String? = null,
-        val plan: String? = null
+        val plan: String? = null,
+        val durationMs: Long? = null
     )
 
     private val SYSTEM = """
@@ -63,7 +64,8 @@ Reply with ONLY a JSON object. Actions:
 {"do":"tap","cell":"C4"}                     tap the centre of a grid cell
 {"do":"tap","x":X,"y":Y}                     tap an exact pixel (rarely needed)
 {"do":"long_press","id":N}                   press and hold element N
-{"do":"long_press","cell":"C4"}              press and hold a grid cell
+{"do":"hold","id":N,"duration_ms":3000}       hold down element N or cell for long periods (default 3000ms, up to 10000ms)
+{"do":"hold","cell":"C4","duration_ms":3000}    hold down cell C4 for duration_ms
 {"do":"swipe","cell":"B5","cell2":"B2"}      drag from cell B5 to cell B2 (pixels also work: x,y,x2,y2)
 {"do":"type","id":N,"text":"..."}            type into field N and press Enter
 {"do":"submit","id":N}                       press Enter on field N
@@ -163,6 +165,7 @@ Critical Instructions:
             val y = if (o.has("y")) o.optInt("y") else cell1?.second
             val x2 = if (o.has("x2")) o.optInt("x2") else cell2?.first
             val y2 = if (o.has("y2")) o.optInt("y2") else cell2?.second
+            val dur = if (o.has("duration_ms")) o.optLong("duration_ms") else if (o.has("duration")) o.optLong("duration") else null
             Act(
                 doWhat = o.optString("do").lowercase(),
                 id = if (o.has("id")) o.optInt("id") else if (o.has("n")) o.optInt("n") else null,
@@ -175,7 +178,8 @@ Critical Instructions:
                 x2 = x2?.coerceIn(0, w - 1),
                 y2 = y2?.coerceIn(0, h - 1),
                 label = o.optString("label").ifEmpty { null },
-                plan = o.optString("plan").ifEmpty { null }
+                plan = o.optString("plan").ifEmpty { null },
+                durationMs = dur
             )
         } catch (e: Exception) {
             null
@@ -482,21 +486,33 @@ Critical Instructions:
                         log.add("opened $app" + if (ok) "" else " (failed)")
                         delay(500)
                     }
+                    "hold" -> {
+                        CapriCursor.setStatus("holding down...")
+                        val duration = a.durationMs ?: 3000L
+                        val item = items.firstOrNull { it.id == a.id }
+                        val ok = when {
+                            item != null -> PhoneControl.hold(item, duration)
+                            a.x != null && a.y != null -> PhoneControl.holdAt(a.x, a.y, duration)
+                            else -> false
+                        }
+                        log.add("held down for ${duration}ms" + if (ok) "" else " (failed)")
+                    }
                     "wait" -> log.add("waited")
                     else -> log.add("unknown action")
                 }
                 steps++
                 // Let the screen settle, then check that the action did something.
+                val isContinuousAction = a.doWhat in setOf("hold", "long_press", "swipe", "scroll", "multitap", "multi_touch", "wait")
                 val changed = waitForChange(before)
-                if (changed) {
+                if (changed || isContinuousAction) {
                     noChangeStreak = 0
                 } else {
                     noChangeStreak++
                     log.add("no change on screen")
-                    if (noChangeStreak == 1 || noChangeStreak == 2) {
+                    if (noChangeStreak <= 3) {
                         delay(600) // Give screen animations or app loads an extra settling window
-                    } else if (noChangeStreak >= 3) {
-                        return "nothing changed on screen after three tries, so I stopped. ${summary(log)}"
+                    } else {
+                        return "nothing changed on screen, so I stopped to avoid an infinite loop. ${summary(log)}"
                     }
                 }
             }
