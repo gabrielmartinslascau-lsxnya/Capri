@@ -36,6 +36,7 @@ import androidx.core.content.ContextCompat
 import com.dot.capri.accessibility.ScreenWriter
 import com.dot.capri.accessibility.WriteResult
 import com.dot.capri.agent.CapriCursor
+import com.dot.capri.agent.DeviceTasks
 import com.dot.capri.agent.PhoneAgent
 import com.dot.capri.agent.PhoneControl
 import com.dot.capri.ai.CloudAiClient
@@ -973,6 +974,14 @@ class BubbleService : Service() {
         }
 
         val cmd = IntentParser.parse(text)
+
+        // Natural requests to act on the phone ("scroll down", "click on the 3rd app",
+        // "take over and open settings") go to the phone agent. Questions stay in chat.
+        if ((cmd is Cmd.Unknown || cmd is Cmd.Chat || cmd is Cmd.Mention) &&
+            DeviceTasks.looksLikeDeviceTask(trimmedInput)
+        ) {
+            return PhoneAgent.run(this, trimmedInput, null) { flag -> setChatVisible(flag) }
+        }
 
         if (cmd is Cmd.Chat || cmd is Cmd.Mention || cmd is Cmd.Compliment || cmd is Cmd.Unknown) {
             if (cmd is Cmd.Unknown) {
