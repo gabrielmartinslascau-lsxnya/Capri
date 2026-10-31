@@ -60,41 +60,30 @@ object PhoneAgent {
     )
 
     private val SYSTEM = """
-You are the hands of an Android assistant called Capri. You control the phone by reading the numbered element list AND the screenshot.
-The screenshot has a high-contrast grid overlay. Columns are A to F, left to right. Rows are 1 to 10, top to bottom. Each cell label is in a dark badge in the cell's top-left.
-Reply with ONLY a JSON object. Actions:
-{"do":"tap","id":N}                          tap element N from the list (preferred)
-{"do":"tap","cell":"C4"}                     tap the centre of a grid cell
-{"do":"tap","x":X,"y":Y}                     tap an exact pixel (rarely needed)
-{"do":"double_tap","id":N}                   double tap element N
-{"do":"long_press","id":N}                   press and hold element N
-{"do":"hold","id":N,"duration_ms":5000}       hold down element N or cell for long periods (default 5000ms)
-{"do":"hold","cell":"C4","duration_ms":5000}    hold down cell C4 for duration_ms
-{"do":"swipe","cell":"B5","cell2":"B2"}      drag from cell B5 to cell B2 (pixels also work: x,y,x2,y2)
-{"do":"type","id":N,"text":"..."}            type into field N and press Enter
-{"do":"submit","id":N}                       press Enter on field N
-{"do":"scroll","dir":"down"}                 show MORE content below. dir is down, up, left or right.
-{"do":"tap_nth","n":3}                       tap the Nth labelled item on screen.
+You are Capri, an AI agent controlling an Android phone. You perceive the screen through the numbered element list AND the annotated grid screenshot.
+Columns are A to F (left to right), rows 1 to 10 (top to bottom). Cell labels are shown in dark badges in each cell's top-left corner.
+
+Actions (reply with ONLY a JSON object):
+{"do":"tap","cell":"C4"}                     tap grid cell C4 (or "id":N if element is in list)
+{"do":"swipe","cell":"A1","cell2":"C4"}      drag/swipe from cell A1 to cell C4
+{"do":"hold","cell":"C4","duration_ms":3000} hold down cell C4 (default 3000ms, up to 10000ms)
+{"do":"double_tap","cell":"C4"}              double tap cell C4
+{"do":"type","id":N,"text":"..."}            type into field N
+{"do":"scroll","dir":"down"}                 scroll (down, up, left, right)
 {"do":"back"}
 {"do":"home"}
 {"do":"open","app":"app name"}
 {"do":"wait"}
-{"do":"spawn_cursor","id":2,"x":X,"y":Y}     spawn/place cursor ID (1=Pink/Red, 2=Green, 3=Blue, 4=Yellow, etc.) at (X, Y)
-{"do":"move_cursor","id":2,"x":X,"y":Y}      glide cursor ID to (X, Y)
-{"do":"remove_cursor","id":2}              remove cursor ID
+{"do":"spawn_cursor","id":2,"x":X,"y":Y}     spawn/place cursor ID at (X, Y)
+{"do":"move_cursor","id":2,"x":X,"y":Y}      move cursor ID to (X, Y)
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
-Critical Instructions:
-- CARD & GAME ITEM PLACEMENT (e.g. Plants vs Zombies): To pick up and plant an item/card, use "swipe" to drag from the seed packet cell to the target lawn cell (e.g. {"do":"swipe","cell":"A1","cell2":"C4"}), OR tap the seed card cell first, then tap the target lawn cell.
-- TASK COMPLETION: Check SCREENSHOT and SCREEN ELEMENTS carefully. If the user's goal is ALREADY ACCOMPLISHED on screen (e.g. app is opened, page is reached, text is entered, action completed), output {"do":"done","say":"short summary"} IMMEDIATELY. Do NOT repeat actions after accomplishing the task!
-- NO REPEATING ACTIONS: Never re-tap the same button or re-type the same text if the action has already succeeded or is visible on screen.
-- DO NOT GIVE UP RANDOMLY: Never call "fail" simply because a transition is slow, an app is opening, or a target isn't on screen immediately. If the screen is loading or updating, output {"do":"wait"}. If an element is off-screen, scroll or navigate to find it.
-- MULTI-CURSOR AWARENESS: You have multiple color-coded cursors active on screen (Cursor 1 is Pink-Red, Cursor 2 is Green, Cursor 3 is Blue, Cursor 4 is Yellow, etc.). Use spawn_cursor and move_cursor to position and coordinate them when playing games or handling multi-touch controls.
-- DO NOT GUESS CLICKS: Do not tap random grid cells, unverified IDs, or blank spaces to "explore". Every tap must target a verified element label from SCREEN ELEMENTS or an explicitly visible visual control in the screenshot grid.
-- Every "tap" and "type" action must include "label": the exact label of the element you are acting on, copied from SCREEN ELEMENTS.
-- On your first action of a task, include "plan": one short sentence describing how you will do it.
-- An id is only valid with its matching label. Do not guess ids.
-- Pick an element from the list by its label or id when one matches. Use a grid cell only when a visual control is clearly visible in the screenshot grid and not in the element list.
+
+Direct Instructions:
+- Be decisive. Act immediately based on what is visible in the screenshot grid or element list.
+- In games (like Plants vs Zombies or action games), use grid cells directly (e.g. swipe/drag plant card cell A1 to lawn cell C4, or tap card cell then tap lawn cell).
+- If the user's goal is accomplished, output {"do":"done","say":"..."} immediately. If a screen is loading or transitioning, output {"do":"wait"}.
+- Never repeat the exact same action if the result is already visible on screen.
 - Keep "say" to one short lowercase sentence.
 """.trimIndent()
 
@@ -215,13 +204,7 @@ Critical Instructions:
         }
     }
 
-    /** Loose match: either label contains the other, ignoring case. */
-    private fun labelMatches(actual: String, claimed: String): Boolean {
-        val x = actual.lowercase().trim()
-        val c = claimed.lowercase().trim()
-        if (x.isEmpty() || c.isEmpty()) return false
-        return x.contains(c) || c.contains(x)
-    }
+
 
     private fun summary(log: List<String>): String =
         if (log.isEmpty()) "" else "did: " + log.takeLast(6).joinToString(" > ")
@@ -287,7 +270,6 @@ Critical Instructions:
         chatVisible(false)
         CapriCursor.show(context)
         delay(250)
-        var failStreak = 0
         var plan: String? = null
 
         try {
@@ -335,30 +317,7 @@ Critical Instructions:
                     }
                 }
 
-                // The model must name the element it's acting on. A tap whose label doesn't
-                // match the id it picked is a guess, so it's refused.
                 val targetItem = a.id?.let { id -> items.firstOrNull { it.id == id } }
-                val claimed = a.label
-                if (a.doWhat == "tap" && targetItem != null && claimed != null &&
-                    !labelMatches(targetItem.label, claimed)
-                ) {
-                    failStreak++
-                    log.add("label mismatch: wanted '$claimed', id ${a.id} is '${targetItem.label}'")
-                    if (failStreak >= 3) return "i kept grabbing the wrong thing, choom. ${summary(log)}"
-                    steps++
-                    continue
-                }
-
-                // A tap on an element that isn't on screen is a failed step, not a retry.
-                val missing = a.doWhat == "tap" && a.id != null && a.x == null && items.none { it.id == a.id }
-                if (missing) {
-                    failStreak++
-                    log.add("no element ${a.id} on screen")
-                    if (failStreak >= 3) return "couldn't find that on screen, choom. ${summary(log)}"
-                    steps++
-                    continue
-                }
-                failStreak = 0
 
                 Log.d(TAG, "step=$steps act=${a.doWhat} id=${a.id} x=${a.x} y=${a.y} pkg=$pkg items=${items.size}")
 

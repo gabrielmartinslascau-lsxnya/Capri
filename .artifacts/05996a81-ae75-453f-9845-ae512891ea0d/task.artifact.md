@@ -19,4 +19,5 @@
 - [x] Task 19 (`v10.34`): Fast 960px In-Memory Scaling, 70% Fast JPEG Compression, & 300ms Reduced Settlement Window
 - [x] Task 20 (`v10.35`): Card & Game Item Placement Rules (PvZ) & Post-Gesture Render Settle Window (`400ms`)
 - [x] Task 21 (`v10.36`): Top-Margin System Gesture Shielding (Notification Pull-Down Prevention) & Draggable Top-Right STOP Pill
+- [x] Task 22 (`v10.37`): Streamlined Decisive System Prompt & Removal of Restrictive Game Label Mismatch Blocks
 - [x] Build and verify (`app:assembleDebug`)
