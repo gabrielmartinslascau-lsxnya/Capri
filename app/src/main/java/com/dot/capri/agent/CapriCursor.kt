@@ -269,8 +269,8 @@ object CapriCursor {
         c.x = x
         c.y = y
         val half = sizePx / 2f
-        c.view.translationX = x - half
-        c.view.translationY = y - half
+        c.view.translationX = x - half - originX
+        c.view.translationY = y - half - originY
     }
 
     private fun spawnNow(context: Context, id: Int, x: Int, y: Int, colorHex: Int) {

@@ -230,10 +230,12 @@ object PhoneControl {
         var best: AccessibilityNodeInfo? = null
         var bestArea = Long.MAX_VALUE
         val r = Rect()
+        val tolerance = 20
         fun walk(n: AccessibilityNodeInfo?, depth: Int) {
             if (n == null || depth > 40 || !n.isVisibleToUser) return
             n.getBoundsInScreen(r)
-            if (n.isClickable && r.contains(x, y)) {
+            val expanded = Rect(r.left - tolerance, r.top - tolerance, r.right + tolerance, r.bottom + tolerance)
+            if (n.isClickable && expanded.contains(x, y)) {
                 val area = r.width().toLong() * r.height()
                 if (area in 1 until bestArea) {
                     best = n

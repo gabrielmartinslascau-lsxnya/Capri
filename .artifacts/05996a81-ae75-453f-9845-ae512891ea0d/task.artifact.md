@@ -7,9 +7,10 @@
 - [x] Task 7 (`v10.22`): Anti-Premature GiveUp & Strict No-Guessing Safeguards in PhoneAgent
 - [x] Task 8 (`v10.23`): Sustained Holds & Bypassing `noChangeStreak` for Continuous Actions
 - [x] Task 9 (`v10.24`): Infinite Task Loop (`while (!CapriCursor.cancelled)`) & Chunked Indefinite Hold Support
-- `[x]` Task 10 (`v10.25`): Precise Millisecond & Adaptive Visual Hold Precision
+- [x] Task 10 (`v10.25`): Precise Millisecond & Adaptive Visual Hold Precision
 - [x] Task 11 (`v10.26`): Adaptive Sliced Holding with Visual Early-Release Polling
 - [x] Task 12 (`v10.27`): True Continuous Unbroken Hold Fix & Dynamic Landscape Screenshot Coordinate Mapping
 - [x] Task 13 (`v10.28`): LLM Multi-Cursor Prompt Awareness & Default Dual-Cursor Startup
 - [x] Task 14 (`v10.29`): Robust Stop Button Touch/Click Handling & Absolute Screen Cursor Alignment
+- [x] Task 15 (`v10.30`): Landscape Window Inset Alignment & 20px Touch Slop Tolerance for Small Buttons
 - [x] Build and verify (`app:assembleDebug`)
