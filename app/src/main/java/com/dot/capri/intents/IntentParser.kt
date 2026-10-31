@@ -256,8 +256,21 @@ object IntentParser {
         playRegex.find(cleaned)?.let { match ->
             val (q) = match.destructured
             val query = q.trim()
-            if (query.lowercase() in knownAppNames) {
-                return Cmd.Open(query.lowercase())
+            val queryLower = query.lowercase()
+
+            val serviceCtx = com.dot.capri.CapriAccessibilityService.instance ?: com.dot.capri.BubbleService.instance
+            if (serviceCtx != null && !queryLower.contains("song") && !queryLower.contains("music") && !queryLower.contains("by ")) {
+                val matchesApp = AppChooser.launchers(serviceCtx).firstOrNull { app ->
+                    val labelLower = app.label.lowercase().trim()
+                    labelLower == queryLower || (queryLower.length >= 3 && labelLower.contains(queryLower))
+                }
+                if (matchesApp != null) {
+                    return Cmd.Open(matchesApp.label)
+                }
+            }
+
+            if (queryLower in knownAppNames) {
+                return Cmd.Open(queryLower)
             }
             openRegex.find(query)?.let { openMatch ->
                 val (appName) = openMatch.destructured

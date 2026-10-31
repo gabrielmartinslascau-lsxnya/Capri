@@ -134,6 +134,19 @@ object IntentExecutor {
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
         val rawQuery = cmd.query.trim().lowercase()
 
+        // Adaptive Check: If query matches an installed game/app (e.g. "play minecraft", "play roblox"),
+        // open the game instead of searching for music!
+        if (!rawQuery.contains("song") && !rawQuery.contains("music") && !rawQuery.contains("track") && !rawQuery.contains("by ")) {
+            val launchers = AppChooser.launchers(context)
+            val matchingApp = launchers.firstOrNull { app ->
+                val labelLower = app.label.lowercase().trim()
+                labelLower == rawQuery || (rawQuery.length >= 3 && labelLower.contains(rawQuery))
+            }
+            if (matchingApp != null) {
+                return AppChooser.open(context, matchingApp.pkg)
+            }
+        }
+
         // Handle short video / reels queries ("play video", "play a vid", "reels")
         if (rawQuery in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid")) {
             val reelsApp = MainActivity.getDefaultReelsApp(context)
