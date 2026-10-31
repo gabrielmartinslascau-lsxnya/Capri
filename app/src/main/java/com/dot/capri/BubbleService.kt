@@ -721,28 +721,16 @@ class BubbleService : Service() {
             val (actionType, rawTarget) = match.destructured
             val target = rawTarget.trim()
             when (actionType.uppercase()) {
-                "SPAWN_CURSOR" -> {
+                "MOVE_CURSOR", "SPAWN_CURSOR" -> {
                     val parts = target.split(",").mapNotNull { it.trim().toIntOrNull() }
                     if (parts.size >= 3) {
-                        CapriCursor.spawnCursor(this, parts[0], parts[1], parts[2])
+                        CapriCursor.moveTo(parts[1], parts[2])
                     } else if (parts.size >= 2) {
-                        CapriCursor.spawnCursor(this, 1, parts[0], parts[1])
+                        CapriCursor.moveTo(parts[0], parts[1])
                     }
                 }
-                "MOVE_CURSOR" -> {
-                    val parts = target.split(",").mapNotNull { it.trim().toIntOrNull() }
-                    if (parts.size >= 3) {
-                        CapriCursor.moveTo(parts[1], parts[2], id = parts[0])
-                    } else if (parts.size >= 2) {
-                        CapriCursor.moveTo(parts[0], parts[1], id = 1)
-                    }
-                }
-                "REMOVE_CURSOR" -> {
-                    val id = target.toIntOrNull() ?: 1
-                    CapriCursor.removeCursor(id)
-                }
-                "CLEAR_CURSORS" -> {
-                    // CapriCursor.hide() removed per patch rule 2c
+                "REMOVE_CURSOR", "CLEAR_CURSORS" -> {
+                    // Single cursor state
                 }
                 "MULTITAP", "MULTI_TOUCH", "MULTITOUCH" -> {
                     val pairs = target.split("|").mapNotNull { pt ->

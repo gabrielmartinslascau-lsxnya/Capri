@@ -243,9 +243,10 @@ object PhoneControl {
     suspend fun tapMulti(points: List<Pair<Int, Int>>, durationMs: Long = 100L): Boolean {
         val s = service() ?: return false
         if (points.isEmpty()) return false
-        CapriCursor.showMulti(s, points)
-        delay(80)
-        CapriCursor.pulseAll()
+        points.firstOrNull()?.let { (x, y) ->
+            CapriCursor.moveTo(x, y)
+        }
+        CapriCursor.pulse()
         return dispatchMultiTouch(points, durationMs)
     }
 
@@ -415,7 +416,7 @@ object PhoneControl {
             listOf(w * 0.15f, w * 0.40f, w * 0.85f, w * 0.60f)
         }
 
-        CapriCursor.showDual(s, x1From.toInt(), cy.toInt(), x2From.toInt(), cy.toInt())
+        CapriCursor.moveTo(x1From.toInt(), cy.toInt())
         delay(150)
 
         val path1 = Path().apply { moveTo(x1From, cy); lineTo(x1To, cy) }
@@ -424,7 +425,7 @@ object PhoneControl {
         var ok = false
         coroutineScope {
             val animJob = launch {
-                CapriCursor.glideDualPaths(x1From, cy, x1To, cy, x2From, cy, x2To, cy, 400)
+                CapriCursor.glideAlongPath(x1From, cy, x1To, cy, 400)
             }
             val gestureJob = async { multiStrokeGesture(path1, path2, 400) }
             ok = gestureJob.await()
@@ -436,8 +437,8 @@ object PhoneControl {
     }
 
     suspend fun dualTap(x1: Int, y1: Int, x2: Int, y2: Int): Boolean {
-        val s = service() ?: return false
-        CapriCursor.showDual(s, x1, y1, x2, y2)
+        service() ?: return false
+        CapriCursor.moveTo(x1, y1)
         CapriCursor.pulse()
 
         val path1 = Path().apply { moveTo(x1.toFloat(), y1.toFloat()) }

@@ -60,13 +60,13 @@ object PhoneAgent {
     )
 
     private val SYSTEM = """
-You are Capri, an AI agent controlling an Android phone. You perceive the screen through the numbered element list AND the annotated grid screenshot.
+You are Capri, an AI agent controlling an Android phone. You perceive the screen through the annotated grid screenshot.
 Columns are A to F (left to right), rows 1 to 10 (top to bottom). Cell labels are shown in dark badges in each cell's top-left corner.
 
 Actions (reply with ONLY a JSON object):
 {"do":"tap","cell":"C4"}                     tap grid cell C4 (or "id":N if element is in list)
-{"do":"swipe","cell":"A1","cell2":"C4"}      drag/swipe from cell A1 to cell C4
-{"do":"hold","cell":"C4","duration_ms":3000} hold down cell C4 (default 3000ms, up to 10000ms)
+{"do":"swipe","cell":"A1","cell2":"C4"}      drag/swipe from cell A1 to cell C4 (e.g. planting cards in PvZ)
+{"do":"hold","cell":"C4","duration_ms":5000} hold down cell C4 for exact duration (default 5000ms)
 {"do":"double_tap","cell":"C4"}              double tap cell C4
 {"do":"type","id":N,"text":"..."}            type into field N
 {"do":"scroll","dir":"down"}                 scroll (down, up, left, right)
@@ -74,13 +74,11 @@ Actions (reply with ONLY a JSON object):
 {"do":"home"}
 {"do":"open","app":"app name"}
 {"do":"wait"}
-{"do":"spawn_cursor","id":2,"x":X,"y":Y}     spawn/place cursor ID at (X, Y)
-{"do":"move_cursor","id":2,"x":X,"y":Y}      move cursor ID to (X, Y)
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
 
 Direct Instructions:
-- Be decisive. Act immediately based on what is visible in the screenshot grid or element list.
+- Be decisive. Act immediately based on what is visible in the screenshot grid.
 - In games (like Plants vs Zombies or action games), use grid cells directly (e.g. swipe/drag plant card cell A1 to lawn cell C4, or tap card cell then tap lawn cell).
 - If the user's goal is accomplished, output {"do":"done","say":"..."} immediately. If a screen is loading or transitioning, output {"do":"wait"}.
 - Never repeat the exact same action if the result is already visible on screen.
@@ -330,29 +328,6 @@ Direct Instructions:
                 when (a.doWhat) {
                     "done" -> return a.say ?: "done."
                     "fail" -> return a.say ?: "couldn't do that, choom."
-                    "spawn_cursor" -> {
-                        val cid = a.id ?: 1
-                        val cx = a.x ?: (items.firstOrNull()?.cx ?: 500)
-                        val cy = a.y ?: (items.firstOrNull()?.cy ?: 500)
-                        CapriCursor.spawnCursor(context, cid, cx, cy)
-                        log.add("spawned cursor $cid at ($cx, $cy)")
-                    }
-                    "move_cursor" -> {
-                        val cid = a.id ?: 1
-                        val cx = a.x ?: 500
-                        val cy = a.y ?: 500
-                        CapriCursor.moveTo(cx, cy, id = cid)
-                        log.add("moved cursor $cid to ($cx, $cy)")
-                    }
-                    "remove_cursor" -> {
-                        val cid = a.id ?: 1
-                        CapriCursor.removeCursor(cid)
-                        log.add("removed cursor $cid")
-                    }
-                    "clear_cursors" -> {
-                        CapriCursor.hide()
-                        log.add("cleared all cursors")
-                    }
                     "swipe" -> {
                         val fx = a.x; val fy = a.y; val tx = a.x2; val ty = a.y2
                         if (fx == null || fy == null || tx == null || ty == null) {
@@ -376,7 +351,7 @@ Direct Instructions:
                     "tap" -> {
                         CapriCursor.setStatus("tapping...")
                         if (a.x != null && a.y != null) {
-                            CapriCursor.spawnCursor(context, 1, a.x, a.y)
+                            CapriCursor.moveTo(a.x, a.y)
                             CapriCursor.pulse()
                             val ok = PhoneControl.tapAt(a.x, a.y)
                             log.add("glided cursor to (${a.x}, ${a.y}) & tapped pixel" + if (ok) "" else " (failed)")
@@ -475,7 +450,7 @@ Direct Instructions:
                     "double_tap" -> {
                         CapriCursor.setStatus("double tapping...")
                         if (a.x != null && a.y != null) {
-                            CapriCursor.spawnCursor(context, 1, a.x, a.y)
+                            CapriCursor.moveTo(a.x, a.y)
                             CapriCursor.pulse()
                             val ok = PhoneControl.doubleTapAt(a.x, a.y)
                             log.add("double tapped pixel (${a.x}, ${a.y})" + if (ok) "" else " (failed)")
