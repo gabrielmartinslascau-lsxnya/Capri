@@ -182,6 +182,28 @@ object PhoneControl {
         return dispatchTap(safeX, safeY)
     }
 
+    suspend fun doubleTapAt(x: Int, y: Int): Boolean {
+        val (safeX, safeY) = clampToScreen(x, y)
+        CapriCursor.moveTo(safeX, safeY)
+        CapriCursor.pulse()
+        val ok1 = dispatchTap(safeX, safeY)
+        delay(60)
+        val ok2 = dispatchTap(safeX, safeY)
+        return ok1 && ok2
+    }
+
+    suspend fun doubleTap(item: UiItem): Boolean {
+        CapriCursor.moveTo(item.cx, item.cy)
+        CapriCursor.pulse()
+        if (item.node.isClickable) {
+            item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(60)
+            item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            return true
+        }
+        return doubleTapAt(item.cx, item.cy)
+    }
+
     private suspend fun dispatchTap(x: Int, y: Int): Boolean {
         val (safeX, safeY) = clampToScreen(x, y)
         return dispatch(Path().apply { moveTo(safeX.toFloat(), safeY.toFloat()); lineTo(safeX.toFloat(), safeY.toFloat()) }, 60)

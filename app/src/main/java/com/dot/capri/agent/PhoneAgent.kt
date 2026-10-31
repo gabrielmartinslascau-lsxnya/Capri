@@ -61,40 +61,39 @@ object PhoneAgent {
 
     private val SYSTEM = """
 You are the hands of an Android assistant called Capri. You control the phone by reading the numbered element list AND the screenshot.
-The screenshot has a light grid. Columns are A to F, left to right. Rows are 1 to 10, top to bottom. Each cell label is in the cell's top-left corner.
+The screenshot has a high-contrast grid overlay. Columns are A to F, left to right. Rows are 1 to 10, top to bottom. Each cell label is in a dark badge in the cell's top-left.
 Reply with ONLY a JSON object. Actions:
 {"do":"tap","id":N}                          tap element N from the list (preferred)
 {"do":"tap","cell":"C4"}                     tap the centre of a grid cell
 {"do":"tap","x":X,"y":Y}                     tap an exact pixel (rarely needed)
+{"do":"double_tap","id":N}                   double tap element N
 {"do":"long_press","id":N}                   press and hold element N
-{"do":"hold","id":N,"duration_ms":3000}       hold down element N or cell for long periods (default 3000ms, up to 10000ms)
-{"do":"hold","cell":"C4","duration_ms":3000}    hold down cell C4 for duration_ms
+{"do":"hold","id":N,"duration_ms":5000}       hold down element N or cell for long periods (default 5000ms)
+{"do":"hold","cell":"C4","duration_ms":5000}    hold down cell C4 for duration_ms
 {"do":"swipe","cell":"B5","cell2":"B2"}      drag from cell B5 to cell B2 (pixels also work: x,y,x2,y2)
 {"do":"type","id":N,"text":"..."}            type into field N and press Enter
 {"do":"submit","id":N}                       press Enter on field N
-{"do":"scroll","dir":"down"}                 show MORE content below. dir is down, up, left or right. "right" shows content further right.
-{"do":"tap_nth","n":3}                       tap the Nth labelled item on screen, counted top to bottom, left to right.
+{"do":"scroll","dir":"down"}                 show MORE content below. dir is down, up, left or right.
+{"do":"tap_nth","n":3}                       tap the Nth labelled item on screen.
 {"do":"back"}
 {"do":"home"}
 {"do":"open","app":"app name"}
 {"do":"wait"}
-{"do":"spawn_cursor","id":2,"x":X,"y":Y}     spawn or place cursor ID (1=Pink/Red, 2=Green, 3=Blue, etc.) at (X, Y)
+{"do":"spawn_cursor","id":2,"x":X,"y":Y}     spawn/place cursor ID (1=Pink/Red, 2=Green, 3=Blue, 4=Yellow, etc.) at (X, Y)
 {"do":"move_cursor","id":2,"x":X,"y":Y}      glide cursor ID to (X, Y)
 {"do":"remove_cursor","id":2}              remove cursor ID
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
 Critical Instructions:
+- TASK COMPLETION: Check SCREENSHOT and SCREEN ELEMENTS carefully. If the user's goal is ALREADY ACCOMPLISHED on screen (e.g. app is opened, page is reached, text is entered, action completed), output {"do":"done","say":"short summary"} IMMEDIATELY. Do NOT repeat actions after accomplishing the task!
+- NO REPEATING ACTIONS: Never re-tap the same button or re-type the same text if the action has already succeeded or is visible on screen.
+- DO NOT GIVE UP RANDOMLY: Never call "fail" simply because a transition is slow, an app is opening, or a target isn't on screen immediately. If the screen is loading or updating, output {"do":"wait"}. If an element is off-screen, scroll or navigate to find it.
 - MULTI-CURSOR AWARENESS: You have multiple color-coded cursors active on screen (Cursor 1 is Pink-Red, Cursor 2 is Green, Cursor 3 is Blue, Cursor 4 is Yellow, etc.). Use spawn_cursor and move_cursor to position and coordinate them when playing games or handling multi-touch controls.
-- DO NOT GIVE UP RANDOMLY: Never call "fail" simply because a transition is slow, an app is opening, or a target isn't on screen immediately. If the screen is loading or updating, output {"do":"wait"}. If an element is off-screen, scroll or navigate to find it. Only use "fail" if the requested task is strictly impossible or prohibited.
 - DO NOT GUESS CLICKS: Do not tap random grid cells, unverified IDs, or blank spaces to "explore". Every tap must target a verified element label from SCREEN ELEMENTS or an explicitly visible visual control in the screenshot grid.
 - Every "tap" and "type" action must include "label": the exact label of the element you are acting on, copied from SCREEN ELEMENTS.
 - On your first action of a task, include "plan": one short sentence describing how you will do it.
 - An id is only valid with its matching label. Do not guess ids.
 - Pick an element from the list by its label or id when one matches. Use a grid cell only when a visual control is clearly visible in the screenshot grid and not in the element list.
-- If the screen doesn't show what you need, scroll down, go back, or open the right app.
-- Don't repeat an action when the screen did not change; use "wait" to let the screen settle.
-- Never guess passwords, codes, card numbers or personal details.
-- Only type text the user asked you to type.
 - Keep "say" to one short lowercase sentence.
 """.trimIndent()
 
@@ -131,26 +130,42 @@ Critical Instructions:
         lastShotHeight = src.height
         val bmp = src.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
         val canvas = android.graphics.Canvas(bmp)
-        val line = android.graphics.Paint().apply { color = 0x88FF2D6B.toInt(); strokeWidth = 2f }
-        val label = android.graphics.Paint().apply {
+
+        val shadowLine = android.graphics.Paint().apply { color = 0xAA000000.toInt(); strokeWidth = 3f }
+        val cyanLine = android.graphics.Paint().apply { color = 0xCC00E5FF.toInt(); strokeWidth = 2f }
+        val bgBadge = android.graphics.Paint().apply { color = 0xCC111111.toInt(); style = android.graphics.Paint.Style.FILL }
+        val borderBadge = android.graphics.Paint().apply { color = 0xFF00E5FF.toInt(); style = android.graphics.Paint.Style.STROKE; strokeWidth = 1.5f }
+        val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFFFFFFFF.toInt()
-            textSize = bmp.height / 45f
-            isAntiAlias = true
-            setShadowLayer(4f, 0f, 0f, 0xFF000000.toInt())
+            textSize = (bmp.height / 42f).coerceAtLeast(18f)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
+
+        val w = bmp.width.toFloat()
+        val h = bmp.height.toFloat()
+
         for (col in 0..6) {
-            val x = bmp.width * col / 6f
-            canvas.drawLine(x, 0f, x, bmp.height.toFloat(), line)
+            val x = w * col / 6f
+            canvas.drawLine(x + 1f, 0f, x + 1f, h, shadowLine)
+            canvas.drawLine(x, 0f, x, h, cyanLine)
         }
         for (row in 0..10) {
-            val y = bmp.height * row / 10f
-            canvas.drawLine(0f, y, bmp.width.toFloat(), y, line)
+            val y = h * row / 10f
+            canvas.drawLine(0f, y + 1f, w, y + 1f, shadowLine)
+            canvas.drawLine(0f, y, w, y, cyanLine)
         }
+
+        val badgePadding = 6f
         for (col in 0..5) {
             for (row in 0..9) {
-                val x = bmp.width * col / 6f + 6f
-                val y = bmp.height * row / 10f + label.textSize + 4f
-                canvas.drawText("${'A' + col}${row + 1}", x, y, label)
+                val tag = "${'A' + col}${row + 1}"
+                val x = w * col / 6f + 8f
+                val y = h * row / 10f + textPaint.textSize + 6f
+                val tw = textPaint.measureText(tag)
+                val rect = android.graphics.RectF(x - 4f, y - textPaint.textSize - 2f, x + tw + badgePadding, y + badgePadding)
+                canvas.drawRoundRect(rect, 6f, 6f, bgBadge)
+                canvas.drawRoundRect(rect, 6f, 6f, borderBadge)
+                canvas.drawText(tag, x, y, textPaint)
             }
         }
         val out = java.io.ByteArrayOutputStream()
@@ -488,6 +503,23 @@ Critical Instructions:
                         val ok = IntentExecutor.execute(context, Cmd.Open(app))
                         log.add("opened $app" + if (ok) "" else " (failed)")
                         delay(500)
+                    }
+                    "double_tap" -> {
+                        CapriCursor.setStatus("double tapping...")
+                        if (a.x != null && a.y != null) {
+                            CapriCursor.spawnCursor(context, 1, a.x, a.y)
+                            CapriCursor.pulse()
+                            val ok = PhoneControl.doubleTapAt(a.x, a.y)
+                            log.add("double tapped pixel (${a.x}, ${a.y})" + if (ok) "" else " (failed)")
+                        } else {
+                            val item = items.firstOrNull { it.id == a.id }
+                            if (item == null) {
+                                log.add("double_tap: unknown element")
+                            } else {
+                                val ok = PhoneControl.doubleTap(item)
+                                log.add("double tapped ${item.label}" + if (ok) "" else " (failed)")
+                            }
+                        }
                     }
                     "hold" -> {
                         CapriCursor.setStatus("holding continuously...")
