@@ -86,8 +86,30 @@ Rules:
 - If the screen doesn't show what you need, scroll down, go back, or open the right app.
 - Don't repeat an action when the screen did not change.
 - Never guess passwords, codes, card numbers or personal details.
+- Only type text the user asked you to type. Never write your own introduction, identity, or chat replies into another app. If the user asked for a reply and gave no words, ask for the words with fail.
+- Never repeat an action whose result you can already see on screen. After a type or a tap, look at SCREEN ELEMENTS first. If the result is not there yet, use "wait".
+- One action per step. Don't chain guesses.
+- Before typing a message, check that you are in the right chat (the label of the contact is on screen).
 - Keep "say" to one short lowercase sentence.
 """.trimIndent()
+
+    /** A cheap fingerprint of what is on screen right now. */
+    private fun screenSignature(): String {
+        val root = PhoneControl.foregroundRoot() ?: return "none"
+        val labels = PhoneControl.snapshot(root, max = 60).joinToString("|") { it.label }
+        return "${root.packageName}#${labels.hashCode()}"
+    }
+
+    /** Waits until the screen differs from `before`, or the timeout passes. Returns true if it changed. */
+    private suspend fun waitForChange(before: String, timeoutMs: Long = 1500L): Boolean {
+        var waited = 0L
+        while (waited < timeoutMs) {
+            delay(150L)
+            waited += 150L
+            if (screenSignature() != before) return true
+        }
+        return false
+    }
 
     private fun cellToXY(cell: String, w: Int, h: Int): Pair<Int, Int>? {
         val c = cell.trim().uppercase()
@@ -231,8 +253,8 @@ Rules:
         var steps = resume?.stepsUsed ?: 0
         var confirmedAction: Pending? = resume
         val started = System.currentTimeMillis()
-        var lastKey = ""
-        var repeats = 0
+        var noChangeStreak = 0
+        val sentTexts = HashSet<String>()
         val (screenW, screenH) = PhoneControl.screenSize() ?: (1080 to 2400)
 
         chatVisible(false)
@@ -319,10 +341,7 @@ Rules:
 
                 Log.d(TAG, "step=$steps act=${a.doWhat} id=${a.id} x=${a.x} y=${a.y} pkg=$pkg items=${items.size}")
 
-                val key = "$pkg|${items.joinToString(",") { it.label }.hashCode()}|${a.doWhat}|${a.id}|${a.x}|${a.y}|${a.text}"
-                repeats = if (key == lastKey) repeats + 1 else 0
-                lastKey = key
-                if (repeats >= 4) return "i'm going in circles, choom. ${summary(log)}"
+                val before = screenSignature()
 
                 when (a.doWhat) {
                     "done" -> return a.say ?: "done."
@@ -465,7 +484,17 @@ Rules:
                     else -> log.add("unknown action")
                 }
                 steps++
-                delay(300)
+                // Let the screen settle, then check that the action did something.
+                val changed = waitForChange(before)
+                if (changed) {
+                    noChangeStreak = 0
+                } else {
+                    noChangeStreak++
+                    log.add("no change on screen")
+                    if (noChangeStreak >= 2) {
+                        return "nothing changed on screen after two tries, so I stopped. ${summary(log)}"
+                    }
+                }
             }
             return "that took too many steps, choom. ${summary(log)}"
         } finally {
