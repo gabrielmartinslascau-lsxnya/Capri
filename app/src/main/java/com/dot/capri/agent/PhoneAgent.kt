@@ -85,6 +85,7 @@ Reply with ONLY a JSON object. Actions:
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why you can't do it"}
 Critical Instructions:
+- CARD & GAME ITEM PLACEMENT (e.g. Plants vs Zombies): To pick up and plant an item/card, use "swipe" to drag from the seed packet cell to the target lawn cell (e.g. {"do":"swipe","cell":"A1","cell2":"C4"}), OR tap the seed card cell first, then tap the target lawn cell.
 - TASK COMPLETION: Check SCREENSHOT and SCREEN ELEMENTS carefully. If the user's goal is ALREADY ACCOMPLISHED on screen (e.g. app is opened, page is reached, text is entered, action completed), output {"do":"done","say":"short summary"} IMMEDIATELY. Do NOT repeat actions after accomplishing the task!
 - NO REPEATING ACTIONS: Never re-tap the same button or re-type the same text if the action has already succeeded or is visible on screen.
 - DO NOT GIVE UP RANDOMLY: Never call "fail" simply because a transition is slow, an app is opening, or a target isn't on screen immediately. If the screen is loading or updating, output {"do":"wait"}. If an element is off-screen, scroll or navigate to find it.
@@ -541,6 +542,9 @@ Critical Instructions:
                 }
                 steps++
                 // Let the screen settle, then check that the action did something.
+                if (items.size < 5) {
+                    delay(400) // Allow game frame animations/renders to settle before taking fresh screenshot
+                }
                 val isContinuousAction = a.doWhat in setOf("hold", "long_press", "swipe", "scroll", "multitap", "multi_touch", "wait")
                 val changed = waitForChange(before)
                 if (changed || isContinuousAction) {
