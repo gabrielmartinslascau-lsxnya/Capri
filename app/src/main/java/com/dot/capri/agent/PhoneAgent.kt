@@ -491,7 +491,7 @@ Critical Instructions:
                     }
                     "hold" -> {
                         CapriCursor.setStatus("holding continuously...")
-                        val duration = a.durationMs ?: 3000L
+                        val duration = a.durationMs ?: 5000L
                         val item = items.firstOrNull { it.id == a.id }
                         val ok = when {
                             item != null -> PhoneControl.hold(item, duration)

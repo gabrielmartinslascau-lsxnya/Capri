@@ -13,4 +13,5 @@
 - [x] Task 13 (`v10.28`): LLM Multi-Cursor Prompt Awareness & Default Dual-Cursor Startup
 - [x] Task 14 (`v10.29`): Robust Stop Button Touch/Click Handling & Absolute Screen Cursor Alignment
 - [x] Task 15 (`v10.30`): Landscape Window Inset Alignment & 20px Touch Slop Tolerance for Small Buttons
+- [x] Task 16 (`v10.31`): Cursor Right-Shift Alignment Correction (`-12f`) & Extended 5000ms Default Hold Duration
 - [x] Build and verify (`app:assembleDebug`)

@@ -269,7 +269,7 @@ object CapriCursor {
         c.x = x
         c.y = y
         val half = sizePx / 2f
-        c.view.translationX = x - half - originX
+        c.view.translationX = x - half - originX - 12f
         c.view.translationY = y - half - originY
     }
 
