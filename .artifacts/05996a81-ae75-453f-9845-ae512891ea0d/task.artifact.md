@@ -7,4 +7,5 @@
 - [x] Task 7 (`v10.22`): Anti-Premature GiveUp & Strict No-Guessing Safeguards in PhoneAgent
 - [x] Task 8 (`v10.23`): Sustained Holds & Bypassing `noChangeStreak` for Continuous Actions
 - [x] Task 9 (`v10.24`): Infinite Task Loop (`while (!CapriCursor.cancelled)`) & Chunked Indefinite Hold Support
+- [x] Task 10 (`v10.25`): Precise Millisecond & Adaptive Visual Hold Precision
 - [x] Build and verify (`app:assembleDebug`)
