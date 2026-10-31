@@ -16,7 +16,7 @@ import org.json.JSONObject
 object PhoneAgent {
 
     private const val TAG = "CAPRI_AGENT"
-    private const val TOTAL_TIMEOUT_MS = 180_000L
+
 
     private val RISKY = Regex(
         "\\b(send|pay|buy|purchase|order|checkout|delete|remove|erase|reset|confirm|submit|post|publish|transfer|uninstall|sign out|log out|logout)\\b",
@@ -252,7 +252,6 @@ Critical Instructions:
         val log = ArrayList<String>(resume?.log ?: emptyList())
         var steps = resume?.stepsUsed ?: 0
         var confirmedAction: Pending? = resume
-        val started = System.currentTimeMillis()
         var noChangeStreak = 0
         val sentTexts = HashSet<String>()
         val (screenW, screenH) = PhoneControl.screenSize() ?: (1080 to 2400)
@@ -262,13 +261,9 @@ Critical Instructions:
         delay(250)
         var failStreak = 0
         var plan: String? = null
-        val maxSteps = if (useApi(context)) 18 else 10   // allow sufficient steps to navigate & settle
 
         try {
-            while (steps < maxSteps) {
-                if (CapriCursor.cancelled) return "stopped. ${summary(log)}"
-                if (System.currentTimeMillis() - started > TOTAL_TIMEOUT_MS) return "ran out of time. ${summary(log)}"
-
+            while (!CapriCursor.cancelled) {
                 val root = waitForRoot() ?: return "i can't see an app to work in, choom. ${summary(log)}"
                 val pkg = root.packageName?.toString().orEmpty()
                 if (pkg in BLOCKED_PACKAGES) return "i keep my hands off that app, choom."
