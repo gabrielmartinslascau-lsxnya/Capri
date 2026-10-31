@@ -105,11 +105,11 @@ Critical Instructions:
     }
 
     /** Waits until the screen differs from `before`, or the timeout passes. Returns true if it changed. */
-    private suspend fun waitForChange(before: String, timeoutMs: Long = 1500L): Boolean {
+    private suspend fun waitForChange(before: String, timeoutMs: Long = 300L): Boolean {
         var waited = 0L
         while (waited < timeoutMs) {
-            delay(150L)
-            waited += 150L
+            delay(80L)
+            waited += 80L
             if (screenSignature() != before) return true
         }
         return false
@@ -120,7 +120,11 @@ Critical Instructions:
         val col = c.firstOrNull()?.let { it - 'A' } ?: return null
         val row = c.drop(1).toIntOrNull()?.minus(1) ?: return null
         if (col !in 0..5 || row !in 0..9) return null
-        return Pair(((col + 0.5f) * w / 6f).toInt(), ((row + 0.5f) * h / 10f).toInt())
+
+        val (screenW, screenH) = PhoneControl.screenSize() ?: (w to h)
+        val realX = ((col + 0.5f) * screenW / 6f).toInt()
+        val realY = ((row + 0.5f) * screenH / 10f).toInt()
+        return Pair(realX, realY)
     }
 
     private fun annotate(bytes: ByteArray?): ByteArray? {
@@ -169,7 +173,7 @@ Critical Instructions:
             }
         }
         val out = java.io.ByteArrayOutputStream()
-        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, out)
         return out.toByteArray()
     }
 

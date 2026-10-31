@@ -67,8 +67,19 @@ class CapriAccessibilityService : AccessibilityService() {
                             val mutableBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
                             hwBuffer.close()
                             if (mutableBitmap != null) {
+                                val maxDim = 960
+                                val srcW = mutableBitmap.width
+                                val srcH = mutableBitmap.height
+                                val scaledBitmap = if (srcW > maxDim || srcH > maxDim) {
+                                    val scale = maxDim.toFloat() / Math.max(srcW, srcH)
+                                    val newW = (srcW * scale).toInt()
+                                    val newH = (srcH * scale).toInt()
+                                    Bitmap.createScaledBitmap(mutableBitmap, newW, newH, true)
+                                } else {
+                                    mutableBitmap
+                                }
                                 val stream = ByteArrayOutputStream()
-                                mutableBitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+                                scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream)
                                 continuation.resume(stream.toByteArray())
                             } else {
                                 continuation.resume(null)

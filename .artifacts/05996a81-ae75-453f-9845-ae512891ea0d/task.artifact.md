@@ -16,4 +16,5 @@
 - [x] Task 16 (`v10.31`): Cursor Right-Shift Alignment Correction (`-12f`) & Extended 5000ms Default Hold Duration
 - [x] Task 17 (`v10.32`): Removal of Static-Screen Abort Error (`"nothing changed on screen so I stopped"`)
 - [x] Task 18 (`v10.33`): High-Contrast Grid Badges, Anti-Repetition Rules, & Native Double Tap Action Support
+- [x] Task 19 (`v10.34`): Fast 960px In-Memory Scaling, 70% Fast JPEG Compression, & 300ms Reduced Settlement Window
 - [x] Build and verify (`app:assembleDebug`)
