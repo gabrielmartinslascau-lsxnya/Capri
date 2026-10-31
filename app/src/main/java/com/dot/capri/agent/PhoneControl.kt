@@ -361,7 +361,7 @@ object PhoneControl {
     }
 
     /** Puts `text` into a field (replaces what is there) and automatically hits enter/submit if possible. */
-    suspend fun typeInto(context: Context, item: UiItem, text: String): Boolean {
+    suspend fun typeInto(context: Context, item: UiItem, text: String, submit: Boolean = true): Boolean {
         if (!MainActivity.isAllowTyping(context)) return false
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
@@ -373,7 +373,9 @@ object PhoneControl {
         }
         val ok = item.node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
         delay(300)
-        submitTypedText(context, item)
+        if (submit) {
+            submitTypedText(context, item)
+        }
         return ok
     }
 

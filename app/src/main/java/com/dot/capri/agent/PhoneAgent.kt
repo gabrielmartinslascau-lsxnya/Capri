@@ -414,11 +414,19 @@ Rules:
                         CapriCursor.setStatus("typing...")
                         val item = items.firstOrNull { it.id == a.id }
                         val text = a.text
-                        if (item == null || text == null) {
+                        if (item == null || text.isNullOrBlank()) {
                             log.add("type: bad target")
+                        } else if (!sentTexts.add(text.lowercase())) {
+                            // Already typed this exact text in this task. Don't send it again.
+                            log.add("refused to repeat text already typed")
                         } else {
-                            val ok = PhoneControl.typeInto(context, item, text)
-                            log.add("glided cursor to (${item.cx}, ${item.cy}) & typed into ${item.label}" + if (ok) "" else " (failed)")
+                            // Only press Enter (send) when the user's own goal contains this text.
+                            // Otherwise the text is typed and left for you to send.
+                            val submit = goal.contains(text, ignoreCase = true)
+                            val ok = PhoneControl.typeInto(context, item, text, submit)
+                            log.add("typed into ${item.label}" +
+                                    (if (submit) " and sent" else " (not sent)") +
+                                    if (ok) "" else " (failed)")
                         }
                     }
                     "submit" -> {
