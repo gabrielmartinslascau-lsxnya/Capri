@@ -15,7 +15,11 @@ import java.net.URL
 object FastModelClient {
 
     private const val TAG = "CAPRI_FAST_MODEL"
-    private const val REPO_BASE = "https://huggingface.co/showlab/ShowUI-2B/resolve/main/"
+    private val REPO_BASES = listOf(
+        "https://huggingface.co/ShowUI/ShowUI-2B/resolve/main/",
+        "https://huggingface.co/showlab/ShowUI-2B/resolve/main/",
+        "https://huggingface.co/ShowUI/showui-2b/resolve/main/"
+    )
     private val TARGET_FILES = listOf("model.safetensors", "config.json", "preprocessor_config.json")
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -60,74 +64,99 @@ object FastModelClient {
                         onProgress?.invoke(((index * 100) / totalFiles), "Downloading $fileName (${index + 1}/$totalFiles)...")
                     }
 
-                    var url = URL(REPO_BASE + fileName)
-                    var response: HttpURLConnection? = null
-                    var hops = 0
+                    var success = false
+                    var lastHttpCode = -1
 
-                    while (response == null) {
-                        val c = (url.openConnection() as HttpURLConnection).apply {
-                            instanceFollowRedirects = false
-                            connectTimeout = 15_000
-                            readTimeout = 60_000
-                            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    for (base in REPO_BASES) {
+                        var url = URL(base + fileName)
+                        var response: HttpURLConnection? = null
+                        var hops = 0
+                        var failed = false
+
+                        while (response == null && !failed) {
+                            try {
+                                val c = (url.openConnection() as HttpURLConnection).apply {
+                                    instanceFollowRedirects = false
+                                    connectTimeout = 15_000
+                                    readTimeout = 60_000
+                                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                }
+                                val code = c.responseCode
+                                lastHttpCode = code
+                                when (code) {
+                                    in 300..399 -> {
+                                        val loc = c.getHeaderField("Location")
+                                        if (loc == null || ++hops > 6) {
+                                            c.disconnect()
+                                            failed = true
+                                        } else {
+                                            url = URL(url, loc)
+                                            c.disconnect()
+                                        }
+                                    }
+                                    in 200..299 -> response = c
+                                    else -> {
+                                        val errBody = try { c.errorStream?.bufferedReader()?.use { it.readText() } ?: "" } catch (_: Exception) { "" }
+                                        Log.e(TAG, "HTTP $code for $url: $errBody")
+                                        c.disconnect()
+                                        failed = true
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Connection exception for $url", e)
+                                failed = true
+                            }
                         }
-                        when (val code = c.responseCode) {
-                            in 300..399 -> {
-                                val loc = c.getHeaderField("Location")
-                                if (loc == null || ++hops > 6) {
+
+                        if (response != null) {
+                            val resp = response
+                            val fileTotal = resp.contentLengthLong
+                            var done = 0L
+
+                            try {
+                                resp.inputStream.use { input ->
+                                    FileOutputStream(tempFile).use { out ->
+                                        val buf = ByteArray(64 * 1024)
+                                        while (true) {
+                                            val n = input.read(buf)
+                                            if (n == -1) break
+                                            out.write(buf, 0, n)
+                                            done += n
+                                            if (fileTotal > 0) {
+                                                val filePct = ((done * 100) / fileTotal).toInt()
+                                                val overallPct = (((index * 100) + filePct) / totalFiles).coerceIn(0, 99)
+                                                withContext(Dispatchers.Main) {
+                                                    onProgress?.invoke(overallPct, "Downloading $fileName ($filePct%)...")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (tempFile.length() <= 0) {
                                     tempFile.delete()
-                                    finish(false, "Download failed: bad redirect for $fileName (HTTP $code).")
+                                    continue
+                                }
+                                if (destFile.exists()) destFile.delete()
+                                if (!tempFile.renameTo(destFile)) {
+                                    finish(false, "Failed to save $fileName.")
                                     return@launch
                                 }
-                                url = URL(url, loc)
-                                c.disconnect()
-                            }
-                            in 200..299 -> response = c
-                            else -> {
+                                success = true
+                                break
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Read/write error for $fileName", e)
                                 tempFile.delete()
-                                c.disconnect()
-                                finish(false, "Download failed for $fileName (HTTP $code).")
-                                return@launch
+                            } finally {
+                                resp.disconnect()
                             }
                         }
                     }
 
-                    val resp = response
-                    val fileTotal = resp.contentLengthLong
-                    var done = 0L
-
-                    try {
-                        resp.inputStream.use { input ->
-                            FileOutputStream(tempFile).use { out ->
-                                val buf = ByteArray(64 * 1024)
-                                while (true) {
-                                    val n = input.read(buf)
-                                    if (n == -1) break
-                                    out.write(buf, 0, n)
-                                    done += n
-                                    if (fileTotal > 0) {
-                                        val filePct = ((done * 100) / fileTotal).toInt()
-                                        val overallPct = (((index * 100) + filePct) / totalFiles).coerceIn(0, 99)
-                                        withContext(Dispatchers.Main) {
-                                            onProgress?.invoke(overallPct, "Downloading $fileName ($filePct%)...")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (tempFile.length() <= 0) {
-                            tempFile.delete()
-                            finish(false, "File $fileName was empty.")
-                            return@launch
-                        }
-                        if (destFile.exists()) destFile.delete()
-                        if (!tempFile.renameTo(destFile)) {
-                            finish(false, "Failed to save $fileName.")
-                            return@launch
-                        }
-                    } finally {
-                        resp.disconnect()
+                    if (!success) {
+                        tempFile.delete()
+                        finish(false, "Download failed for $fileName (HTTP $lastHttpCode). Check Logcat tag CAPRI_FAST_MODEL.")
+                        return@launch
                     }
                 }
 
