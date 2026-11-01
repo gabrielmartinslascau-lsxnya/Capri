@@ -88,12 +88,14 @@ object PhoneControl {
         return realScreenBounds(s)
     }
 
+    /**
+     * Keeps a point inside the screen. Only a small margin is kept clear, so the point that
+     * Capri taps is the same point the ring and the red marker show.
+     */
     fun clampToScreen(x: Int, y: Int): Pair<Int, Int> {
         val s = screenSize() ?: return Pair(x, y)
-        val topMargin = (s.second * 0.08f).toInt().coerceAtLeast(100)
-        val clampedX = x.coerceIn(0, s.first - 1)
-        val clampedY = y.coerceIn(topMargin, (s.second - 100).coerceAtLeast(topMargin + 100))
-        return Pair(clampedX, clampedY)
+        val edge = 48
+        return Pair(x.coerceIn(edge, s.first - edge), y.coerceIn(edge, s.second - edge))
     }
 
     // Windows that are never the app the user is working in.

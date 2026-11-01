@@ -65,7 +65,7 @@ object PhoneAgent {
 
     private val SYSTEM = """
 You are Capri, an AI agent controlling an Android phone. You perceive the screen through the annotated grid screenshot.
-Columns are A to F (left to right), rows 1 to 10 (top to bottom). The screenshot also features a 0.0 to 1.0 percentage coordinate overlay (yellow reference lines and axis labels at 0.2, 0.4, 0.6, 0.8). You can use grid cells (cell/cell2) or specify exact pixel/percentage coordinates (x, y, x2, y2) by estimating from the overlay axes for precise grounding.
+The GRID line in each prompt gives the exact columns and rows for this screen. Use only those. The screenshot also features a 0.0 to 1.0 percentage coordinate overlay (yellow reference lines and axis labels at 0.2, 0.4, 0.6, 0.8). You can use grid cells (cell/cell2) or specify exact pixel/percentage coordinates (x, y, x2, y2) by estimating from the overlay axes for precise grounding.
 
 Actions (reply with ONLY a JSON object):
 {"do":"tap","cell":"C4"}                     tap grid cell C4 (or "id":N if element is in list)
@@ -144,15 +144,8 @@ Rules:
     }
 
     private fun cellToXY(cell: String, w: Int, h: Int): Pair<Int, Int>? {
-        val c = cell.trim().uppercase()
-        val col = c.firstOrNull()?.let { it - 'A' } ?: return null
-        val row = c.drop(1).toIntOrNull()?.minus(1) ?: return null
-        if (col !in 0..5 || row !in 0..9) return null
-
-        val (screenW, screenH) = PhoneControl.screenSize() ?: (w to h)
-        val realX = ((col + 0.5f) * screenW / 6f).toInt()
-        val realY = ((row + 0.5f) * screenH / 10f).toInt()
-        return Pair(realX, realY)
+        val (sw, sh) = PhoneControl.screenSize() ?: (w to h)
+        return GridSpec.centre(cell, sw, sh)
     }
 
     private fun annotate(bytes: ByteArray?): ByteArray? {
@@ -175,14 +168,15 @@ Rules:
 
         val w = bmp.width.toFloat()
         val h = bmp.height.toFloat()
+        val g = GridSpec.of(w.toInt(), h.toInt())
 
-        for (col in 0..6) {
-            val x = w * col / 6f
+        for (col in 0..g.cols) {
+            val x = w * col / g.cols.toFloat()
             canvas.drawLine(x + 1f, 0f, x + 1f, h, shadowLine)
             canvas.drawLine(x, 0f, x, h, cyanLine)
         }
-        for (row in 0..10) {
-            val y = h * row / 10f
+        for (row in 0..g.rows) {
+            val y = h * row / g.rows.toFloat()
             canvas.drawLine(0f, y + 1f, w, y + 1f, shadowLine)
             canvas.drawLine(0f, y, w, y, cyanLine)
         }
@@ -223,11 +217,11 @@ Rules:
         }
 
         val badgePadding = 6f
-        for (col in 0..5) {
-            for (row in 0..9) {
+        for (col in 0 until g.cols) {
+            for (row in 0 until g.rows) {
                 val tag = "${'A' + col}${row + 1}"
-                val x = w * col / 6f + 8f
-                val y = h * row / 10f + textPaint.textSize + 6f
+                val x = w * col / g.cols.toFloat() + 8f
+                val y = h * row / g.rows.toFloat() + textPaint.textSize + 6f
                 val tw = textPaint.measureText(tag)
                 val rect = android.graphics.RectF(x - 4f, y - textPaint.textSize - 2f, x + tw + badgePadding, y + badgePadding)
                 canvas.drawRoundRect(rect, 6f, 6f, bgBadge)
@@ -346,6 +340,7 @@ Rules:
         val screen = items.joinToString("\n") { "[${it.id}] ${it.kind} \"${it.label}\"" }
         val prompt = "TASK: $goal\n" +
                 "SCREEN SIZE: ${PhoneControl.screenSize()?.let { "${it.first}x${it.second}" } ?: "unknown"}\n" +
+                "GRID: ${PhoneControl.screenSize()?.let { GridSpec.describe(it.first, it.second) } ?: "unknown"}\n" +
                 "SCREENSHOT: ${if (shot != null) "attached, grid shown" else "none, use element ids"}\n" +
                 "CONTROL REGIONS: ${ControlRegions.names(context).ifEmpty { "none calibrated" }}\n" +
                 "STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(8).joinToString(" > ")}\n" +
@@ -453,8 +448,11 @@ Rules:
 
                 Log.d(TAG, "step=$steps act=${a.doWhat} id=${a.id} x=${a.x} y=${a.y} pkg=$pkg items=${items.size}")
                 if (DevOverlay.isEnabled(context)) {
-                    val mx = a.x ?: targetItem?.cx
-                    val my = a.y ?: targetItem?.cy
+                    val rawMx = a.x ?: targetItem?.cx
+                    val rawMy = a.y ?: targetItem?.cy
+                    val marked = if (rawMx != null && rawMy != null) PhoneControl.clampToScreen(rawMx, rawMy) else null
+                    val mx = marked?.first
+                    val my = marked?.second
                     if (mx != null && my != null) {
                         val size = PhoneControl.screenSize()
                         val cell = size?.let { (w, h) -> DevOverlay.cellName(mx, my, w, h) } ?: "?"
@@ -491,18 +489,11 @@ Rules:
                     "tap" -> {
                         CapriCursor.setStatus("tapping...")
                         if (a.x != null && a.y != null) {
-                            val (screenW, screenH) = PhoneControl.screenSize() ?: (lastShotWidth to lastShotHeight)
-                            val edge = a.x <= 0 || a.y <= 0 ||
-                                a.x >= screenW - 1 || a.y >= screenH - 1
-                            if (edge) {
-                                log.add("refused an edge tap at (${a.x}, ${a.y})")
-                                steps++
-                                continue
-                            }
-                            CapriCursor.moveTo(a.x, a.y)
+                            val (cx, cy) = PhoneControl.clampToScreen(a.x, a.y)
+                            CapriCursor.moveTo(cx, cy)
                             CapriCursor.pulse()
-                            val ok = PhoneControl.tapAt(a.x, a.y)
-                            log.add("glided cursor to (${a.x}, ${a.y}) & tapped pixel" + if (ok) "" else " (failed)")
+                            val ok = PhoneControl.tapAt(cx, cy)
+                            log.add("tapped ($cx, $cy)" + if (a.x != cx || a.y != cy) " (asked for ${a.x}, ${a.y})" else "" + if (ok) "" else " (failed)")
                         } else {
                             val item = items.firstOrNull { it.id == a.id }
                             if (item == null) {

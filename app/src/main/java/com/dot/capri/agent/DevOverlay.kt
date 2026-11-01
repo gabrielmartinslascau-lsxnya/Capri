@@ -93,21 +93,13 @@ object DevOverlay {
         }
     }
 
-    /** The cell name for a pixel, using the same 6 x 10 grid the model sees. */
-    fun cellName(x: Int, y: Int, w: Int, h: Int): String {
-        val col = (x * 6 / w).coerceIn(0, 5)
-        val row = (y * 10 / h).coerceIn(0, 9)
-        return "${'A' + col}${row + 1}"
-    }
+    /** The cell name for a pixel, using the same grid as GridSpec. */
+    fun cellName(x: Int, y: Int, w: Int, h: Int): String =
+        GridSpec.nameOf(x, y, w, h)
 
     /** Centre pixel of a cell such as "C4", or null if the cell doesn't exist. */
-    fun cellCentre(cell: String, w: Int, h: Int): Pair<Int, Int>? {
-        val c = cell.trim().uppercase()
-        val col = c.firstOrNull()?.let { it - 'A' } ?: return null
-        val row = c.drop(1).toIntOrNull()?.minus(1) ?: return null
-        if (col !in 0..5 || row !in 0..9) return null
-        return Pair(((col + 0.5f) * w / 6f).toInt(), ((row + 0.5f) * h / 10f).toInt())
-    }
+    fun cellCentre(cell: String, w: Int, h: Int): Pair<Int, Int>? =
+        GridSpec.centre(cell, w, h)
 
     private class GridView(context: Context) : View(context) {
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -141,19 +133,20 @@ object DevOverlay {
         override fun onDraw(canvas: Canvas) {
             val w = width.toFloat()
             val h = height.toFloat()
+            val g = GridSpec.of(w.toInt(), h.toInt())
 
-            // Grid lines: 6 columns, 10 rows, the same as the model's grid.
-            for (c in 0..6) {
-                val x = w * c / 6f
+            // Grid lines: dynamic cols x rows based on GridSpec.
+            for (c in 0..g.cols) {
+                val x = w * c / g.cols.toFloat()
                 canvas.drawLine(x, 0f, x, h, line)
             }
-            for (r in 0..10) {
-                val y = h * r / 10f
+            for (r in 0..g.rows) {
+                val y = h * r / g.rows.toFloat()
                 canvas.drawLine(0f, y, w, y, line)
             }
-            for (c in 0..5) {
-                for (r in 0..9) {
-                    canvas.drawText("${'A' + c}${r + 1}", w * c / 6f + 8f, h * r / 10f + 30f, cellText)
+            for (c in 0 until g.cols) {
+                for (r in 0 until g.rows) {
+                    canvas.drawText("${'A' + c}${r + 1}", w * c / g.cols.toFloat() + 8f, h * r / g.rows.toFloat() + 30f, cellText)
                 }
             }
 
