@@ -229,38 +229,17 @@
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
 
-        <LinearLayout
+        <Button
+            android:id="@+id/btn_download_fast_model"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_import_fast_model"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="4dp"
-                android:backgroundTint="@color/input_bg"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:text="Import ShowUI-2B"
-                android:textColor="@color/text_primary"
-                android:textSize="11sp" />
-
-            <Button
-                android:id="@+id/btn_download_fast_model"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="4dp"
-                android:backgroundTint="@color/input_bg"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:text="Auto-Download Fast Model"
-                android:textColor="@color/text_primary"
-                android:textSize="11sp" />
-        </LinearLayout>
+            android:backgroundTint="@color/input_bg"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="Download Fast Model (ShowUI-2B)"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/tv_fast_model_status"

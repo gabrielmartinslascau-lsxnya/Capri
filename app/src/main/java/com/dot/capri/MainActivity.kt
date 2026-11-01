@@ -1,7 +1,6 @@
 package com.dot.capri
 
 import com.dot.capri.agent.DevOverlay
-import java.io.File
 
 import android.Manifest
 import android.content.Context
@@ -112,11 +111,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val importFastModelLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            importFastModelUri(uri)
-        }
-    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -263,9 +258,7 @@ class MainActivity : AppCompatActivity() {
             importLocalModelLauncher.launch("*/*")
         }
 
-        findViewById<Button>(R.id.btn_import_fast_model)?.setOnClickListener {
-            importFastModelLauncher.launch("*/*")
-        }
+
 
         val btnDownloadLocalLlm = findViewById<Button>(R.id.btn_download_local_llm)
         btnDownloadLocalLlm?.setOnClickListener {
@@ -611,33 +604,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun importFastModelUri(uri: Uri) {
-        val progressToast = Toast.makeText(this, "Importing Fast Model file...", Toast.LENGTH_LONG)
-        progressToast.show()
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            try {
-                contentResolver.openInputStream(uri)?.use { input ->
-                    val targetDir = com.dot.capri.ai.FastModelClient.modelDirectory(this@MainActivity)
-                    targetDir.mkdirs()
-                    val fileName = uri.lastPathSegment?.substringAfterLast('/')?.ifEmpty { null } ?: "model.safetensors"
-                    val targetFile = File(targetDir, fileName)
-                    if (targetFile.exists()) targetFile.delete()
-                    targetFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Fast Model file imported successfully!", Toast.LENGTH_SHORT).show()
-                    updateFastModelStatus()
-                }
-            } catch (e: Exception) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Failed to import file: ${e.message}", Toast.LENGTH_LONG).show()
-                    updateFastModelStatus()
-                }
-            }
-        }
-    }
+
 
     private fun updateLocalLlmStatus() {
         val tvStatus = findViewById<TextView>(R.id.tv_local_llm_status) ?: return
