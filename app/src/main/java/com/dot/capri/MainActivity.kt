@@ -233,6 +233,17 @@ class MainActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
+        val hfTokenInput = findViewById<EditText>(R.id.input_hf_token)
+        hfTokenInput?.setText(prefs.getString("user_hf_token", ""))
+        hfTokenInput?.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val token = s?.toString()?.trim() ?: ""
+                prefs.edit().putString("user_hf_token", token).apply()
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
         // Local On-Device LLM Controls
         val switchLocalLlm = findViewById<SwitchCompat>(R.id.switch_local_llm)
         switchLocalLlm?.isChecked = prefs.getBoolean(com.dot.capri.ai.OnDeviceAiClient.KEY_LOCAL_LLM_ENABLED, true)

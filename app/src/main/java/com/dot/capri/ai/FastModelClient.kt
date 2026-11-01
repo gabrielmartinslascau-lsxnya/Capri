@@ -75,13 +75,17 @@ object FastModelClient {
 
                         while (response == null && !failed) {
                             try {
-                                val c = (url.openConnection() as HttpURLConnection).apply {
-                                    instanceFollowRedirects = false
-                                    connectTimeout = 15_000
-                                    readTimeout = 60_000
-                                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            val hfToken = context.getSharedPreferences("capri_prefs", Context.MODE_PRIVATE).getString("user_hf_token", "")?.trim() ?: ""
+                            val c = (url.openConnection() as HttpURLConnection).apply {
+                                instanceFollowRedirects = false
+                                connectTimeout = 15_000
+                                readTimeout = 60_000
+                                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                if (hfToken.isNotBlank()) {
+                                    setRequestProperty("Authorization", "Bearer $hfToken")
                                 }
-                                val code = c.responseCode
+                            }
+                            val code = c.responseCode
                                 lastHttpCode = code
                                 when (code) {
                                     in 300..399 -> {
