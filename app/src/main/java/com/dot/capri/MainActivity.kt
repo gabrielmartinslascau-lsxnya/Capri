@@ -263,6 +263,25 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        val btnDownloadFastModel = findViewById<Button>(R.id.btn_download_fast_model)
+        btnDownloadFastModel?.setOnClickListener {
+            btnDownloadFastModel.isEnabled = false
+            btnDownloadFastModel.text = "Downloading 0%..."
+            com.dot.capri.ai.FastModelClient.downloadFastModel(
+                context = this,
+                onProgress = { _, statusMsg ->
+                    btnDownloadFastModel.text = statusMsg
+                },
+                onComplete = { success, message ->
+                    btnDownloadFastModel.isEnabled = true
+                    btnDownloadFastModel.text = "Download Fast Model (ShowUI-2B)"
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    updateFastModelStatus()
+                }
+            )
+        }
+        updateFastModelStatus()
+
         // Force Mood Spinner
         val forcedMoodSpinner = findViewById<Spinner>(R.id.spinner_forced_mood)
         val moodList = listOf("None", "Judging", "Pleased", "Bored", "Neutral", "Lonely")
@@ -500,7 +519,13 @@ class MainActivity : AppCompatActivity() {
         updateUsageStatsButton(usageStatsBtn)
         updateDebugTriggersInfo()
         updateLocalLlmStatus()
+        updateFastModelStatus()
         updateSavedMacrosList()
+    }
+
+    private fun updateFastModelStatus() {
+        val tvStatus = findViewById<TextView>(R.id.tv_fast_model_status) ?: return
+        tvStatus.text = com.dot.capri.ai.FastModelClient.statusLine(this)
     }
 
     private fun updateSavedMacrosList() {
