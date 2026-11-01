@@ -85,7 +85,10 @@ Actions (reply with ONLY a JSON object):
 {"do":"fail","say":"why you can't do it"}
 
 Direct Instructions:
-- Be decisive. Act immediately based on what is visible in the screenshot grid.
+- If SCREEN ELEMENTS contains the target, always tap it by id. Use a grid cell only when no element matches.
+- Only use a grid cell when the target is clearly visible inside that cell. Never guess a cell.
+- Columns A and F and rows 1 and 10 are the screen edges. Use them only when the target is there.
+- Be decisive, but look first: name the target in "label" before you act.
 - In games (like Plants vs Zombies or action games), use grid cells directly (e.g. swipe/drag plant card cell A1 to lawn cell C4, or tap card cell then tap lawn cell).
 - If the user's goal is accomplished, output {"do":"done","say":"..."} immediately. If a screen is loading or transitioning, output {"do":"wait"}.
 - Never repeat the exact same action if the result is already visible on screen.
@@ -280,10 +283,16 @@ Rules:
                 else -> cell2?.second
             }
 
-            val x = rawX?.let { (it * scaleX).toInt() }
-            val y = rawY?.let { (it * scaleY).toInt() }
-            val x2 = rawX2?.let { (it * scaleX).toInt() }
-            val y2 = rawY2?.let { (it * scaleY).toInt() }
+            // Cell values are already in real screen pixels, so they must not be scaled again.
+            // Only raw x/y and 0..1 percentages come from the screenshot and need scaling.
+            val xIsCell = !o.has("x") && !(rawDoubleX >= 0.0 && rawDoubleX <= 1.0)
+            val yIsCell = !o.has("y") && !(rawDoubleY >= 0.0 && rawDoubleY <= 1.0)
+            val x2IsCell = !o.has("x2") && !(rawDoubleX2 >= 0.0 && rawDoubleX2 <= 1.0)
+            val y2IsCell = !o.has("y2") && !(rawDoubleY2 >= 0.0 && rawDoubleY2 <= 1.0)
+            val x = rawX?.let { if (xIsCell) it else (it * scaleX).toInt() }
+            val y = rawY?.let { if (yIsCell) it else (it * scaleY).toInt() }
+            val x2 = rawX2?.let { if (x2IsCell) it else (it * scaleX).toInt() }
+            val y2 = rawY2?.let { if (y2IsCell) it else (it * scaleY).toInt() }
 
             val dur = if (o.has("duration_ms")) o.optLong("duration_ms") else if (o.has("duration")) o.optLong("duration") else null
             Act(
@@ -414,6 +423,7 @@ Rules:
                         continue
                     }
                     chosen = parseAct(reply, lastShotWidth, lastShotHeight)
+                    Log.d(TAG, "raw reply: ${reply.take(300)}")
                     if (chosen == null) {
                         Log.w(TAG, "unreadable reply: ${reply.take(120)}")
                         log.add("unreadable reply")
@@ -470,6 +480,14 @@ Rules:
                     "tap" -> {
                         CapriCursor.setStatus("tapping...")
                         if (a.x != null && a.y != null) {
+                            val (screenW, screenH) = PhoneControl.screenSize() ?: (lastShotWidth to lastShotHeight)
+                            val edge = a.x <= 0 || a.y <= 0 ||
+                                a.x >= screenW - 1 || a.y >= screenH - 1
+                            if (edge) {
+                                log.add("refused an edge tap at (${a.x}, ${a.y})")
+                                steps++
+                                continue
+                            }
                             CapriCursor.moveTo(a.x, a.y)
                             CapriCursor.pulse()
                             val ok = PhoneControl.tapAt(a.x, a.y)
