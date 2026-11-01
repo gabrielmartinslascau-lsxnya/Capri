@@ -411,6 +411,7 @@ class MainActivity : AppCompatActivity() {
                 requestOverlayPermission()
                 return@setOnClickListener
             }
+            com.dot.capri.agent.DevOverlay.preview(this)
             com.dot.capri.agent.CapriCursor.show(this)
             lifecycleScope.launch {
                 delay(300)
@@ -424,6 +425,9 @@ class MainActivity : AppCompatActivity() {
                 com.dot.capri.agent.CapriCursor.pulse()
                 delay(1500)
                 com.dot.capri.agent.CapriCursor.hide()
+                if (!com.dot.capri.agent.DevOverlay.isEnabled(this@MainActivity)) {
+                    com.dot.capri.agent.DevOverlay.stop()
+                }
             }
         }
 

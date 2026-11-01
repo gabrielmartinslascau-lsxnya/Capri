@@ -41,6 +41,12 @@ object DevOverlay {
         main.post { attach(app) }
     }
 
+    /** Previews the dev overlay grid immediately regardless of enabled preference. */
+    fun preview(context: Context) {
+        val app = context.applicationContext
+        main.post { attach(app) }
+    }
+
     fun stop() {
         main.post { detach() }
     }
