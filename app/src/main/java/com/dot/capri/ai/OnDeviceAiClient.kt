@@ -351,6 +351,7 @@ object OnDeviceAiClient {
             ?: throw IllegalStateException(lastError ?: "local model not ready")
 
         val history = if (systemOverride == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
+        val isTask = systemOverride != null
         val config = ConversationConfig(
             systemInstruction = Contents.of(systemOverride ?: buildSystemPrompt(context)),
             initialMessages = history.flatMap { (u, c) ->
@@ -359,9 +360,9 @@ object OnDeviceAiClient {
                     Message.model(c.take(MAX_HISTORY_CHARS))
                 )
             },
-            samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.9),
+            samplerConfig = SamplerConfig(topK = if (isTask) 10 else 40, topP = 0.9, temperature = if (isTask) 0.1 else 0.7),
             thinkingConfig = ThinkingConfig(enableThinking = false),
-            maxOutputToken = MAX_REPLY_TOKENS
+            maxOutputToken = if (isTask) 32 else MAX_REPLY_TOKENS
         )
 
         var imageFile: File? = null
@@ -376,12 +377,12 @@ object OnDeviceAiClient {
                         }
                         conversation.sendMessageAsync(
                             Contents.of(
-                                Content.Text(prompt.take(MAX_PROMPT_CHARS)),
+                                Content.Text(prompt.take(if (isTask) 1000 else MAX_PROMPT_CHARS)),
                                 Content.ImageFile(imageFile.absolutePath)
                             )
                         )
                     } else {
-                        conversation.sendMessageAsync(prompt.take(MAX_PROMPT_CHARS))
+                        conversation.sendMessageAsync(prompt.take(if (isTask) 1000 else MAX_PROMPT_CHARS))
                     }
                     flow.collect { sb.append(it.toString()) }
                 }
