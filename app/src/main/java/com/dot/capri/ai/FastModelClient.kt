@@ -16,11 +16,9 @@ object FastModelClient {
 
     private const val TAG = "CAPRI_FAST_MODEL"
     private val REPO_BASES = listOf(
+        "https://huggingface.co/HuggingFaceTB/SmolVLM-Instruct/resolve/main/",
         "https://huggingface.co/ShowUI/ShowUI-2B/resolve/main/",
-        "https://huggingface.co/showlab/ShowUI-2B/resolve/main/",
-        "https://huggingface.co/ShowUI/showui-2b/resolve/main/",
-        "https://huggingface.co/OpenGVLab/ShowUI-2B/resolve/main/",
-        "https://huggingface.co/showui-2b/resolve/main/"
+        "https://huggingface.co/showlab/ShowUI-2B/resolve/main/"
     )
     private val TARGET_FILES = listOf("model.safetensors", "config.json", "preprocessor_config.json")
 
