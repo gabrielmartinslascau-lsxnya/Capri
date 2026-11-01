@@ -681,7 +681,6 @@ Rules:
             }
             return "that took too many steps, choom. ${summary(log)}"
         } finally {
-            DevOverlay.stop()
             CapriCursor.hide()
             chatVisible(true)
         }

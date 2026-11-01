@@ -1,5 +1,7 @@
 package com.dot.capri
 
+import com.dot.capri.agent.DevOverlay
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -429,6 +431,21 @@ class MainActivity : AppCompatActivity() {
                     com.dot.capri.agent.DevOverlay.stop()
                 }
             }
+        }
+
+        val gridButton = findViewById<Button>(R.id.btn_toggle_grid)
+        fun refreshGridButton() {
+            gridButton?.text = if (DevOverlay.isEnabled(this)) "Hide coordinate grid" else "Show coordinate grid"
+        }
+        refreshGridButton()
+        gridButton?.setOnClickListener {
+            val turningOn = !DevOverlay.isEnabled(this)
+            if (turningOn && !Settings.canDrawOverlays(this)) {
+                requestOverlayPermission()
+                return@setOnClickListener
+            }
+            DevOverlay.setEnabled(this, turningOn)
+            refreshGridButton()
         }
 
         updateUsageStatsButton(usageStatsBtn)

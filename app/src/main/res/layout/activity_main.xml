@@ -398,6 +398,18 @@
             android:textColor="@color/text_primary"
             android:textSize="12sp" />
 
+        <Button
+            android:id="@+id/btn_toggle_grid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/input_bg"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="Show coordinate grid"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
         <!-- Saved Macros Dev Override -->
         <TextView
             android:layout_width="match_parent"
