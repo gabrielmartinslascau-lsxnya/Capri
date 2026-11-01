@@ -37,13 +37,13 @@ object OnDeviceAiClient {
     private const val EXPECTED_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
     private const val MIN_MODEL_BYTES = 5_000_000L
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
-    private const val PREFER_GPU = false                  // false to avoid OpenCL / status code 2 errors on unsupported GPU drivers
+    private const val PREFER_GPU = true                   // enabled for Snapdragon GPU/NPU hardware acceleration
     private const val IDLE_RELEASE_MS = 30 * 60 * 1000L   // keep the model warm for 30 idle minutes
     private const val GENERATION_TIMEOUT_MS = 60_000L
-    private const val HISTORY_TURNS = 3
-    private const val MAX_PROMPT_CHARS = 2000
-    private const val MAX_HISTORY_CHARS = 300
-    private const val MAX_REPLY_TOKENS = 120              // short replies = fast replies
+    private const val HISTORY_TURNS = 2                   // trimmed for speed
+    private const val MAX_PROMPT_CHARS = 1500             // trimmed for speed
+    private const val MAX_HISTORY_CHARS = 200
+    private const val MAX_REPLY_TOKENS = 64               // lightning-fast action JSON replies
 
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -98,8 +98,8 @@ object OnDeviceAiClient {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Shrinks a screenshot to a 768px JPEG so grid labels stay readable and fast. */
-    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 768): ByteArray {
+    /** Shrinks a screenshot to a 512px JPEG for ultra-fast on-device vision encoding. */
+    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 512): ByteArray {
         val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
         val scale = minOf(1f, maxSide.toFloat() / maxOf(src.width, src.height))
         val scaled = android.graphics.Bitmap.createScaledBitmap(
