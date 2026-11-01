@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -29,6 +30,8 @@ import kotlin.coroutines.resume
  * Uncluttered and optimized for single-cursor gaming and task agents.
  */
 object CapriCursor {
+
+    private const val TAG = "CAPRI_CURSOR"
 
     @Volatile
     var cancelled = false
@@ -144,11 +147,17 @@ object CapriCursor {
         val added = try {
             manager.addView(frame, paramsFor(preferred))
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add stage with type $preferred", e)
             false
         }
         if (!added && preferred != WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) {
-            try { manager.addView(frame, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)) } catch (_: Exception) { return }
+            try {
+                manager.addView(frame, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add stage with fallback TYPE_APPLICATION_OVERLAY", e)
+                return
+            }
         } else if (!added) {
             return
         }
@@ -261,8 +270,16 @@ object CapriCursor {
             x = (16 * density).toInt()
             y = (20 * density).toInt()
         }
-        try { manager.addView(row, paramsFor(preferred)) } catch (_: Exception) {
-            try { manager.addView(row, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)) } catch (_: Exception) { return }
+        try {
+            manager.addView(row, paramsFor(preferred))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add pill with type $preferred", e)
+            try {
+                manager.addView(row, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+            } catch (ex: Exception) {
+                Log.e(TAG, "Failed to add pill with fallback TYPE_APPLICATION_OVERLAY", ex)
+                return
+            }
         }
         pill = row
         statusTv = status

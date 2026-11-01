@@ -184,21 +184,39 @@ Rules:
             canvas.drawLine(0f, y, w, y, cyanLine)
         }
 
-        // Percentage coordinate overlay (0.0 to 1.0 at 0.2 intervals with thin blue lines & axis labels)
-        val percentPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF2196F3.toInt()
-            textSize = (bmp.height / 50f).coerceAtLeast(14f)
+        // Percentage coordinate overlay (0.0 to 1.0 at 0.2 intervals with high-contrast dual-layer lines & background badges)
+        val percentTextPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFFFFFF.toInt()
+            textSize = (bmp.height / 38f).coerceAtLeast(18f)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
-        val percentLine = android.graphics.Paint().apply { color = 0xAA2196F3.toInt(); strokeWidth = 1.0f }
+        val percentBgPaint = android.graphics.Paint().apply { color = 0xEE1565C0.toInt(); style = android.graphics.Paint.Style.FILL }
+        val percentLineShadow = android.graphics.Paint().apply { color = 0xAA000000.toInt(); strokeWidth = 4f }
+        val percentLineFg = android.graphics.Paint().apply { color = 0xFFFFEA00.toInt(); strokeWidth = 2.5f }
 
         for (p in listOf(0.2f, 0.4f, 0.6f, 0.8f)) {
             val px = w * p
             val py = h * p
-            canvas.drawLine(px, 0f, px, h, percentLine)
-            canvas.drawText(String.format(java.util.Locale.US, "%.1f", p), px + 4f, 25f, percentPaint)
-            canvas.drawLine(0f, py, w, py, percentLine)
-            canvas.drawText(String.format(java.util.Locale.US, "%.1f", p), 8f, py - 4f, percentPaint)
+            // Vertical line
+            canvas.drawLine(px + 1f, 0f, px + 1f, h, percentLineShadow)
+            canvas.drawLine(px, 0f, px, h, percentLineFg)
+
+            // Horizontal line
+            canvas.drawLine(0f, py + 1f, w, py + 1f, percentLineShadow)
+            canvas.drawLine(0f, py, w, py, percentLineFg)
+
+            // Text labels with background badges
+            val label = String.format(java.util.Locale.US, "%.1f", p)
+            val tw = percentTextPaint.measureText(label)
+            val th = percentTextPaint.textSize
+
+            val rectV = android.graphics.RectF(px - tw / 2f - 6f, 10f, px + tw / 2f + 6f, 10f + th + 8f)
+            canvas.drawRoundRect(rectV, 6f, 6f, percentBgPaint)
+            canvas.drawText(label, px - tw / 2f, 10f + th, percentTextPaint)
+
+            val rectH = android.graphics.RectF(10f, py - th / 2f - 4f, 10f + tw + 12f, py + th / 2f + 4f)
+            canvas.drawRoundRect(rectH, 6f, 6f, percentBgPaint)
+            canvas.drawText(label, 14f, py + th / 2f - 2f, percentTextPaint)
         }
 
         val badgePadding = 6f
@@ -236,10 +254,31 @@ Rules:
             val scaleX = screenW.toFloat() / w.toFloat()
             val scaleY = screenH.toFloat() / h.toFloat()
 
-            val rawX = if (o.has("x")) o.optInt("x") else cell1?.first
-            val rawY = if (o.has("y")) o.optInt("y") else cell1?.second
-            val rawX2 = if (o.has("x2")) o.optInt("x2") else cell2?.first
-            val rawY2 = if (o.has("y2")) o.optInt("y2") else cell2?.second
+            val rawDoubleX = if (o.has("x")) o.optDouble("x", -1.0) else -1.0
+            val rawDoubleY = if (o.has("y")) o.optDouble("y", -1.0) else -1.0
+            val rawDoubleX2 = if (o.has("x2")) o.optDouble("x2", -1.0) else -1.0
+            val rawDoubleY2 = if (o.has("y2")) o.optDouble("y2", -1.0) else -1.0
+
+            val rawX = when {
+                rawDoubleX >= 0.0 && rawDoubleX <= 1.0 -> (rawDoubleX * w).toInt()
+                o.has("x") -> o.optInt("x")
+                else -> cell1?.first
+            }
+            val rawY = when {
+                rawDoubleY >= 0.0 && rawDoubleY <= 1.0 -> (rawDoubleY * h).toInt()
+                o.has("y") -> o.optInt("y")
+                else -> cell1?.second
+            }
+            val rawX2 = when {
+                rawDoubleX2 >= 0.0 && rawDoubleX2 <= 1.0 -> (rawDoubleX2 * w).toInt()
+                o.has("x2") -> o.optInt("x2")
+                else -> cell2?.first
+            }
+            val rawY2 = when {
+                rawDoubleY2 >= 0.0 && rawDoubleY2 <= 1.0 -> (rawDoubleY2 * h).toInt()
+                o.has("y2") -> o.optInt("y2")
+                else -> cell2?.second
+            }
 
             val x = rawX?.let { (it * scaleX).toInt() }
             val y = rawY?.let { (it * scaleY).toInt() }

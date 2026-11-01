@@ -15,7 +15,7 @@ class GroqProvider(
 ) : LlmProvider {
 
     override val name: String = "Groq"
-    override val currentModel: String = modelOverride?.ifBlank { null } ?: "llama-3.2-11b-vision-preview"
+    override val currentModel: String = modelOverride?.ifBlank { null } ?: "openai/gpt-oss-120b"
 
     private var lastError: String? = null
     private var isReachableState: Boolean = true
@@ -65,26 +65,27 @@ class GroqProvider(
                 }
             }
 
-            val userContent = JSONArray()
-            userContent.put(JSONObject().apply {
-                put("type", "text")
-                put("text", req.prompt)
-            })
-
-            if (req.imageBytes != null && req.imageBytes.isNotEmpty()) {
-                val base64Image = Base64.encodeToString(req.imageBytes, Base64.NO_WRAP)
-                userContent.put(JSONObject().apply {
-                    put("type", "image_url")
-                    put("image_url", JSONObject().apply {
-                        put("url", "data:image/jpeg;base64,$base64Image")
-                    })
-                })
-            }
-
-            messages.put(JSONObject().apply {
+            val userMsg = JSONObject().apply {
                 put("role", "user")
-                put("content", userContent)
-            })
+                if (req.imageBytes != null && req.imageBytes.isNotEmpty()) {
+                    val userContent = JSONArray()
+                    userContent.put(JSONObject().apply {
+                        put("type", "text")
+                        put("text", req.prompt)
+                    })
+                    val base64Image = Base64.encodeToString(req.imageBytes, Base64.NO_WRAP)
+                    userContent.put(JSONObject().apply {
+                        put("type", "image_url")
+                        put("image_url", JSONObject().apply {
+                            put("url", "data:image/jpeg;base64,$base64Image")
+                        })
+                    })
+                    put("content", userContent)
+                } else {
+                    put("content", req.prompt)
+                }
+            }
+            messages.put(userMsg)
 
             val payload = JSONObject().apply {
                 put("model", currentModel)

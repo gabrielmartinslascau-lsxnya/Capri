@@ -151,7 +151,7 @@ class MainActivity : AppCompatActivity() {
 
         // Provider Options & Key Fields
         val activeProviderSpinner = findViewById<Spinner>(R.id.spinner_active_provider)
-        val providerList = listOf("Auto (Priority)", "Gemini", "Anthropic", "OpenRouter")
+        val providerList = listOf("Auto (Priority)", "Gemini", "Anthropic", "OpenRouter", "Groq")
         val providerAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, providerList).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
@@ -162,6 +162,7 @@ class MainActivity : AppCompatActivity() {
             "gemini" -> 1
             "anthropic" -> 2
             "openrouter" -> 3
+            "groq" -> 4
             else -> 0
         }
         activeProviderSpinner.setSelection(providerIndex)
@@ -172,6 +173,7 @@ class MainActivity : AppCompatActivity() {
                     1 -> "gemini"
                     2 -> "anthropic"
                     3 -> "openrouter"
+                    4 -> "groq"
                     else -> "auto"
                 }
                 prefs.edit().putString(LlmRouter.KEY_ACTIVE_PROVIDER, selectedKey).apply()
@@ -182,10 +184,12 @@ class MainActivity : AppCompatActivity() {
         val apiKeyInput = findViewById<EditText>(R.id.input_api_key)
         val anthropicKeyInput = findViewById<EditText>(R.id.input_anthropic_key)
         val openRouterKeyInput = findViewById<EditText>(R.id.input_openrouter_key)
+        val groqKeyInput = findViewById<EditText>(R.id.input_groq_key)
 
         apiKeyInput.setText(prefs.getString(KEY_GEMINI_API_KEY, ""))
         anthropicKeyInput.setText(prefs.getString(LlmRouter.KEY_ANTHROPIC_API_KEY, ""))
         openRouterKeyInput.setText(prefs.getString(LlmRouter.KEY_OPENROUTER_API_KEY, ""))
+        groqKeyInput.setText(prefs.getString(LlmRouter.KEY_GROQ_API_KEY, ""))
 
         apiKeyInput.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
@@ -212,6 +216,16 @@ class MainActivity : AppCompatActivity() {
                 val key = s?.toString()?.trim() ?: ""
                 prefs.edit().putString(LlmRouter.KEY_OPENROUTER_API_KEY, key).apply()
                 android.util.Log.d("CAPRI_KEYS", "OpenRouter API key updated instantly (length=${key.length}, blank=${key.isBlank()})")
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        groqKeyInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val key = s?.toString()?.trim() ?: ""
+                prefs.edit().putString(LlmRouter.KEY_GROQ_API_KEY, key).apply()
+                android.util.Log.d("CAPRI_KEYS", "Groq API key updated instantly (length=${key.length}, blank=${key.isBlank()})")
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}

@@ -47,12 +47,14 @@ class AiUsageActivity : AppCompatActivity() {
         val modelKey = when (providerName.lowercase()) {
             "anthropic" -> LlmRouter.KEY_ANTHROPIC_MODEL_OVERRIDE
             "openrouter" -> LlmRouter.KEY_OPENROUTER_MODEL_OVERRIDE
+            "groq" -> LlmRouter.KEY_GROQ_MODEL_OVERRIDE
             else -> LlmRouter.KEY_GEMINI_MODEL_OVERRIDE
         }
 
         val modelsList = when (providerName.lowercase()) {
             "anthropic" -> listOf("Default (claude-3-5-sonnet)", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229")
             "openrouter" -> listOf("Default (anthropic/claude-3.5-sonnet)", "anthropic/claude-3.5-sonnet", "google/gemini-flash-1.5", "openai/gpt-4o")
+            "groq" -> listOf("Default (openai/gpt-oss-120b)", "openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b", "canopylabs/orpheus-v1-english")
             else -> listOf("Default (gemini-3.5-flash-lite)", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-2.5-flash")
         }
 
@@ -67,6 +69,23 @@ class AiUsageActivity : AppCompatActivity() {
                 val fetched = com.dot.capri.llm.GeminiModelFetcher.fetchModels(apiKey)
                 if (fetched.isNotEmpty()) {
                     val liveList = mutableListOf("Default (gemini-3.5-flash-lite)") + fetched
+                    withContext(Dispatchers.Main) {
+                        val liveAdapter = ArrayAdapter(this@AiUsageActivity, android.R.layout.simple_spinner_item, liveList).apply {
+                            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                        }
+                        modelSpinner.adapter = liveAdapter
+                        val currentModel = prefs.getString(modelKey, "") ?: ""
+                        val idx = liveList.indexOfFirst { it.equals(currentModel, ignoreCase = true) }.let { if (it >= 0) it else 0 }
+                        modelSpinner.setSelection(idx)
+                    }
+                }
+            }
+        } else if (providerName.lowercase() == "groq") {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val groqKey = prefs.getString(LlmRouter.KEY_GROQ_API_KEY, "")?.trim() ?: ""
+                val fetched = com.dot.capri.llm.GroqModelFetcher.fetchModels(groqKey)
+                if (fetched.isNotEmpty()) {
+                    val liveList = mutableListOf("Default (openai/gpt-oss-120b)") + fetched
                     withContext(Dispatchers.Main) {
                         val liveAdapter = ArrayAdapter(this@AiUsageActivity, android.R.layout.simple_spinner_item, liveList).apply {
                             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)

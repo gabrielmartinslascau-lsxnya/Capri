@@ -146,6 +146,21 @@
             android:textColorHint="@color/text_secondary"
             android:textSize="13sp" />
 
+        <EditText
+            android:id="@+id/input_groq_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_input_field"
+            android:hint="Groq API Key (Free Vision)"
+            android:inputType="textPassword"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:textSize="13sp" />
+
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/switch_local_llm"
             android:layout_width="match_parent"

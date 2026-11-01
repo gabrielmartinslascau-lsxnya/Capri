@@ -1,5 +1,6 @@
 package com.dot.capri.llm
 
+import android.util.Base64
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -60,9 +61,26 @@ class AnthropicProvider(
                 put("system", req.systemPrompt)
 
                 val messages = JSONArray()
+                val userContent = JSONArray()
+                if (req.imageBytes != null && req.imageBytes.isNotEmpty()) {
+                    val base64Image = Base64.encodeToString(req.imageBytes, Base64.NO_WRAP)
+                    userContent.put(JSONObject().apply {
+                        put("type", "image")
+                        put("source", JSONObject().apply {
+                            put("type", "base64")
+                            put("media_type", "image/jpeg")
+                            put("data", base64Image)
+                        })
+                    })
+                }
+                userContent.put(JSONObject().apply {
+                    put("type", "text")
+                    put("text", fullUserPrompt.toString())
+                })
+
                 val userMsg = JSONObject().apply {
                     put("role", "user")
-                    put("content", fullUserPrompt.toString())
+                    put("content", userContent)
                 }
                 messages.put(userMsg)
                 put("messages", messages)
