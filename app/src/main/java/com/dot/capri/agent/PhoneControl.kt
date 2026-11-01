@@ -106,7 +106,7 @@ object PhoneControl {
      */
     fun clampToScreen(x: Int, y: Int): Pair<Int, Int> {
         val s = screenSize() ?: return Pair(x, y)
-        val edge = 48
+        val edge = 12
         return Pair(x.coerceIn(edge, s.first - edge), y.coerceIn(edge, s.second - edge))
     }
 
@@ -343,10 +343,10 @@ object PhoneControl {
         val h = r.height().toFloat()
 
         val (fx, fy, tx, ty) = when (direction) {
-            ScrollDirection.DOWN -> listOf(cx, cy + h * 0.25f, cx, cy - h * 0.25f)
-            ScrollDirection.UP -> listOf(cx, cy - h * 0.25f, cx, cy + h * 0.25f)
-            ScrollDirection.RIGHT -> listOf(cx + w * 0.25f, cy, cx - w * 0.25f, cy)
-            ScrollDirection.LEFT -> listOf(cx - w * 0.25f, cy, cx + w * 0.25f, cy)
+            ScrollDirection.DOWN -> listOf(cx, cy + h * 0.40f, cx, cy - h * 0.40f)
+            ScrollDirection.UP -> listOf(cx, cy - h * 0.40f, cx, cy + h * 0.40f)
+            ScrollDirection.RIGHT -> listOf(cx + w * 0.40f, cy, cx - w * 0.40f, cy)
+            ScrollDirection.LEFT -> listOf(cx - w * 0.40f, cy, cx + w * 0.40f, cy)
         }
 
         CapriCursor.moveTo(cx.toInt(), cy.toInt())
