@@ -360,7 +360,12 @@ Rules:
                 LlmRequest(prompt = prompt, systemPrompt = SYSTEM, history = emptyList(), imageBytes = shot)
             ).getOrNull()
         } else {
-            OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM_LOCAL).getOrNull()
+            if (com.dot.capri.ai.FastModelEngine.isAvailable(context)) {
+                com.dot.capri.ai.FastModelEngine.generateResponse(context, prompt, shot).getOrNull()
+                    ?: OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM_LOCAL).getOrNull()
+            } else {
+                OnDeviceAiClient.generateResponse(context, prompt, shot, systemOverride = SYSTEM_LOCAL).getOrNull()
+            }
         }
         Log.d(TAG, "model call ${System.currentTimeMillis() - t0} ms, image=${shot != null}, elements=${items.size}")
         return reply
@@ -374,8 +379,8 @@ Rules:
     ): String {
         val service = CapriAccessibilityService.instance
             ?: return "accessibility isn't connected. switch it on from my health screen, choom."
-        if (!useApi(context) && !OnDeviceAiClient.isAvailable(context)) {
-            return "task mode needs an api key + internet, or the on-device model downloaded, choom."
+        if (!useApi(context) && !OnDeviceAiClient.isAvailable(context) && !com.dot.capri.ai.FastModelEngine.isAvailable(context)) {
+            return "task mode needs an api key + internet, or an on-device model downloaded, choom."
         }
 
         val log = ArrayList<String>(resume?.log ?: emptyList())
