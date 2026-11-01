@@ -15,7 +15,7 @@ class GroqProvider(
 ) : LlmProvider {
 
     override val name: String = "Groq"
-    override val currentModel: String = modelOverride?.ifBlank { null } ?: "llama-3.2-11b-vision-preview"
+    override val currentModel: String = modelOverride?.ifBlank { null } ?: "openai/gpt-oss-120b"
 
     private var lastError: String? = null
     private var isReachableState: Boolean = true
