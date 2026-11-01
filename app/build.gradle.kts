@@ -57,6 +57,7 @@ base {
 }
 
 dependencies {
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1") {
         exclude(group = "org.jetbrains.kotlin")
     }

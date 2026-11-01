@@ -69,6 +69,7 @@ The GRID line in each prompt gives the exact columns and rows for this screen. U
 
 Actions (reply with ONLY a JSON object):
 {"do":"tap","cell":"C4"}                     tap grid cell C4 (or "id":N if element is in list)
+{"do":"tap_text","text":"Resume Game"}   tap the centre of the words on screen that match. Use this first for any button or label that has words (menus, Play, Continue, Resume, Next, OK). Only fall back to a grid cell when no text fits.
 {"do":"swipe","cell":"A1","cell2":"C4"}      drag/swipe from cell A1 to cell C4 (e.g. planting cards in PvZ)
 {"do":"hold","cell":"C4","duration_ms":5000} hold down cell C4 for exact duration (default 5000ms)
 {"do":"double_tap","cell":"C4"}              double tap cell C4
@@ -85,6 +86,8 @@ Actions (reply with ONLY a JSON object):
 {"do":"fail","say":"why you can't do it"}
 
 Direct Instructions:
+- For buttons with words, use tap_text with the exact words you see. Never guess a cell for a word you can read.
+- If tap_text reports "not found", try the shortest distinctive word from the button, or use a cell.
 - If SCREEN ELEMENTS contains the target, always tap it by id. Use a grid cell only when no element matches.
 - Only use a grid cell when the target is clearly visible inside that cell. Never guess a cell.
 - Columns A and F and rows 1 and 10 are the screen edges. Use them only when the target is there.
@@ -430,7 +433,7 @@ Rules:
                 val a: Act = chosen
 
                 // The same action on the same spot again and again is a loop, not progress.
-                val spot = "${a.doWhat}|${a.id}|${a.x}|${a.y}|${a.x2}|${a.y2}|${a.region}|${a.dx}|${a.dy}|${a.durationMs}"
+                val spot = "${a.doWhat}|${a.id}|${a.x}|${a.y}|${a.x2}|${a.y2}|${a.region}|${a.dx}|${a.dy}|${a.durationMs}|${a.text}"
                 val repeatable = a.doWhat in setOf("wait", "press_region", "hold", "look", "drag", "double_tap")
                 if (!repeatable && spot == lastSpot) spotRepeats++ else { spotRepeats = 0; lastSpot = spot }
                 if (spotRepeats >= 2) {
@@ -648,6 +651,24 @@ Rules:
                             ?: Pair(900, 600)
                         val ok = PhoneControl.look(origin.first, origin.second, dx, dy, a.durationMs ?: 250L)
                         log.add("looked ($dx,$dy)" + if (ok) "" else " (failed)")
+                    }
+                    "tap_text" -> {
+                        CapriCursor.setStatus("looking for \"${a.text}\"...")
+                        val wanted = a.text ?: ""
+                        val shotBytes = service.captureScreenBitmap()
+                        val size = PhoneControl.screenSize()
+                        val hit = if (shotBytes != null && size != null && wanted.isNotBlank())
+                            TextFinder.find(shotBytes, size.first, size.second, wanted)
+                        else null
+                        if (hit == null) {
+                            log.add("tap_text: \"$wanted\" not found on screen")
+                        } else {
+                            val (hx, hy) = PhoneControl.clampToScreen(hit.x, hit.y)
+                            CapriCursor.moveTo(hx, hy)
+                            CapriCursor.pulse()
+                            val ok = PhoneControl.tapAt(hx, hy)
+                            log.add("tapped text \"${hit.text}\" at ($hx, $hy)" + if (ok) "" else " (failed)")
+                        }
                     }
                     "wait" -> log.add("waited")
                     else -> log.add("unknown action")
