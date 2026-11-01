@@ -639,8 +639,8 @@ Rules:
                             CapriCursor.setStatus("dragging...")
                             val ok = PhoneControl.dragWithHold(
                                 fx, fy, tx, ty,
-                                holdMs = a.holdMs ?: 300L,
-                                moveMs = a.durationMs ?: 600L
+                                holdMs = a.holdMs ?: 150L,
+                                moveMs = a.durationMs ?: 300L
                             )
                             log.add("dragged ($fx,$fy) to ($tx,$ty)" + if (ok) "" else " (failed)")
                         }

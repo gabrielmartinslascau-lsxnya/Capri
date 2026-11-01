@@ -396,7 +396,7 @@ object PhoneControl {
     }
 
     /** Drags from (x1,y1) to (x2,y2). The cursor is placed at the start first, so there's no diagonal jump. */
-    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 700): Boolean {
+    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long = 250): Boolean {
         service() ?: return false
         val (safeX1, safeY1) = clampToScreen(x1.toInt(), y1.toInt())
         val (safeX2, safeY2) = clampToScreen(x2.toInt(), y2.toInt())
