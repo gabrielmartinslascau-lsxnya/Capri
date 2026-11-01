@@ -15,7 +15,7 @@ import java.net.URL
 object FastModelClient {
 
     private const val TAG = "CAPRI_FAST_MODEL"
-    private const val REPO_BASE = "https://huggingface.co/ShowUI/ShowUI-2B/resolve/main/"
+    private const val REPO_BASE = "https://huggingface.co/showlab/ShowUI-2B/resolve/main/"
     private val TARGET_FILES = listOf("model.safetensors", "config.json", "preprocessor_config.json")
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -55,31 +55,49 @@ object FastModelClient {
                 for ((index, fileName) in TARGET_FILES.withIndex()) {
                     val destFile = File(dir, fileName)
                     val tempFile = File(dir, "$fileName.tmp")
-                    val fileUrl = URL(REPO_BASE + fileName)
 
                     withContext(Dispatchers.Main) {
                         onProgress?.invoke(((index * 100) / totalFiles), "Downloading $fileName (${index + 1}/$totalFiles)...")
                     }
 
-                    var conn: HttpURLConnection? = null
-                    try {
-                        val c = (fileUrl.openConnection() as HttpURLConnection).apply {
-                            instanceFollowRedirects = true
+                    var url = URL(REPO_BASE + fileName)
+                    var response: HttpURLConnection? = null
+                    var hops = 0
+
+                    while (response == null) {
+                        val c = (url.openConnection() as HttpURLConnection).apply {
+                            instanceFollowRedirects = false
                             connectTimeout = 15_000
                             readTimeout = 60_000
-                            setRequestProperty("User-Agent", "Capri-Android-App")
+                            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                         }
-                        conn = c
-                        val code = c.responseCode
-                        if (code !in 200..299) {
-                            tempFile.delete()
-                            finish(false, "Download failed for $fileName (HTTP $code).")
-                            return@launch
+                        when (val code = c.responseCode) {
+                            in 300..399 -> {
+                                val loc = c.getHeaderField("Location")
+                                if (loc == null || ++hops > 6) {
+                                    tempFile.delete()
+                                    finish(false, "Download failed: bad redirect for $fileName (HTTP $code).")
+                                    return@launch
+                                }
+                                url = URL(url, loc)
+                                c.disconnect()
+                            }
+                            in 200..299 -> response = c
+                            else -> {
+                                tempFile.delete()
+                                c.disconnect()
+                                finish(false, "Download failed for $fileName (HTTP $code).")
+                                return@launch
+                            }
                         }
+                    }
 
-                        val fileTotal = c.contentLengthLong
-                        var done = 0L
-                        c.inputStream.use { input ->
+                    val resp = response
+                    val fileTotal = resp.contentLengthLong
+                    var done = 0L
+
+                    try {
+                        resp.inputStream.use { input ->
                             FileOutputStream(tempFile).use { out ->
                                 val buf = ByteArray(64 * 1024)
                                 while (true) {
@@ -109,7 +127,7 @@ object FastModelClient {
                             return@launch
                         }
                     } finally {
-                        conn?.disconnect()
+                        resp.disconnect()
                     }
                 }
 
