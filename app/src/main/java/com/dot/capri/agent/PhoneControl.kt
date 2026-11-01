@@ -50,8 +50,14 @@ object PhoneControl {
         val movePath = Path().apply { moveTo(sax.toFloat(), say.toFloat()); lineTo(sbx.toFloat(), sby.toFloat()) }
         val first = GestureDescription.StrokeDescription(holdPath, 0L, holdMs.coerceIn(1L, max - 1), true)
         if (!dispatchStroke(first)) return false
-        val second = first.continueStroke(movePath, 0L, moveMs.coerceIn(50L, max - 1), false)
-        return dispatchStroke(second)
+        val safeMoveMs = moveMs.coerceIn(50L, max - 1)
+        val second = first.continueStroke(movePath, 0L, safeMoveMs, false)
+        return coroutineScope {
+            val anim = launch { CapriCursor.glideAlongPath(sax.toFloat(), say.toFloat(), sbx.toFloat(), sby.toFloat(), safeMoveMs) }
+            val ok = async { dispatchStroke(second) }.await()
+            anim.join()
+            ok
+        }
     }
 
     /** Turns the camera: a drag from (zoneX, zoneY) by (dx, dy) pixels. */
@@ -61,7 +67,13 @@ object PhoneControl {
         CapriCursor.moveTo(sx, sy)
         CapriCursor.pulse()
         val path = Path().apply { moveTo(sx.toFloat(), sy.toFloat()); lineTo(ex.toFloat(), ey.toFloat()) }
-        return dispatch(path, ms)
+        val safeMs = ms.coerceIn(50L, GestureDescription.getMaxGestureDuration())
+        return coroutineScope {
+            val anim = launch { CapriCursor.glideAlongPath(sx.toFloat(), sy.toFloat(), ex.toFloat(), ey.toFloat(), safeMs) }
+            val ok = async { dispatch(path, safeMs) }.await()
+            anim.join()
+            ok
+        }
     }
 
     class UiItem(
