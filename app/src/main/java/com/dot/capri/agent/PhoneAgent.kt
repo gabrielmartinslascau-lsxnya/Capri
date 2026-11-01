@@ -391,6 +391,7 @@ Rules:
         var plan: String? = null
 
         try {
+            DevOverlay.start(context)
             while (!CapriCursor.cancelled) {
                 val root = waitForRoot() ?: return "i can't see an app to work in, choom. ${summary(log)}"
                 val pkg = root.packageName?.toString().orEmpty()
@@ -451,6 +452,16 @@ Rules:
                 val targetItem = a.id?.let { id -> items.firstOrNull { it.id == id } }
 
                 Log.d(TAG, "step=$steps act=${a.doWhat} id=${a.id} x=${a.x} y=${a.y} pkg=$pkg items=${items.size}")
+                if (DevOverlay.isEnabled(context)) {
+                    val mx = a.x ?: targetItem?.cx
+                    val my = a.y ?: targetItem?.cy
+                    if (mx != null && my != null) {
+                        val size = PhoneControl.screenSize()
+                        val cell = size?.let { (w, h) -> DevOverlay.cellName(mx, my, w, h) } ?: "?"
+                        val idPart = if (a.id != null) " #${a.id}" else ""
+                        DevOverlay.mark(mx, my, "${a.doWhat} $cell$idPart")
+                    }
+                }
 
                 val before = screenSignature()
 
@@ -670,6 +681,7 @@ Rules:
             }
             return "that took too many steps, choom. ${summary(log)}"
         } finally {
+            DevOverlay.stop()
             CapriCursor.hide()
             chatVisible(true)
         }

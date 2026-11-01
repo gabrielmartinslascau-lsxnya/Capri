@@ -1,5 +1,7 @@
 package com.dot.capri
 
+import com.dot.capri.agent.DevOverlay
+
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.app.Notification
@@ -964,6 +966,33 @@ class BubbleService : Service() {
         if (taskMatch != null) {
             PhoneAgent.pending = null
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
+        }
+
+        // Dev overlay: "dev grid on" / "dev grid off".
+        Regex("^dev grid (on|off)$", RegexOption.IGNORE_CASE).find(trimmedInput)?.let { m ->
+            val on = m.groupValues[1].equals("on", ignoreCase = true)
+            DevOverlay.setEnabled(this, on)
+            return if (on) "dev grid on. red marks show every tap." else "dev grid off."
+        }
+
+        // Dev tap: "go C4", "go to C4", "go 0.42 0.31" (percent), "go 540 1200" (pixels).
+        Regex("^go(?:\\s+to)?\\s+(?:([a-f][0-9]{1,2})|([01](?:\\.\\d+)?)\\s+([01](?:\\.\\d+)?)|(\\d+)\\s+(\\d+))$",
+            RegexOption.IGNORE_CASE).find(trimmedInput)?.let { m ->
+            val (w, h) = PhoneControl.screenSize() ?: return "i can't read the screen size right now."
+            val target: Pair<Int, Int> = when {
+                m.groupValues[1].isNotEmpty() ->
+                    DevOverlay.cellCentre(m.groupValues[1], w, h) ?: return "there's no cell called ${m.groupValues[1].uppercase()}."
+                m.groupValues[2].isNotEmpty() ->
+                    Pair((m.groupValues[2].toFloat() * w).toInt(), (m.groupValues[3].toFloat() * h).toInt())
+                else ->
+                    Pair(m.groupValues[4].toInt(), m.groupValues[5].toInt())
+            }
+            val tx = target.first.coerceIn(0, w - 1)
+            val ty = target.second.coerceIn(0, h - 1)
+            val cell = DevOverlay.cellName(tx, ty, w, h)
+            DevOverlay.mark(tx, ty, "go $cell")
+            val ok = PhoneControl.tapAt(tx, ty)
+            return if (ok) "tapped $cell ($tx, $ty)." else "the tap at $cell ($tx, $ty) didn't go through."
         }
 
         // "calibrate attack 0.9 0.55" stores a button as fractions of the screen (0..1).
