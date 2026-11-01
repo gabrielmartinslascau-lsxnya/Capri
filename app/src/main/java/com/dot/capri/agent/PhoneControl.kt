@@ -222,10 +222,11 @@ object PhoneControl {
         val (safeX, safeY) = clampToScreen(x, y)
         CapriCursor.moveTo(safeX, safeY)
         CapriCursor.pulse()
+        val gestureOk = dispatchTap(safeX, safeY)
+        if (gestureOk) return true
         val root = foregroundRoot()
         val target = root?.let { smallestClickableAt(it, safeX, safeY) }
-        if (target != null && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-        return dispatchTap(safeX, safeY)
+        return target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
     }
 
     suspend fun doubleTapAt(x: Int, y: Int): Boolean {
