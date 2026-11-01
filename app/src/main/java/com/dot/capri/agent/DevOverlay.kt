@@ -55,11 +55,12 @@ object DevOverlay {
         if (view != null) return
         val manager = app.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         wm = manager
-        val type = if (com.dot.capri.CapriAccessibilityService.instance != null)
+        val preferred = if (com.dot.capri.CapriAccessibilityService.instance != null)
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
         else
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        val params = WindowManager.LayoutParams(
+
+        fun paramsFor(type: Int) = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             type,
@@ -69,11 +70,27 @@ object DevOverlay {
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
+
         val v = GridView(app)
-        try {
-            manager.addView(v, params)
+        var added = try {
+            manager.addView(v, paramsFor(preferred))
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("DevOverlay", "Failed to add overlay with type $preferred", e)
+            false
+        }
+
+        if (!added && preferred != WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) {
+            try {
+                manager.addView(v, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+                added = true
+            } catch (e: Exception) {
+                android.util.Log.e("DevOverlay", "Failed to add overlay with fallback TYPE_APPLICATION_OVERLAY", e)
+            }
+        }
+
+        if (added) {
             view = v
-        } catch (_: Exception) {
         }
     }
 
