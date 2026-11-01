@@ -105,7 +105,7 @@ class AiUsageActivity : AppCompatActivity() {
 
         modelSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selected = modelsList[position]
+                val selected = parent?.getItemAtPosition(position) as? String ?: return
                 val valToSave = if (selected.startsWith("Default")) "" else selected
                 prefs.edit().putString(modelKey, valToSave).apply()
                 updateDashboardUI()
