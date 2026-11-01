@@ -193,8 +193,9 @@ object PhoneControl {
     suspend fun tap(item: UiItem): Boolean {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
-        if (item.node.isClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-        return dispatchTap(item.cx, item.cy)
+        val gestureOk = dispatchTap(item.cx, item.cy)
+        if (gestureOk) return true
+        return item.node.isClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
 
     suspend fun longPress(item: UiItem, durationMs: Long = 800): Boolean {
@@ -240,14 +241,6 @@ object PhoneControl {
     }
 
     suspend fun doubleTap(item: UiItem): Boolean {
-        CapriCursor.moveTo(item.cx, item.cy)
-        CapriCursor.pulse()
-        if (item.node.isClickable) {
-            item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            delay(60)
-            item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            return true
-        }
         return doubleTapAt(item.cx, item.cy)
     }
 
@@ -323,32 +316,35 @@ object PhoneControl {
         val root = foregroundRoot()
         val vertical = direction == ScrollDirection.UP || direction == ScrollDirection.DOWN
         val scrollable = root?.let { largestScrollable(it, vertical) }
-        val forward = direction == ScrollDirection.DOWN || direction == ScrollDirection.RIGHT
-        val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-        else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+
+        val r = Rect()
         if (scrollable != null) {
-            val r = Rect()
             scrollable.getBoundsInScreen(r)
-            CapriCursor.moveTo(r.centerX(), r.centerY())
-            if (scrollable.performAction(action)) {
-                CapriCursor.pulse()
-                return true
-            }
+        } else {
+            val (realW, realH) = realScreenBounds(s)
+            r.set(0, 0, realW, realH)
         }
 
-        // Fallback: a finger drag across the middle of the screen.
-        val (realW, realH) = realScreenBounds(s)
-        val w = realW.toFloat()
-        val h = realH.toFloat()
-        val cx = w / 2f
-        val cy = h / 2f
+        val cx = r.centerX().toFloat()
+        val cy = r.centerY().toFloat()
+        val w = r.width().toFloat()
+        val h = r.height().toFloat()
+
         val (fx, fy, tx, ty) = when (direction) {
-            ScrollDirection.DOWN -> listOf(cx, h * 0.70f, cx, h * 0.30f)
-            ScrollDirection.UP -> listOf(cx, h * 0.30f, cx, h * 0.70f)
-            ScrollDirection.RIGHT -> listOf(w * 0.80f, cy, w * 0.20f, cy)
-            ScrollDirection.LEFT -> listOf(w * 0.20f, cy, w * 0.80f, cy)
+            ScrollDirection.DOWN -> listOf(cx, cy + h * 0.25f, cx, cy - h * 0.25f)
+            ScrollDirection.UP -> listOf(cx, cy - h * 0.25f, cx, cy + h * 0.25f)
+            ScrollDirection.RIGHT -> listOf(cx + w * 0.25f, cy, cx - w * 0.25f, cy)
+            ScrollDirection.LEFT -> listOf(cx - w * 0.25f, cy, cx + w * 0.25f, cy)
         }
-        return swipe(fx, fy, tx, ty, 700)
+
+        CapriCursor.moveTo(cx.toInt(), cy.toInt())
+        CapriCursor.pulse()
+        val swipeOk = swipe(fx, fy, tx, ty, 400)
+        if (swipeOk) return true
+
+        val forward = direction == ScrollDirection.DOWN || direction == ScrollDirection.RIGHT
+        val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        return scrollable?.performAction(action) ?: false
     }
 
     /**
