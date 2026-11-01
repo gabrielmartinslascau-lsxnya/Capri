@@ -86,6 +86,8 @@ Actions (reply with ONLY a JSON object):
 {"do":"fail","say":"why you can't do it"}
 
 Direct Instructions:
+- CRITICAL GOAL CHECK: Before taking an action, check if the TASK is ALREADY SATISFIED on the current screen or foreground app. If TASK is complete (e.g., requested app is open, menu item was clicked, or goal was achieved), reply {"do":"done","say":"..."} immediately. Never repeat an action for a goal that is already finished.
+- Review STEPS SO FAR: Each previous step shows whether it (worked/screen updated) or (failed/no change). Use this feedback to decide your next move—never repeat a step that failed or re-do a step that already worked.
 - For buttons with words, use tap_text with the exact words you see. Never guess a cell for a word you can read.
 - If tap_text reports "not found", try the shortest distinctive word from the button, or use a cell.
 - If SCREEN ELEMENTS contains the target, always tap it by id. Use a grid cell only when no element matches.
@@ -117,6 +119,7 @@ Actions:
 {"do":"done","say":"short summary"}
 {"do":"fail","say":"why"}
 Rules:
+- CRITICAL GOAL CHECK: If the task is already completed or the requested app/screen is open, output {"do":"done","say":"..."} immediately. Never repeat an action that already succeeded.
 - In first-person games, aim first: use look until the target is at the centre of the screen, then press_region attack. Never press attack while the target is off-centre.
 - Mining or breaking a block: press_region attack with a duration long enough to finish, then check the screen. Do not repeat attack in short bursts.
 - Placing cards in PvZ: use drag from the card cell to the lawn cell.
@@ -680,11 +683,17 @@ Rules:
                 }
                 val isContinuousAction = a.doWhat in setOf("hold", "long_press", "swipe", "scroll", "multitap", "multi_touch", "wait", "press_region", "look", "drag")
                 val changed = waitForChange(before)
+                val statusTag = if (changed) "(worked/screen updated)" else if (isContinuousAction) "(in progress)" else "(failed/no change)"
+                if (log.isNotEmpty()) {
+                    val lastIdx = log.lastIndex
+                    if (!log[lastIdx].contains("(worked") && !log[lastIdx].contains("(failed") && !log[lastIdx].contains("(in progress)")) {
+                        log[lastIdx] = "${log[lastIdx]} $statusTag"
+                    }
+                }
                 if (changed || isContinuousAction) {
                     noChangeStreak = 0
                 } else {
                     noChangeStreak++
-                    log.add("no change on screen")
                     delay(500)
                     if (noChangeStreak >= 3) {
                         return "nothing changed on screen after three tries, so I stopped. ${summary(log)}"
