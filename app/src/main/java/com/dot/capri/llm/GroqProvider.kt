@@ -15,7 +15,7 @@ class GroqProvider(
 ) : LlmProvider {
 
     override val name: String = "Groq"
-    override val currentModel: String = modelOverride?.ifBlank { null } ?: "openai/gpt-oss-120b"
+    override val currentModel: String = modelOverride?.ifBlank { null } ?: "llama-3.2-11b-vision-preview"
 
     private var lastError: String? = null
     private var isReachableState: Boolean = true
@@ -87,8 +87,14 @@ class GroqProvider(
             }
             messages.put(userMsg)
 
+            val effectiveModel = if (req.imageBytes != null && req.imageBytes.isNotEmpty() && !currentModel.lowercase().contains("vision")) {
+                "llama-3.2-11b-vision-preview"
+            } else {
+                currentModel
+            }
+
             val payload = JSONObject().apply {
-                put("model", currentModel)
+                put("model", effectiveModel)
                 put("messages", messages)
                 put("max_tokens", 1024)
             }
