@@ -64,6 +64,7 @@ object LlmRouter {
             "openrouter" -> if (openRouterKey.isNotBlank()) "OpenRouter" else if (geminiKey.isNotBlank()) "Gemini" else "Local"
             "groq" -> if (groqKey.isNotBlank()) "Groq" else if (geminiKey.isNotBlank()) "Gemini" else "Local"
             "gemini" -> if (geminiKey.isNotBlank()) "Gemini" else "Local"
+            "local" -> "Local"
             else -> when {
                 geminiKey.isNotBlank() -> "Gemini"
                 anthropicKey.isNotBlank() -> "Anthropic"

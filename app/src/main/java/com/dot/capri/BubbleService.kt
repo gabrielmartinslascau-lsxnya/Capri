@@ -100,8 +100,10 @@ class BubbleService : Service() {
             if (!visible) {
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
                 imm.hideSoftInputFromWindow(v.windowToken, 0)
+                v.visibility = View.GONE
+            } else {
+                v.visibility = View.VISIBLE
             }
-            v.visibility = if (visible) View.VISIBLE else View.INVISIBLE
         }
         if (!visible) delay(350)
     }
@@ -483,6 +485,15 @@ class BubbleService : Service() {
         val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
         val chatScroll = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
         val expandBtn = chatView?.findViewById<TextView>(R.id.btn_expand)
+        val realTalkBtn = chatView?.findViewById<TextView>(R.id.btn_real_talk)
+
+        realTalkBtn?.setOnClickListener {
+            minimizeToChat()
+            val intent = Intent(this, RealTalkActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        }
 
         var isExpanded = false
         chatScroll?.layoutParams?.height = dpToPx(120)
@@ -582,8 +593,11 @@ class BubbleService : Service() {
     }
 
     fun minimizeToChat() {
-        removeChatWindow()
-        showBubble()
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        mainHandler.post {
+            removeChatWindow()
+            showBubble()
+        }
     }
 
     private fun removeChatWindow() {
@@ -710,7 +724,7 @@ class BubbleService : Service() {
     }
 
     private suspend fun executeEmbeddedActionTag(response: String): String {
-        val actionRegex = Regex("\\[ACTION:(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|PINCH|DUALTAP|DUAL_TAP|SPAWN_CURSOR|MOVE_CURSOR|REMOVE_CURSOR|CLEAR_CURSORS|MULTITAP|TASK):([^]]*)\\]", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[?ACTION[=:]\\s*(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|PINCH|DUALTAP|DUAL_TAP|SPAWN_CURSOR|MOVE_CURSOR|REMOVE_CURSOR|CLEAR_CURSORS|MULTITAP|TASK|GO_HOME|HOME|BACK)(?:[=:]\\s*([^]]*))?\\]?", RegexOption.IGNORE_CASE)
         val matches = actionRegex.findAll(response).toList()
         if (matches.isEmpty()) return response
 
@@ -741,18 +755,30 @@ class BubbleService : Service() {
                     }
                 }
                 "PINCH" -> {
+                    minimizeToChat()
+                    delay(300)
                     val zoomIn = target.contains("in", ignoreCase = true) || target.contains("zoom_in", ignoreCase = true)
                     if (CapriAccessibilityService.instance != null) {
                         PhoneControl.pinch(zoomIn)
                     }
                 }
                 "DUALTAP", "DUAL_TAP" -> {
+                    minimizeToChat()
+                    delay(300)
                     val coords = target.split(",").mapNotNull { it.trim().toIntOrNull() }
                     if (coords.size >= 4 && CapriAccessibilityService.instance != null) {
+                        CapriCursor.show(this@BubbleService)
+                        CapriCursor.moveTo(coords[0], coords[1])
+                        CapriCursor.pulse()
+                        delay(200)
                         PhoneControl.dualTap(coords[0], coords[1], coords[2], coords[3])
+                        delay(500)
+                        CapriCursor.hide()
                     }
                 }
                 "SCROLL" -> {
+                    minimizeToChat()
+                    delay(300)
                     val parts = target.split(":")
                     val dirStr = parts[0].trim().uppercase()
                     val count = parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 1
@@ -770,14 +796,30 @@ class BubbleService : Service() {
                         }
                     }
                 }
+                "GO_HOME", "HOME" -> {
+                    minimizeToChat()
+                    PhoneControl.home()
+                }
+                "BACK" -> {
+                    minimizeToChat()
+                    PhoneControl.back()
+                }
                 "TAP" -> {
+                    minimizeToChat()
+                    delay(300)
                     val root = PhoneControl.foregroundRoot()
                     var done = false
                     if (root != null) {
                         val items = PhoneControl.snapshot(root)
                         val matchItem = items.firstOrNull { it.label.contains(target, ignoreCase = true) }
                         if (matchItem != null) {
+                            CapriCursor.show(this@BubbleService)
+                            CapriCursor.moveTo(matchItem.cx, matchItem.cy)
+                            CapriCursor.pulse()
+                            delay(200)
                             done = PhoneControl.tap(matchItem)
+                            delay(400)
+                            CapriCursor.hide()
                         }
                     }
                     if (!done) {
@@ -785,13 +827,21 @@ class BubbleService : Service() {
                     }
                 }
                 "LONG_PRESS", "LONGPRESS" -> {
+                    minimizeToChat()
+                    delay(300)
                     val root = PhoneControl.foregroundRoot()
                     var done = false
                     if (root != null) {
                         val items = PhoneControl.snapshot(root)
                         val matchItem = items.firstOrNull { it.label.contains(target, ignoreCase = true) }
                         if (matchItem != null) {
+                            CapriCursor.show(this@BubbleService)
+                            CapriCursor.moveTo(matchItem.cx, matchItem.cy)
+                            CapriCursor.pulse()
+                            delay(200)
                             done = PhoneControl.longPress(matchItem)
+                            delay(400)
+                            CapriCursor.hide()
                         }
                     }
                     if (!done) {
@@ -855,14 +905,17 @@ class BubbleService : Service() {
     // 3-way brain: API -> local model -> null (caller falls back to commands / canned lines)
     private suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
         var apiError: String? = null
+        val wantsCloud = LlmRouter.getActiveProviderName(this) != "Local" && LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)
 
-        // Tier 1: cloud API (needs a key and internet)
-        if (LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)) {
+        // Tier 1: cloud API (needs a key, internet, and NOT explicitly set to Local)
+        if (wantsCloud) {
             val result = withContext(Dispatchers.IO) {
                 CloudAiClient.generateResponse(this@BubbleService, prompt, imageBytes)
             }
             val text = result.getOrNull()?.takeIf { it.isNotBlank() }
-            if (text != null) return handleReply(text)
+            if (text != null && !text.contains("No brain installed", ignoreCase = true) && !text.contains("brain chip in my slot", ignoreCase = true)) {
+                return handleReply(text)
+            }
             apiError = result.exceptionOrNull()?.message ?: "empty reply"
             android.util.Log.w("CAPRI_BRAIN", "API tier failed ($apiError), trying local")
         }
@@ -968,6 +1021,30 @@ class BubbleService : Service() {
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
         }
 
+        // Direct game & screen control requests ("can you play the game for me?", "take over the screen and play")
+        val gameAgentRequest = Regex(
+            "^(?:can\\s+you\\s+|please\\s+|could\\s+you\\s+|i\\s+want\\s+you\\s+to\\s+)?(?:play\\s+(?:this|the)?\\s*game|play\\s+for\\s+me|take\\s+over|control\\s+the\\s+screen|play\\s+on\\s+screen|help\\s+me\\s+(?:win|play|beat)|win\\s+(?:this|the)\\s+game|beat\\s+this\\s+level|make\\s+a\\s+new\\s+world|mine\\s+wood)(?:\\s+.*)?$",
+            RegexOption.IGNORE_CASE
+        ).matches(trimmedInput)
+        if (gameAgentRequest) {
+            PhoneAgent.pending = null
+            return PhoneAgent.run(this, trimmedInput, null) { setChatVisible(it) }
+        }
+
+        // Multi-step compound app launch + game handoff ("go on Minecraft, make a new world, and mine wood")
+        val compoundAppMatch = Regex("^(?:go\\s+(?:on|to)|open|launch|play|run)\\s+(?:the\\s+)?(?:app\\s+)?([a-z0-9\\s_]+?)(?:\\s+app)?(?:,|\\s+and|\\s+to|\\s+then)\\s+(.+)$", RegexOption.IGNORE_CASE)
+            .find(trimmedInput)
+        if (compoundAppMatch != null) {
+            val appTarget = compoundAppMatch.groupValues[1].trim()
+            val remainingGoal = compoundAppMatch.groupValues[2].trim()
+            if (appTarget.isNotEmpty() && remainingGoal.isNotEmpty()) {
+                IntentExecutor.execute(this, Cmd.Open(appTarget))
+                delay(2500)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(this, trimmedInput, null) { setChatVisible(it) }
+            }
+        }
+
         // Dev overlay: "dev grid on" / "dev grid off".
         Regex("^dev grid (on|off)$", RegexOption.IGNORE_CASE).find(trimmedInput)?.let { m ->
             val on = m.groupValues[1].equals("on", ignoreCase = true)
@@ -976,7 +1053,7 @@ class BubbleService : Service() {
         }
 
         // Dev tap: "go C4", "go to C4", "go 0.42 0.31" (percent), "go 540 1200" (pixels).
-        Regex("^go(?:\\s+to)?\\s+(?:([a-f][0-9]{1,2})|([01](?:\\.\\d+)?)\\s+([01](?:\\.\\d+)?)|(\\d+)\\s+(\\d+))$",
+        Regex("^go(?:\\s+to)?\\s+(?:([a-j][0-9]{1,2})|([01](?:\\.\\d+)?)\\s+([01](?:\\.\\d+)?)|(\\d+)\\s+(\\d+))$",
             RegexOption.IGNORE_CASE).find(trimmedInput)?.let { m ->
             val (w, h) = PhoneControl.screenSize() ?: return "i can't read the screen size right now."
             val target: Pair<Int, Int> = when {
@@ -1007,22 +1084,16 @@ class BubbleService : Service() {
 
         // Brain first. There is no keyword fallback: without a brain she says so.
         if (brainAvailable()) {
+            val cmd = IntentParser.parse(trimmedInput)
+            if (cmd is Cmd.SeeScreen || Regex("what(?:'s|\\s+is)\\s+on\\s+(?:my\\s+|the\\s+)?screen|what\\s+do\\s+you\\s+see", RegexOption.IGNORE_CASE).containsMatchIn(trimmedInput)) {
+                val shotBytes = CapriAccessibilityService.instance?.captureScreenBitmap()
+                if (shotBytes != null) {
+                    return askBrain(text, shotBytes) ?: "i didn't get an answer, try again."
+                }
+            }
             return askBrain(text) ?: "i didn't get an answer, try again."
         }
         return noBrainReply()
-
-
-
-
-
-
-
-
-
-
-
-
-
     }
 
     override fun onDestroy() {

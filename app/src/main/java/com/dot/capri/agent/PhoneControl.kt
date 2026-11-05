@@ -101,6 +101,21 @@ object PhoneControl {
     }
 
     /**
+     * Returns the real screen pixel dimensions guaranteed to match the orientation
+     * (landscape vs portrait) of a captured screenshot so X and Y axes never invert in landscape games.
+     */
+    fun orientedScreenSize(shotW: Int, shotH: Int): Pair<Int, Int> {
+        val raw = screenSize() ?: return Pair(shotW.coerceAtLeast(1), shotH.coerceAtLeast(1))
+        val shotLandscape = shotW > shotH
+        val screenLandscape = raw.first > raw.second
+        return if (shotLandscape == screenLandscape) {
+            raw
+        } else {
+            Pair(raw.second, raw.first)
+        }
+    }
+
+    /**
      * Keeps a point inside the screen. Only a small margin is kept clear, so the point that
      * Capri taps is the same point the ring and the red marker show.
      */
@@ -151,8 +166,11 @@ object PhoneControl {
             return ""
         }
 
+        val ownPkg = service()?.packageName ?: "com.dot.capri"
+
         fun walk(n: AccessibilityNodeInfo?, depth: Int) {
             if (n == null || out.size >= max || depth > 40) return
+            if (n.packageName?.toString() == ownPkg) return // Ignore Capri's own chat bubble, cursor, and overlay views
             if (n.isVisibleToUser && !n.isPassword) {
                 val actionable = n.isClickable || n.isEditable || n.isScrollable || n.isCheckable
                 val own = n.text?.toString()?.trim().orEmpty()
@@ -206,8 +224,8 @@ object PhoneControl {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
         val gestureOk = dispatchTap(item.cx, item.cy)
-        if (gestureOk) return true
-        return item.node.isClickable && item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        val actionOk = if (item.node.isClickable) item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK) else false
+        return gestureOk || actionOk
     }
 
     suspend fun longPress(item: UiItem, durationMs: Long = 800): Boolean {
@@ -236,10 +254,10 @@ object PhoneControl {
         CapriCursor.moveTo(safeX, safeY)
         CapriCursor.pulse()
         val gestureOk = dispatchTap(safeX, safeY)
-        if (gestureOk) return true
         val root = foregroundRoot()
         val target = root?.let { smallestClickableAt(it, safeX, safeY) }
-        return target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+        val actionOk = target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+        return gestureOk || actionOk
     }
 
     suspend fun doubleTapAt(x: Int, y: Int): Boolean {
@@ -357,6 +375,69 @@ object PhoneControl {
         val forward = direction == ScrollDirection.DOWN || direction == ScrollDirection.RIGHT
         val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
         return scrollable?.performAction(action) ?: false
+    }
+
+    suspend fun scrollAt(x: Int, y: Int, direction: ScrollDirection): Boolean {
+        val s = service() ?: return false
+        val root = foregroundRoot()
+        val vertical = direction == ScrollDirection.UP || direction == ScrollDirection.DOWN
+        val container = root?.let { scrollableAt(it, x, y, vertical) }
+
+        val r = Rect()
+        if (container != null) {
+            container.getBoundsInScreen(r)
+        } else {
+            val (realW, realH) = realScreenBounds(s)
+            val grid = GridSpec.of(realW, realH)
+            val cellW = realW / grid.cols
+            val cellH = realH / grid.rows
+            val left = (x - cellW / 2).coerceIn(0, realW - cellW)
+            val top = (y - cellH / 2).coerceIn(0, realH - cellH)
+            r.set(left, top, left + cellW, top + cellH)
+        }
+
+        val cx = r.centerX().toFloat()
+        val cy = r.centerY().toFloat()
+        val w = r.width().toFloat()
+        val h = r.height().toFloat()
+
+        val (fx, fy, tx, ty) = when (direction) {
+            ScrollDirection.DOWN -> listOf(cx, cy + h * 0.35f, cx, cy - h * 0.35f)
+            ScrollDirection.UP -> listOf(cx, cy - h * 0.35f, cx, cy + h * 0.35f)
+            ScrollDirection.RIGHT -> listOf(cx + w * 0.35f, cy, cx - w * 0.35f, cy)
+            ScrollDirection.LEFT -> listOf(cx - w * 0.35f, cy, cx + w * 0.35f, cy)
+        }
+
+        CapriCursor.moveTo(cx.toInt(), cy.toInt())
+        CapriCursor.pulse()
+        val swipeOk = swipe(fx, fy, tx, ty, 350)
+        if (swipeOk) return true
+
+        val forward = direction == ScrollDirection.DOWN || direction == ScrollDirection.RIGHT
+        val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        return container?.performAction(action) ?: false
+    }
+
+    private fun scrollableAt(root: AccessibilityNodeInfo, x: Int, y: Int, vertical: Boolean): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var smallestArea = Long.MAX_VALUE
+        val r = Rect()
+        fun walk(n: AccessibilityNodeInfo?, depth: Int) {
+            if (n == null || depth > 40 || !n.isVisibleToUser) return
+            if (n.isScrollable) {
+                n.getBoundsInScreen(r)
+                if (r.contains(x, y)) {
+                    val area = r.width().toLong() * r.height()
+                    if (area in 1 until smallestArea) {
+                        best = n
+                        smallestArea = area
+                    }
+                }
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+        }
+        walk(root, 0)
+        return best
     }
 
     /**

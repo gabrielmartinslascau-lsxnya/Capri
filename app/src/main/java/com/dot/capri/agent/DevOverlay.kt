@@ -51,6 +51,15 @@ object DevOverlay {
         main.post { detach() }
     }
 
+    /** Temporarily hides the dev overlay during screenshot capture so lines don't pollute vision/OCR. */
+    fun setCaptureHidden(hidden: Boolean) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            view?.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
+        } else {
+            main.post { view?.visibility = if (hidden) View.INVISIBLE else View.VISIBLE }
+        }
+    }
+
     private fun attach(app: Context) {
         if (view != null) return
         val manager = app.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -69,7 +78,10 @@ object DevOverlay {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
 
         val v = GridView(app)
         var added = try {

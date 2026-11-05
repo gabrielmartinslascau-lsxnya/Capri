@@ -37,6 +37,21 @@
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
+        <Button
+            android:id="@+id/btnRealTalk"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="12dp"
+            android:backgroundTint="#2563EB"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
+            android:text="Real Talk (Full Chat UI)"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
         <!-- User Guide & Tutorial Button -->
         <Button
             android:id="@+id/btn_open_tutorial"
@@ -248,6 +263,172 @@
             android:layout_marginBottom="12dp"
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
+
+        <!-- Screen Vision Resolution (LLM Pixel Budget) -->
+        <LinearLayout
+            android:id="@+id/cardVisionResolution"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="10dp"
+            android:background="#161622"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="LLM Screen Vision Pixels"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvVisionPixelBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#26FF2D6B"
+                    android:paddingStart="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="3dp"
+                    android:text="512px · Balanced"
+                    android:textColor="#FF2D6B"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvVisionPixelDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:lineSpacingExtra="2dp"
+                android:text="Lower pixels = much faster thinking, but blinder to small details. Higher pixels = sharper sight, slower thinking."
+                android:textColor="#9E9EAE"
+                android:textSize="12sp" />
+
+            <SeekBar
+                android:id="@+id/seekVisionPixels"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="6dp"
+                android:max="14"
+                android:progress="5"
+                android:progressTint="#FF2D6B"
+                android:thumbTint="#FF2D6B" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Faster / Blinder (192px)"
+                    android:textColor="#7A7A8C"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Sharper / Slower (1088px)"
+                    android:textColor="#7A7A8C"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- Instant Preset Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnVision256"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#222230"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="256"
+                    android:textAllCaps="false"
+                    android:textColor="#E0E0E0"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnVision384"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#222230"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="384"
+                    android:textAllCaps="false"
+                    android:textColor="#E0E0E0"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnVision512"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#222230"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="512"
+                    android:textAllCaps="false"
+                    android:textColor="#E0E0E0"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnVision768"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#222230"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="768"
+                    android:textAllCaps="false"
+                    android:textColor="#E0E0E0"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnVision1024"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#222230"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="1024"
+                    android:textAllCaps="false"
+                    android:textColor="#E0E0E0"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"

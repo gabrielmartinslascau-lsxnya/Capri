@@ -316,6 +316,10 @@ object IntentParser {
             }
         }
 
+        if (knownAppNames.contains(cleaned.lowercase())) {
+            return Cmd.Open(cleaned)
+        }
+
         searchRegex.find(cleaned)?.let { match ->
             val (query) = match.destructured
             return Cmd.Search(query.trim())

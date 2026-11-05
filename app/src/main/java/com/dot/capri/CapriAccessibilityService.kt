@@ -57,55 +57,73 @@ class CapriAccessibilityService : AccessibilityService() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             return null
         }
-        return suspendCancellableCoroutine { continuation ->
-            try {
-                takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
-                    override fun onSuccess(screenshot: ScreenshotResult) {
-                        try {
-                            val hwBuffer = screenshot.hardwareBuffer
-                            val bitmap = Bitmap.wrapHardwareBuffer(hwBuffer, screenshot.colorSpace)
-                            var mutableBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
-                            hwBuffer.close()
-                            if (mutableBitmap != null) {
-                                val display = (getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager)?.defaultDisplay
-                                val rotation = display?.rotation ?: android.view.Surface.ROTATION_0
-                                if ((rotation == android.view.Surface.ROTATION_90 || rotation == android.view.Surface.ROTATION_270) && mutableBitmap.width < mutableBitmap.height) {
-                                    val matrix = android.graphics.Matrix()
-                                    matrix.postRotate(if (rotation == android.view.Surface.ROTATION_90) 270f else 90f)
-                                    mutableBitmap = Bitmap.createBitmap(mutableBitmap, 0, 0, mutableBitmap.width, mutableBitmap.height, matrix, true)
-                                }
+        // Fix #1: Hide Capri's own cursor, STOP pill, and DevOverlay before capturing
+        com.dot.capri.agent.CapriCursor.setCaptureHidden(true)
+        com.dot.capri.agent.DevOverlay.setCaptureHidden(true)
+        kotlinx.coroutines.delay(25)
 
-                                val maxDim = 960
-                                val srcW = mutableBitmap.width
-                                val srcH = mutableBitmap.height
-                                val scaledBitmap = if (srcW > maxDim || srcH > maxDim) {
-                                    val scale = maxDim.toFloat() / Math.max(srcW, srcH)
-                                    val newW = (srcW * scale).toInt()
-                                    val newH = (srcH * scale).toInt()
-                                    Bitmap.createScaledBitmap(mutableBitmap, newW, newH, true)
+        return try {
+            suspendCancellableCoroutine { continuation ->
+                try {
+                    takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+                        override fun onSuccess(screenshot: ScreenshotResult) {
+                            com.dot.capri.agent.CapriCursor.setCaptureHidden(false)
+                            com.dot.capri.agent.DevOverlay.setCaptureHidden(false)
+                            try {
+                                val hwBuffer = screenshot.hardwareBuffer
+                                val bitmap = Bitmap.wrapHardwareBuffer(hwBuffer, screenshot.colorSpace)
+                                var mutableBitmap = bitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                                hwBuffer.close()
+                                if (mutableBitmap != null) {
+                                    val display = (getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager)?.defaultDisplay
+                                    val rotation = display?.rotation ?: android.view.Surface.ROTATION_0
+                                    if ((rotation == android.view.Surface.ROTATION_90 || rotation == android.view.Surface.ROTATION_270) && mutableBitmap.width < mutableBitmap.height) {
+                                        val matrix = android.graphics.Matrix()
+                                        matrix.postRotate(if (rotation == android.view.Surface.ROTATION_90) 270f else 90f)
+                                        mutableBitmap = Bitmap.createBitmap(mutableBitmap, 0, 0, mutableBitmap.width, mutableBitmap.height, matrix, true)
+                                    }
+
+                                    // Use user's exact VisionConfig slider resolution & JPEG quality
+                                    val maxDim = com.dot.capri.agent.VisionConfig.getMaxSide(this@CapriAccessibilityService)
+                                    val jpegQuality = com.dot.capri.agent.VisionConfig.getJpegQuality(this@CapriAccessibilityService)
+                                    val srcW = mutableBitmap.width
+                                    val srcH = mutableBitmap.height
+                                    val scaledBitmap = if (srcW > maxDim || srcH > maxDim) {
+                                        val scale = maxDim.toFloat() / Math.max(srcW, srcH)
+                                        val newW = (srcW * scale).toInt().coerceAtLeast(1)
+                                        val newH = (srcH * scale).toInt().coerceAtLeast(1)
+                                        Bitmap.createScaledBitmap(mutableBitmap, newW, newH, true)
+                                    } else {
+                                        mutableBitmap
+                                    }
+                                    val stream = ByteArrayOutputStream()
+                                    scaledBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, stream)
+                                    if (continuation.isActive) continuation.resume(stream.toByteArray())
                                 } else {
-                                    mutableBitmap
+                                    if (continuation.isActive) continuation.resume(null)
                                 }
-                                val stream = ByteArrayOutputStream()
-                                scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream)
-                                continuation.resume(stream.toByteArray())
-                            } else {
-                                continuation.resume(null)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                if (continuation.isActive) continuation.resume(null)
                             }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            continuation.resume(null)
                         }
-                    }
 
-                    override fun onFailure(errorCode: Int) {
-                        continuation.resume(null)
-                    }
-                })
-            } catch (e: Exception) {
-                e.printStackTrace()
-                continuation.resume(null)
+                        override fun onFailure(errorCode: Int) {
+                            com.dot.capri.agent.CapriCursor.setCaptureHidden(false)
+                            com.dot.capri.agent.DevOverlay.setCaptureHidden(false)
+                            if (continuation.isActive) continuation.resume(null)
+                        }
+                    })
+                } catch (e: Exception) {
+                    com.dot.capri.agent.CapriCursor.setCaptureHidden(false)
+                    com.dot.capri.agent.DevOverlay.setCaptureHidden(false)
+                    e.printStackTrace()
+                    if (continuation.isActive) continuation.resume(null)
+                }
             }
+        } finally {
+            com.dot.capri.agent.CapriCursor.setCaptureHidden(false)
+            com.dot.capri.agent.DevOverlay.setCaptureHidden(false)
         }
     }
 

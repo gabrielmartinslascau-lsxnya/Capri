@@ -37,7 +37,7 @@ object OnDeviceAiClient {
     private const val EXPECTED_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
     private const val MIN_MODEL_BYTES = 5_000_000L
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
-    private const val PREFER_GPU = false                  // locked to CPU to avoid OpenCL device errors
+    // CPU is enforced as default backend (no GPU/NPU) to avoid OpenCL/driver errors
     private const val IDLE_RELEASE_MS = 30 * 60 * 1000L   // keep the model warm for 30 idle minutes
     private const val GENERATION_TIMEOUT_MS = 60_000L
     private const val HISTORY_TURNS = 2                   // trimmed for speed
@@ -98,15 +98,34 @@ object OnDeviceAiClient {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Shrinks a screenshot to a 512px JPEG for ultra-fast on-device vision encoding. */
-    private fun shrinkImage(bytes: ByteArray, maxSide: Int = 512): ByteArray {
+    /**
+     * Scales an image to VisionConfig.getMaxSide(context) only if it exceeds the target size.
+     * Skips re-encoding if CapriAccessibilityService or PhoneAgent already scaled the frame.
+     */
+    fun shrinkImage(context: Context, bytes: ByteArray): ByteArray {
+        val maxSide = com.dot.capri.agent.VisionConfig.getMaxSide(context)
+        val quality = com.dot.capri.agent.VisionConfig.getJpegQuality(context)
+
+        val boundsOpts = android.graphics.BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOpts)
+        val origW = boundsOpts.outWidth
+        val origH = boundsOpts.outHeight
+        if (origW <= 0 || origH <= 0) return bytes
+
+        if (maxOf(origW, origH) <= maxSide) {
+            return bytes
+        }
+
         val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
         val scale = minOf(1f, maxSide.toFloat() / maxOf(src.width, src.height))
-        val scaled = android.graphics.Bitmap.createScaledBitmap(
-            src, (src.width * scale).toInt().coerceAtLeast(1), (src.height * scale).toInt().coerceAtLeast(1), true
-        )
+        val targetW = (src.width * scale).toInt().coerceAtLeast(1)
+        val targetH = (src.height * scale).toInt().coerceAtLeast(1)
+        val scaled = android.graphics.Bitmap.createScaledBitmap(src, targetW, targetH, true)
+
         val out = java.io.ByteArrayOutputStream()
-        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out)
         return out.toByteArray()
     }
 
@@ -260,39 +279,36 @@ object OnDeviceAiClient {
             lastError = "model file missing"
             return null
         }
-        val backends: List<() -> Backend> =
-            if (PREFER_GPU) listOf({ Backend.GPU() }, { Backend.CPU() }) else listOf({ Backend.CPU() })
+        // Strictly use CPU backend to avoid Adreno OpenCL/GPU native crashes and vision tensor failures
         val visionTries = if (wantVision && !visionBroken) listOf(true, false) else listOf(false)
 
         for (vision in visionTries) {
-            for (make in backends) {
-                try {
-                    val cfg = if (vision) {
-                        EngineConfig(
-                            modelPath = file.absolutePath,
-                            backend = make(),
-                            visionBackend = make(),
-                            cacheDir = context.cacheDir.path
-                        )
-                    } else {
-                        EngineConfig(
-                            modelPath = file.absolutePath,
-                            backend = make(),
-                            cacheDir = context.cacheDir.path
-                        )
-                    }
-                    val e = Engine(cfg)
-                    e.initialize()
-                    engine = e
-                    engineHasVision = vision
-                    lastError = null
-                    Log.d(TAG, "engine ready (vision=$vision)")
-                    return e
-                } catch (t: Throwable) {
-                    if (vision) visionBroken = true
-                    lastError = "engine init failed (vision=$vision): ${t.message ?: t.javaClass.simpleName}"
-                    Log.e(TAG, lastError!!, t)
+            try {
+                val cfg = if (vision) {
+                    EngineConfig(
+                        modelPath = file.absolutePath,
+                        backend = Backend.CPU(),
+                        visionBackend = Backend.CPU(),
+                        cacheDir = context.cacheDir.path
+                    )
+                } else {
+                    EngineConfig(
+                        modelPath = file.absolutePath,
+                        backend = Backend.CPU(),
+                        cacheDir = context.cacheDir.path
+                    )
                 }
+                val e = Engine(cfg)
+                e.initialize()
+                engine = e
+                engineHasVision = vision
+                lastError = null
+                Log.d(TAG, "engine ready on CPU (vision=$vision)")
+                return e
+            } catch (t: Throwable) {
+                if (vision) visionBroken = true
+                lastError = "engine init failed (vision=$vision): ${t.message ?: t.javaClass.simpleName}"
+                Log.e(TAG, lastError!!, t)
             }
         }
         return null
@@ -335,8 +351,9 @@ object OnDeviceAiClient {
         }
 
         return slim + "\n\n[Context]: it is $weekday, $time. battery: $battery%.\n" +
-                "You are running on the phone itself right now. Keep replies to 1-3 short sentences. " +
-                "Don't guess at facts you're unsure about."
+                "You are Capri running on-device. You CAN control the phone screen and play games using your autonomous agent loop. " +
+                "When asked to play a game or control the screen, reply with: [ACTION:TASK:your goal]. " +
+                "Keep chat replies to 1-2 short sentences."
     }
 
     // ---- generation --------------------------------------------------
@@ -345,24 +362,32 @@ object OnDeviceAiClient {
         context: Context,
         prompt: String,
         imageBytes: ByteArray?,
-        systemOverride: String?
+        systemOverride: String?,
+        historyOverride: List<Pair<String, String>>?,
+        maxTokensOverride: Int?
     ): String {
         val eng = loadEngine(context, wantVision = imageBytes != null && !visionBroken)
             ?: throw IllegalStateException(lastError ?: "local model not ready")
 
-        val history = if (systemOverride == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
+        val history = historyOverride ?: if (systemOverride == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
+        // Fix #3: Anytime systemOverride is provided (e.g. PhoneAgent), it is a deterministic task!
         val isTask = systemOverride != null
+
         val config = ConversationConfig(
             systemInstruction = Contents.of(systemOverride ?: buildSystemPrompt(context)),
             initialMessages = history.flatMap { (u, c) ->
                 listOf(
-                    Message.user(u.take(MAX_HISTORY_CHARS)),
-                    Message.model(c.take(MAX_HISTORY_CHARS))
+                    Message.user(u.take(if (historyOverride != null) 2000 else MAX_HISTORY_CHARS)),
+                    Message.model(c.take(if (historyOverride != null) 2000 else MAX_HISTORY_CHARS))
                 )
             },
-            samplerConfig = SamplerConfig(topK = if (isTask) 10 else 40, topP = 0.9, temperature = if (isTask) 0.1 else 0.7),
+            samplerConfig = SamplerConfig(
+                topK = if (isTask) 1 else 40,
+                topP = if (isTask) 1.0 else 0.9,
+                temperature = if (isTask) 0.0 else 0.7
+            ),
             thinkingConfig = ThinkingConfig(enableThinking = false),
-            maxOutputToken = if (isTask) 32 else MAX_REPLY_TOKENS
+            maxOutputToken = maxTokensOverride ?: (if (isTask) 48 else MAX_REPLY_TOKENS)
         )
 
         var imageFile: File? = null
@@ -371,20 +396,36 @@ object OnDeviceAiClient {
             eng.createConversation(config).use { conversation ->
                 withTimeout(GENERATION_TIMEOUT_MS) {
                     val useImage = imageBytes != null && engineHasVision
+                    val maxChars = if (historyOverride != null) 4000 else (if (isTask) 3000 else MAX_PROMPT_CHARS)
                     val flow = if (useImage) {
                         imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
-                            writeBytes(shrinkImage(imageBytes))
+                            writeBytes(shrinkImage(context, imageBytes!!))
                         }
                         conversation.sendMessageAsync(
                             Contents.of(
-                                Content.Text(prompt.take(if (isTask) 1000 else MAX_PROMPT_CHARS)),
+                                Content.Text(prompt.take(maxChars)),
                                 Content.ImageFile(imageFile.absolutePath)
                             )
                         )
                     } else {
-                        conversation.sendMessageAsync(prompt.take(if (isTask) 1000 else MAX_PROMPT_CHARS))
+                        conversation.sendMessageAsync(prompt.take(maxChars))
                     }
-                    flow.collect { sb.append(it.toString()) }
+                    try {
+                        flow.collect { chunk ->
+                            sb.append(chunk.toString())
+                            if (isTask) {
+                                val cur = sb.toString().trimStart()
+                                // Stop immediately once a single JSON object or single-line command is complete
+                                val hasCompleteJson = cur.startsWith("{") && cur.contains("}")
+                                val hasCompleteLine = !cur.startsWith("{") && !cur.startsWith("`") && cur.contains("\n") && cur.lineSequence().first().trim().length >= 4
+                                if (hasCompleteJson || hasCompleteLine) {
+                                    throw CancellationException("COMPLETE_AGENT_COMMAND")
+                                }
+                            }
+                        }
+                    } catch (ce: CancellationException) {
+                        if (ce.message != "COMPLETE_AGENT_COMMAND") throw ce
+                    }
                 }
             }
         } finally {
@@ -397,18 +438,22 @@ object OnDeviceAiClient {
         context: Context,
         prompt: String,
         imageBytes: ByteArray? = null,
-        systemOverride: String? = null
+        systemOverride: String? = null,
+        historyOverride: List<Pair<String, String>>? = null,
+        maxTokensOverride: Int? = null
     ): Result<String> =
         withContext(Dispatchers.Default) {
             mutex.withLock {
                 idleJob?.cancel()
                 try {
-                    val reply = generateOnce(context, prompt, imageBytes, systemOverride)
+                    val reply = generateOnce(context, prompt, imageBytes, systemOverride, historyOverride, maxTokensOverride)
                     lastError = null
                     if (reply.isBlank()) {
                         Result.failure(RuntimeException("empty local reply"))
                     } else {
-                        if (systemOverride == null) CloudAiClient.recordExchange(prompt, reply)
+                        if (systemOverride == null && historyOverride == null) {
+                            CloudAiClient.recordExchange(prompt, reply)
+                        }
                         Result.success(reply)
                     }
                 } catch (t: Throwable) {

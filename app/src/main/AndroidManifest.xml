@@ -32,6 +32,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Capri">
 
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -56,6 +59,12 @@
             android:name=".TutorialActivity"
             android:exported="false"
             android:theme="@style/Theme.Capri" />
+
+        <activity
+            android:name=".RealTalkActivity"
+            android:exported="false"
+            android:label="Real Talk"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <service
             android:name=".CapriAccessibilityService"

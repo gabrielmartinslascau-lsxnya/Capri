@@ -17,7 +17,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlinx.coroutines.Dispatchers
@@ -26,8 +25,8 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /**
- * Capri's single precision on-screen cursor and draggable STOP pill.
- * Uncluttered and optimized for single-cursor gaming and task agents.
+ * Capri's single precision full-screen canvas cursor and draggable STOP pill.
+ * Draws directly on full-screen canvas space for 1:1 mathematical alignment with touch dispatch coordinates.
  */
 object CapriCursor {
 
@@ -39,34 +38,34 @@ object CapriCursor {
     private val main = Handler(Looper.getMainLooper())
     private var wm: WindowManager? = null
     private var appCtx: Context? = null
-    private var sizePx = 0
 
-    private var stage: FrameLayout? = null
+    private var stageView: StageView? = null
     private var pill: LinearLayout? = null
     private var statusTv: TextView? = null
 
-    private var originX = 0
-    private var originY = 0
-
-    private var cursorView: DotView? = null
     private var cursorX = 0f
     private var cursorY = 0f
+    private var cursorScale = 1f
+    private var sizePx = 0f
+
     private var animator: ValueAnimator? = null
 
-    private class DotView(context: Context) : View(context) {
-        private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private class StageView(context: Context) : View(context) {
+        private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 5f
+            strokeWidth = 6f
             color = 0xFFFF2D6B.toInt()
         }
-        private val core = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xCCFF2D6B.toInt()
+        private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xEEFF2D6B.toInt()
+            style = Paint.Style.FILL
         }
 
         override fun onDraw(canvas: Canvas) {
-            val r = width / 2f
-            canvas.drawCircle(r, r, r - 4f, ring)
-            canvas.drawCircle(r, r, r / 3f, core)
+            val r = (sizePx / 2f) * cursorScale
+            if (r <= 0f) return
+            canvas.drawCircle(cursorX, cursorY, r - 2f, ringPaint)
+            canvas.drawCircle(cursorX, cursorY, r / 3f, corePaint)
         }
     }
 
@@ -125,13 +124,14 @@ object CapriCursor {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
 
     private fun ensureStage(context: Context) {
-        if (stage != null) return
+        if (stageView != null) return
         val app = context.applicationContext
         appCtx = app
         val manager = windowManager(app)
         val density = app.resources.displayMetrics.density
-        sizePx = (36 * density).toInt()
-        val frame = FrameLayout(app)
+        sizePx = 36f * density
+
+        val v = StageView(app)
         fun paramsFor(type: Int) = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -141,32 +141,32 @@ object CapriCursor {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
 
         val preferred = overlayType()
-        val added = try {
-            manager.addView(frame, paramsFor(preferred))
+        var added = try {
+            manager.addView(v, paramsFor(preferred))
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to add stage with type $preferred", e)
+            Log.e(TAG, "Failed to add stage view with type $preferred", e)
             false
         }
         if (!added && preferred != WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) {
             try {
-                manager.addView(frame, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+                manager.addView(v, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+                added = true
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to add stage with fallback TYPE_APPLICATION_OVERLAY", e)
+                Log.e(TAG, "Failed to add stage view with fallback TYPE_APPLICATION_OVERLAY", e)
                 return
             }
-        } else if (!added) {
-            return
         }
-        stage = frame
-        frame.post {
-            val loc = IntArray(2)
-            frame.getLocationOnScreen(loc)
-            originX = loc[0]
-            originY = loc[1]
+        if (added) {
+            stageView = v
         }
     }
 
@@ -190,10 +190,10 @@ object CapriCursor {
         val stop = TextView(app).apply {
             text = "STOP"
             setTextColor(Color.WHITE)
-            textSize = 12f
+            textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            val h = (14 * density).toInt()
-            val v = (6 * density).toInt()
+            val h = (18 * density).toInt()
+            val v = (10 * density).toInt()
             setPadding(h, v, h, v)
             background = GradientDrawable().apply {
                 cornerRadius = 100f
@@ -268,7 +268,7 @@ object CapriCursor {
         ).apply {
             gravity = Gravity.TOP or Gravity.END
             x = (16 * density).toInt()
-            y = (20 * density).toInt()
+            y = (80 * density).toInt()
         }
         try {
             manager.addView(row, paramsFor(preferred))
@@ -288,25 +288,15 @@ object CapriCursor {
     private fun place(x: Float, y: Float) {
         cursorX = x
         cursorY = y
-        val half = sizePx / 2f
-        cursorView?.let {
-            it.translationX = x - half - originX
-            it.translationY = y - half - originY
-        }
+        stageView?.invalidate()
     }
 
     private fun spawnNow(context: Context, x: Int, y: Int) {
         ensureStage(context)
-        val frame = stage ?: return
-        if (cursorView != null) {
+        if (stageView != null) {
             animator?.cancel()
             place(x.toFloat(), y.toFloat())
-            return
         }
-        val view = DotView(frame.context)
-        frame.addView(view, FrameLayout.LayoutParams(sizePx, sizePx))
-        cursorView = view
-        place(x.toFloat(), y.toFloat())
     }
 
     fun setStatus(msg: String) = onMain {
@@ -314,7 +304,7 @@ object CapriCursor {
     }
 
     fun show(context: Context) = onMain {
-        val newRun = stage == null
+        val newRun = stageView == null
         ensurePill(context)
         if (newRun) cancelled = false
         val m = context.applicationContext.resources.displayMetrics
@@ -325,17 +315,26 @@ object CapriCursor {
     fun hide() = onMain {
         cancelled = false
         animator?.cancel()
-        cursorView = null
-        try { stage?.let { wm?.removeView(it) } } catch (_: Exception) {}
+        try { stageView?.let { wm?.removeView(it) } } catch (_: Exception) {}
         try { pill?.let { wm?.removeView(it) } } catch (_: Exception) {}
-        stage = null
+        stageView = null
         pill = null
         statusTv = null
     }
 
+    /**
+     * Temporarily hides the cursor ring and STOP pill while a screenshot is being captured
+     * so Capri never sees her own overlay in the image or taps her own STOP button.
+     */
+    fun setCaptureHidden(hidden: Boolean) = onMain {
+        val vis = if (hidden) View.INVISIBLE else View.VISIBLE
+        stageView?.visibility = vis
+        pill?.visibility = vis
+    }
+
     suspend fun moveTo(x: Int, y: Int) {
         withContext(Dispatchers.Main) {
-            val v = cursorView
+            val v = stageView
             if (v == null) {
                 val ctx = appCtx ?: return@withContext
                 spawnNow(ctx, x, y)
@@ -401,9 +400,14 @@ object CapriCursor {
     }
 
     fun pulse() = onMain {
-        val v = cursorView ?: return@onMain
-        v.animate().scaleX(1.7f).scaleY(1.7f).setDuration(110).withEndAction {
-            v.animate().scaleX(1f).scaleY(1f).setDuration(140).start()
-        }.start()
+        val v = stageView ?: return@onMain
+        ValueAnimator.ofFloat(1f, 1.6f, 1f).apply {
+            duration = 220
+            addUpdateListener {
+                cursorScale = it.animatedValue as Float
+                v.invalidate()
+            }
+            start()
+        }
     }
 }

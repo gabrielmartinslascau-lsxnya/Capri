@@ -117,6 +117,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        setupVisionResolutionControl()
+
         val permissionsToRequest = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -153,9 +155,14 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, HealthActivity::class.java))
         }
 
+        findViewById<View>(R.id.btnRealTalk)?.setOnClickListener {
+            val intent = Intent(this, RealTalkActivity::class.java)
+            startActivity(intent)
+        }
+
         // Provider Options & Key Fields
         val activeProviderSpinner = findViewById<Spinner>(R.id.spinner_active_provider)
-        val providerList = listOf("Auto (Priority)", "Gemini", "Anthropic", "OpenRouter", "Groq")
+        val providerList = listOf("Auto (Priority)", "Gemini", "Anthropic", "OpenRouter", "Groq", "Local (On-Device)")
         val providerAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, providerList).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
@@ -167,6 +174,7 @@ class MainActivity : AppCompatActivity() {
             "anthropic" -> 2
             "openrouter" -> 3
             "groq" -> 4
+            "local" -> 5
             else -> 0
         }
         activeProviderSpinner.setSelection(providerIndex)
@@ -178,6 +186,7 @@ class MainActivity : AppCompatActivity() {
                     2 -> "anthropic"
                     3 -> "openrouter"
                     4 -> "groq"
+                    5 -> "local"
                     else -> "auto"
                 }
                 prefs.edit().putString(LlmRouter.KEY_ACTIVE_PROVIDER, selectedKey).apply()
@@ -653,5 +662,68 @@ class MainActivity : AppCompatActivity() {
         ContextCompat.startForegroundService(this, intent)
         Toast.makeText(this, "Capri is active!", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun setupVisionResolutionControl() {
+        val tvBadge = findViewById<android.widget.TextView>(R.id.tvVisionPixelBadge) ?: return
+        val tvDesc = findViewById<android.widget.TextView>(R.id.tvVisionPixelDesc) ?: return
+        val seekBar = findViewById<android.widget.SeekBar>(R.id.seekVisionPixels) ?: return
+
+        val presetButtons = mapOf(
+            256 to findViewById<android.widget.Button>(R.id.btnVision256),
+            384 to findViewById<android.widget.Button>(R.id.btnVision384),
+            512 to findViewById<android.widget.Button>(R.id.btnVision512),
+            768 to findViewById<android.widget.Button>(R.id.btnVision768),
+            1024 to findViewById<android.widget.Button>(R.id.btnVision1024)
+        )
+
+        seekBar.max = com.dot.capri.agent.VisionConfig.sliderMaxSteps()
+
+        fun refreshVisionUi(maxSidePx: Int, updateSlider: Boolean) {
+            val info = com.dot.capri.agent.VisionConfig.describeSelection(maxSidePx)
+            tvBadge.text = info.title.substringBefore(" (")
+            tvDesc.text = info.description
+
+            if (updateSlider) {
+                seekBar.progress = com.dot.capri.agent.VisionConfig.sideToSliderProgress(maxSidePx)
+            }
+
+            val activeTint = android.content.res.ColorStateList.valueOf(0xFFFF2D6B.toInt())
+            val idleTint = android.content.res.ColorStateList.valueOf(0xFF222230.toInt())
+
+            for ((presetPx, btn) in presetButtons) {
+                btn ?: continue
+                if (presetPx == maxSidePx) {
+                    btn.backgroundTintList = activeTint
+                    btn.setTextColor(android.graphics.Color.WHITE)
+                } else {
+                    btn.backgroundTintList = idleTint
+                    btn.setTextColor(0xFFE0E0E0.toInt())
+                }
+            }
+        }
+
+        // Initialize from SharedPreferences
+        val initialPx = com.dot.capri.agent.VisionConfig.getMaxSide(this)
+        refreshVisionUi(initialPx, updateSlider = true)
+
+        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                val px = com.dot.capri.agent.VisionConfig.sliderProgressToSide(progress)
+                val saved = com.dot.capri.agent.VisionConfig.setMaxSide(this@MainActivity, px)
+                refreshVisionUi(saved, updateSlider = false)
+            }
+
+            override fun onStartTrackingTouch(bar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(bar: android.widget.SeekBar?) {}
+        })
+
+        for ((presetPx, btn) in presetButtons) {
+            btn?.setOnClickListener {
+                val saved = com.dot.capri.agent.VisionConfig.setMaxSide(this, presetPx)
+                refreshVisionUi(saved, updateSlider = true)
+            }
+        }
     }
 }

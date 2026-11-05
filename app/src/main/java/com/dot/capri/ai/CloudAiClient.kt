@@ -49,6 +49,9 @@ Start a reply with exactly one action tag when the user clearly asks for a singl
 - [ACTION:TYPE:text_to_type]
 - [ACTION:CALL:contact_name]
 - [ACTION:TEXT:contact_name:optional_message]
+- [ACTION:SCROLL:UP] or [ACTION:SCROLL:DOWN]
+- [ACTION:TAP:button_label_or_text]
+- [ACTION:GO_HOME] or [ACTION:BACK]
 - [ACTION:MULTITAP:x1,y1|x2,y2] to tap multiple on-screen coordinates simultaneously using color-coded cursors.
 - Adaptive "play" command: "play <name>" means opening the app if <name> is an installed game or app (e.g., "play minecraft" -> [ACTION:OPEN:Minecraft]). Only use [ACTION:PLAY:song_query] if the query is a song, music, or artist!
 - If the request needs several steps on the phone, or needs to look at the screen (for example: search Google then open a GitHub page, scroll a list, click the 3rd app, take over the screen), reply with exactly: [ACTION:TASK:<the goal, in the user's own words>] and nothing else.

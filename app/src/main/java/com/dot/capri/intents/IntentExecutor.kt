@@ -133,18 +133,22 @@ object IntentExecutor {
 
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
         val rawQuery = cmd.query.trim().lowercase()
+        val isExplicitMusic = rawQuery.contains("song") || rawQuery.contains("music") || rawQuery.contains("track") || rawQuery.contains("by ") || !cmd.app.isNullOrBlank()
 
-        // Adaptive Check: If query matches an installed game/app (e.g. "play minecraft", "play roblox"),
-        // open the game instead of searching for music!
-        if (!rawQuery.contains("song") && !rawQuery.contains("music") && !rawQuery.contains("track") && !rawQuery.contains("by ")) {
+        // Adaptive Check: If query matches an installed game/app (e.g. "play minecraft", "play roblox", "play pvz"),
+        // open the game instead of searching for music on Spotify!
+        if (!isExplicitMusic) {
+            val queryWords = rawQuery.split(Regex("\\s+")).filter { it.length >= 2 }
             val launchers = AppChooser.launchers(context)
             val matchingApp = launchers.firstOrNull { app ->
                 val labelLower = app.label.lowercase().trim()
-                labelLower == rawQuery || (rawQuery.length >= 3 && labelLower.contains(rawQuery))
+                val pkgLower = app.pkg.lowercase().trim()
+                labelLower == rawQuery || queryWords.any { word -> labelLower.contains(word) || pkgLower.contains(word) }
             }
             if (matchingApp != null) {
                 return AppChooser.open(context, matchingApp.pkg)
             }
+            return false
         }
 
         // Handle short video / reels queries ("play video", "play a vid", "reels")

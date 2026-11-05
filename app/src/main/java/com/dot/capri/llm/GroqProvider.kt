@@ -15,7 +15,7 @@ class GroqProvider(
 ) : LlmProvider {
 
     override val name: String = "Groq"
-    override val currentModel: String = modelOverride?.ifBlank { null } ?: "openai/gpt-oss-120b"
+    override val currentModel: String = modelOverride?.ifBlank { null } ?: "llama-3.1-70b-versatile"
 
     private var lastError: String? = null
     private var isReachableState: Boolean = true
@@ -73,7 +73,25 @@ class GroqProvider(
                         put("type", "text")
                         put("text", req.prompt)
                     })
-                    val base64Image = Base64.encodeToString(req.imageBytes, Base64.NO_WRAP)
+                    
+                    // Downscale for Groq Vision limits (max 1120x1120)
+                    var finalBytes = req.imageBytes
+                    try {
+                        val bmp = android.graphics.BitmapFactory.decodeByteArray(req.imageBytes, 0, req.imageBytes.size)
+                        if (bmp != null && (bmp.width > 1024 || bmp.height > 1024)) {
+                            val scale = 1024f / maxOf(bmp.width, bmp.height)
+                            val scaled = android.graphics.Bitmap.createScaledBitmap(
+                                bmp, (bmp.width * scale).toInt().coerceAtLeast(1), (bmp.height * scale).toInt().coerceAtLeast(1), true
+                            )
+                            val out = java.io.ByteArrayOutputStream()
+                            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+                            finalBytes = out.toByteArray()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+
+                    val base64Image = Base64.encodeToString(finalBytes, Base64.NO_WRAP)
                     userContent.put(JSONObject().apply {
                         put("type", "image_url")
                         put("image_url", JSONObject().apply {
@@ -88,7 +106,7 @@ class GroqProvider(
             messages.put(userMsg)
 
             val effectiveModel = if (req.imageBytes != null && req.imageBytes.isNotEmpty() && !currentModel.lowercase().contains("vision")) {
-                "llama-3.2-11b-vision-preview"
+                "llama-3.2-90b-vision-preview"
             } else {
                 currentModel
             }
@@ -97,6 +115,9 @@ class GroqProvider(
                 put("model", effectiveModel)
                 put("messages", messages)
                 put("max_tokens", 1024)
+                if (req.systemPrompt.contains("JSON object")) {
+                    put("response_format", JSONObject().put("type", "json_object"))
+                }
             }
 
             OutputStreamWriter(connection.outputStream, "UTF-8").use { writer ->
