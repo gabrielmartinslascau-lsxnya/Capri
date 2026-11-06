@@ -49,6 +49,7 @@ object CapriCursor {
     private var sizePx = 0f
 
     private var animator: ValueAnimator? = null
+    private var pulseAnimator: ValueAnimator? = null
 
     private class StageView(context: Context) : View(context) {
         private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -113,8 +114,8 @@ object CapriCursor {
     }
 
     private fun windowManager(context: Context): WindowManager {
-        return wm ?: (context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
-            .also { wm = it }
+        val hostCtx = com.dot.capri.CapriAccessibilityService.instance ?: context.applicationContext
+        return (hostCtx.getSystemService(Context.WINDOW_SERVICE) as WindowManager).also { wm = it }
     }
 
     private fun overlayType(): Int =
@@ -127,7 +128,7 @@ object CapriCursor {
         if (stageView != null) return
         val app = context.applicationContext
         appCtx = app
-        val manager = windowManager(app)
+        val manager = windowManager(context)
         val density = app.resources.displayMetrics.density
         sizePx = 36f * density
 
@@ -158,7 +159,9 @@ object CapriCursor {
         }
         if (!added && preferred != WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) {
             try {
-                manager.addView(v, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+                val appWm = app.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                appWm.addView(v, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+                wm = appWm
                 added = true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to add stage view with fallback TYPE_APPLICATION_OVERLAY", e)
@@ -173,7 +176,7 @@ object CapriCursor {
     private fun ensurePill(context: Context) {
         if (pill != null) return
         val app = context.applicationContext
-        val manager = windowManager(app)
+        val manager = windowManager(context)
         val density = app.resources.displayMetrics.density
 
         val bars = AnimatedBarsView(app).apply {
@@ -248,7 +251,7 @@ object CapriCursor {
                         MotionEvent.ACTION_MOVE -> {
                             params.x = initialX - (event.rawX - initialTouchX).toInt()
                             params.y = initialY + (event.rawY - initialTouchY).toInt()
-                            try { manager.updateViewLayout(v, params) } catch (_: Exception) {}
+                            try { wm?.updateViewLayout(v, params) } catch (_: Exception) {}
                             return true
                         }
                     }
@@ -275,7 +278,9 @@ object CapriCursor {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add pill with type $preferred", e)
             try {
-                manager.addView(row, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+                val appWm = app.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                appWm.addView(row, paramsFor(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY))
+                wm = appWm
             } catch (ex: Exception) {
                 Log.e(TAG, "Failed to add pill with fallback TYPE_APPLICATION_OVERLAY", ex)
                 return
@@ -304,17 +309,22 @@ object CapriCursor {
     }
 
     fun show(context: Context) = onMain {
-        val newRun = stageView == null
+        val newRun = stageView == null && pill == null
         ensurePill(context)
-        if (newRun) cancelled = false
-        val m = context.applicationContext.resources.displayMetrics
-        spawnNow(context, m.widthPixels / 2, m.heightPixels / 2)
-        pulse()
+        if (newRun) {
+            cancelled = false
+            val m = context.applicationContext.resources.displayMetrics
+            spawnNow(context, m.widthPixels / 2, m.heightPixels / 2)
+            pulse()
+        } else {
+            ensureStage(context)
+        }
     }
 
     fun hide() = onMain {
         cancelled = false
         animator?.cancel()
+        pulseAnimator?.cancel()
         try { stageView?.let { wm?.removeView(it) } } catch (_: Exception) {}
         try { pill?.let { wm?.removeView(it) } } catch (_: Exception) {}
         stageView = null
@@ -323,21 +333,30 @@ object CapriCursor {
     }
 
     /**
-     * Temporarily hides the cursor ring and STOP pill while a screenshot is being captured
-     * so Capri never sees her own overlay in the image or taps her own STOP button.
+     * Temporarily hides both the cursor ring AND the STOP pill while a screenshot is captured
+     * so Capri never sees her own UI in screenshots or mistakes pill animations for screen changes.
      */
     fun setCaptureHidden(hidden: Boolean) = onMain {
-        val vis = if (hidden) View.INVISIBLE else View.VISIBLE
-        stageView?.visibility = vis
-        pill?.visibility = vis
+        val a = if (hidden) 0f else 1f
+        stageView?.alpha = a
+        pill?.alpha = a
     }
 
     suspend fun moveTo(x: Int, y: Int) {
         withContext(Dispatchers.Main) {
             val v = stageView
             if (v == null) {
-                val ctx = appCtx ?: return@withContext
+                val ctx = appCtx
+                    ?: com.dot.capri.CapriAccessibilityService.instance?.applicationContext
+                    ?: com.dot.capri.BubbleService.instance?.applicationContext
+                    ?: return@withContext
                 spawnNow(ctx, x, y)
+                return@withContext
+            }
+            val dx = kotlin.math.abs(cursorX - x)
+            val dy = kotlin.math.abs(cursorY - y)
+            if (dx < 2f && dy < 2f) {
+                place(x.toFloat(), y.toFloat())
                 return@withContext
             }
             suspendCancellableCoroutine<Unit> { cont ->
@@ -345,7 +364,7 @@ object CapriCursor {
                 val fx = cursorX
                 val fy = cursorY
                 val anim = ValueAnimator.ofFloat(0f, 1f).apply {
-                    duration = 150
+                    duration = 60
                     addUpdateListener {
                         val f = it.animatedValue as Float
                         place(fx + (x - fx) * f, fy + (y - fy) * f)
@@ -370,7 +389,10 @@ object CapriCursor {
 
     suspend fun glideAlongPath(fromX: Float, fromY: Float, toX: Float, toY: Float, durationMs: Long) {
         withContext(Dispatchers.Main) {
-            val ctx = appCtx ?: return@withContext
+            val ctx = appCtx
+                ?: com.dot.capri.CapriAccessibilityService.instance?.applicationContext
+                ?: com.dot.capri.BubbleService.instance?.applicationContext
+                ?: return@withContext
             spawnNow(ctx, fromX.toInt(), fromY.toInt())
             place(fromX, fromY)
             suspendCancellableCoroutine<Unit> { cont ->
@@ -401,8 +423,9 @@ object CapriCursor {
 
     fun pulse() = onMain {
         val v = stageView ?: return@onMain
-        ValueAnimator.ofFloat(1f, 1.6f, 1f).apply {
-            duration = 220
+        pulseAnimator?.cancel()
+        pulseAnimator = ValueAnimator.ofFloat(1f, 1.5f, 1f).apply {
+            duration = 130
             addUpdateListener {
                 cursorScale = it.animatedValue as Float
                 v.invalidate()

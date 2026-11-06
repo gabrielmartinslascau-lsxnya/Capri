@@ -53,11 +53,11 @@ Start a reply with exactly one action tag when the user clearly asks for a singl
 - [ACTION:TAP:button_label_or_text]
 - [ACTION:GO_HOME] or [ACTION:BACK]
 - [ACTION:MULTITAP:x1,y1|x2,y2] to tap multiple on-screen coordinates simultaneously using color-coded cursors.
-- Adaptive "play" command: "play <name>" means opening the app if <name> is an installed game or app (e.g., "play minecraft" -> [ACTION:OPEN:Minecraft]). Only use [ACTION:PLAY:song_query] if the query is a song, music, or artist!
-- If the request needs several steps on the phone, or needs to look at the screen (for example: search Google then open a GitHub page, scroll a list, click the 3rd app, take over the screen), reply with exactly: [ACTION:TASK:<the goal, in the user's own words>] and nothing else.
+- [ACTION:SEE_SCREEN:question] when the user asks what is on their screen, asks you to look/read/check the screen or take a screenshot, or when you need to see the screen to answer a question (not for interactive clicking — use TASK for clicking/playing).
+- Adaptive "play" command: if the user asks you to play a game (e.g., "play minecraft", "play pvz", "play this game"), NEVER reply with text tutorials or instructions — reply with `[ACTION:TASK:<goal>]` so your autonomous agent opens and plays the game directly! Only use `[ACTION:PLAY:song_query]` if the query is a song, music, or artist!
+- If the request needs several steps on the phone, or needs to interact with the screen or play a game (for example: move towards the tree and mine wood, search Google then open a GitHub page, scroll a list, click the 3rd app, take over the screen, play a game), reply with exactly: [ACTION:TASK:<the goal, in the user's own words>] and nothing else.
 - Single simple actions use the tags above (for example [ACTION:OPEN:Settings]).
 - Writing text is chat, not typing. "write a funny message" means you write the message in your reply. Only type into a field when the user asks you to put text into an app.
-For multi-step screen tasks, don't use a tag. The phone agent handles those.
 Asking a question about an app is not a request to open it.
 For OPEN, copy the exact app label from INSTALLED APPS. "Google" means the Google app, not Chrome, Lens, Drive, Gmail or Photos. If the name could mean more than one app, ask which one.
 
@@ -97,15 +97,17 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
             ?.lowercase()
             ?: "neutral"
 
+        val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
         val contextBlock = "it is $weekday, $time. foreground app: $currentApp. battery: $batteryPct%.\n" +
+                "user's macro buttons (MBs): $mbSummary. (to execute a multi-step or game task with MBs or the screen, reply with [ACTION:TASK:<goal>]; to inspect what's on screen, reply with [ACTION:SEE_SCREEN:<question>]).\n" +
                 "your current mood is $currentMood. let it color your tone without ever saying the word mood: " +
                 "pleased = warmer and proud of them, judging = teasing them about screen time, " +
                 "lonely = a little clingy, bored = restless and eager, neutral = normal.\n" +
                 "what you can actually do on this phone: see the foreground app and today's app usage, " +
-                "read the screen when asked (accessibility), read recent notifications when asked " +
+                "read the screen when asked ([ACTION:SEE_SCREEN:...]), read recent notifications when asked " +
                 "(only if notification access is on), open apps, play music, adjust volume, call and text " +
                 "contacts, type into text fields, tap/click on-screen buttons, scroll up/down on screen, " +
-                "glide your pink glowing cursor to on-screen elements, execute tasks (using 'task: ...'), " +
+                "glide your pink glowing cursor to on-screen elements, execute tasks ([ACTION:TASK:...]), " +
                 "and report the battery level above. " +
                 "you cannot see the user's files or anything not listed here. " +
                 "if asked about something you can't do, say so plainly and don't invent a reason.\n" +

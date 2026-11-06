@@ -33,6 +33,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.dot.capri.accessibility.ScreenWriter
@@ -48,7 +49,6 @@ import com.dot.capri.llm.LlmRouter
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentExecutor
 import com.dot.capri.intents.AppChooser
-import com.dot.capri.intents.IntentParser
 import com.dot.capri.intents.VolumeDirection
 import com.dot.capri.personality.Personality
 import com.dot.capri.proactivity.ProactivityEngine
@@ -74,6 +74,25 @@ class BubbleService : Service() {
 
         private val persistentChatHistory = mutableListOf<Pair<String, String>>()
         fun getPersistentChatHistory(): MutableList<Pair<String, String>> = persistentChatHistory
+
+        /**
+         * Temporarily hides Capri's floating bubble, chat window, and proactive banner during
+         * screenshot capture so Capri never sees her own UI or mistakes it for screen changes.
+         */
+        fun setCaptureHidden(hidden: Boolean) {
+            val svc = instance ?: return
+            val runnable = Runnable {
+                val a = if (hidden) 0f else 1f
+                svc.bubbleView?.alpha = a
+                svc.chatView?.alpha = a
+                svc.bannerView?.alpha = a
+            }
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                runnable.run()
+            } else {
+                android.os.Handler(android.os.Looper.getMainLooper()).post(runnable)
+            }
+        }
     }
 
     private var windowManager: WindowManager? = null
@@ -486,6 +505,37 @@ class BubbleService : Service() {
         val chatScroll = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
         val expandBtn = chatView?.findViewById<TextView>(R.id.btn_expand)
         val realTalkBtn = chatView?.findViewById<TextView>(R.id.btn_real_talk)
+        val addMbBtn = chatView?.findViewById<TextView>(R.id.btn_add_mb)
+        val toggleMbBtn = chatView?.findViewById<TextView>(R.id.btn_toggle_mb)
+
+        addMbBtn?.setOnClickListener {
+            triggerHapticFeedback()
+            val mb = ControlRegions.addNextMacroButton(this)
+            Toast.makeText(
+                this,
+                "Spawned ${mb.name.uppercase()}! Drag onto button, tap to tag role, or hold to delete.",
+                Toast.LENGTH_SHORT
+            ).show()
+            minimizeToChat()
+        }
+
+        addMbBtn?.setOnLongClickListener {
+            triggerHapticFeedback()
+            ControlRegions.clearAll(this)
+            Toast.makeText(this, "Cleared all Macro Buttons (MBs)", Toast.LENGTH_SHORT).show()
+            true
+        }
+
+        toggleMbBtn?.setOnClickListener {
+            triggerHapticFeedback()
+            val shown = ControlRegions.toggleOverlays(this)
+            Toast.makeText(
+                this,
+                if (shown) "Showing Macro Buttons (MBs)" else "Hidden Macro Buttons (positions saved)",
+                Toast.LENGTH_SHORT
+            ).show()
+            if (shown) minimizeToChat()
+        }
 
         realTalkBtn?.setOnClickListener {
             minimizeToChat()
@@ -724,7 +774,7 @@ class BubbleService : Service() {
     }
 
     private suspend fun executeEmbeddedActionTag(response: String): String {
-        val actionRegex = Regex("\\[?ACTION[=:]\\s*(OPEN|PLAY|CALL|TEXT|SEARCH|VOLUME|TYPE|WRITE|SCROLL|TAP|LONG_PRESS|LONGPRESS|PINCH|DUALTAP|DUAL_TAP|SPAWN_CURSOR|MOVE_CURSOR|REMOVE_CURSOR|CLEAR_CURSORS|MULTITAP|TASK|GO_HOME|HOME|BACK)(?:[=:]\\s*([^]]*))?\\]?", RegexOption.IGNORE_CASE)
+        val actionRegex = Regex("\\[?ACTION[=:]\\s*([A-Z_]+)(?:[=:]\\s*([^]\\n]*))?\\]?", RegexOption.IGNORE_CASE)
         val matches = actionRegex.findAll(response).toList()
         if (matches.isEmpty()) return response
 
@@ -736,14 +786,24 @@ class BubbleService : Service() {
             when (actionType.uppercase()) {
                 "MOVE_CURSOR", "SPAWN_CURSOR" -> {
                     val parts = target.split(",").mapNotNull { it.trim().toIntOrNull() }
-                    if (parts.size >= 3) {
-                        CapriCursor.moveTo(parts[1], parts[2])
-                    } else if (parts.size >= 2) {
-                        CapriCursor.moveTo(parts[0], parts[1])
+                    val (tx, ty) = when {
+                        parts.size >= 3 -> Pair(parts[1], parts[2])
+                        parts.size >= 2 -> Pair(parts[0], parts[1])
+                        else -> PhoneControl.screenSize()?.let { (w, h) -> Pair(w / 2, h / 2) } ?: Pair(540, 1200)
+                    }
+                    setChatVisible(false)
+                    try {
+                        CapriCursor.show(this@BubbleService)
+                        CapriCursor.moveTo(tx, ty)
+                        CapriCursor.pulse()
+                        delay(700)
+                    } finally {
+                        CapriCursor.hide()
+                        setChatVisible(true)
                     }
                 }
                 "REMOVE_CURSOR", "CLEAR_CURSORS" -> {
-                    // Single cursor state
+                    CapriCursor.hide()
                 }
                 "MULTITAP", "MULTI_TOUCH", "MULTITOUCH" -> {
                     val pairs = target.split("|").mapNotNull { pt ->
@@ -805,6 +865,8 @@ class BubbleService : Service() {
                     PhoneControl.back()
                 }
                 "TAP" -> {
+                    val directMb = ControlRegions.tryExecuteUserMbCommand(this, "tap $target") { setChatVisible(it) }
+                    if (directMb != null) return directMb
                     minimizeToChat()
                     delay(300)
                     val root = PhoneControl.foregroundRoot()
@@ -827,6 +889,8 @@ class BubbleService : Service() {
                     }
                 }
                 "LONG_PRESS", "LONGPRESS" -> {
+                    val directMb = ControlRegions.tryExecuteUserMbCommand(this, "hold $target") { setChatVisible(it) }
+                    if (directMb != null) return directMb
                     minimizeToChat()
                     delay(300)
                     val root = PhoneControl.foregroundRoot()
@@ -848,16 +912,35 @@ class BubbleService : Service() {
                         return PhoneAgent.run(this, "long press $target", null) { setChatVisible(it) }
                     }
                 }
-                "TASK" -> {
-                    return PhoneAgent.run(this, target, null) { setChatVisible(it) }
+                "TASK", "AGENT", "DO", "EXECUTE" -> {
+                    return PhoneAgent.run(this, target.ifBlank { response }, null) { setChatVisible(it) }
+                }
+                "MOVE", "WALK", "RUN", "GOTO", "GO", "MINE", "CHOP", "BREAK", "DIG",
+                "ATTACK", "HIT", "HOLD", "PRESS", "CLICK", "USE", "LOOK", "SWIPE", "DRAG" -> {
+                    // If the LLM invented a custom action tag like ACTION:MOVE:tree or ACTION:MINE:wood,
+                    // execute it via PhoneAgent instead of leaking raw ACTION:... text into chat!
+                    val verb = actionType.lowercase(java.util.Locale.US)
+                    val goalFromTag = if (target.isNotBlank()) "$verb ${target.replace(':', ' ')}" else verb
+                    return PhoneAgent.run(this, goalFromTag, null) { setChatVisible(it) }
+                }
+                "OPEN" -> {
+                    return PhoneAgent.run(this, "open $target", null) { setChatVisible(it) }
+                }
+                "PLAY" -> {
+                    val gameOpt = com.dot.capri.agent.DeviceTasks.resolveInstalledGame(this, target)
+                    if (gameOpt != null) {
+                        com.dot.capri.intents.AppChooser.open(this, gameOpt.pkg)
+                        delay(2000)
+                        return PhoneAgent.run(this, "play ${gameOpt.label} and win", null) { setChatVisible(it) }
+                    }
+                    val query = target.replace(':', ' ').trim()
+                    return PhoneAgent.run(this, "play $query", null) { setChatVisible(it) }
+                }
+                "SEARCH" -> {
+                    return PhoneAgent.run(this, "search for $target", null) { setChatVisible(it) }
                 }
                 else -> {
                     val cmd = when (actionType.uppercase()) {
-                        "OPEN" -> Cmd.Open(target)
-                        "PLAY" -> {
-                            val parts = target.split(":")
-                            if (parts.size >= 2) Cmd.Play(parts[0].trim(), parts[1].trim()) else Cmd.Play(target, null)
-                        }
                         "VOLUME" -> {
                             val dir = when (target.uppercase()) {
                                 "UP" -> VolumeDirection.UP
@@ -873,7 +956,6 @@ class BubbleService : Service() {
                             val parts = target.split(":")
                             if (parts.size >= 2) Cmd.Text(parts[0].trim(), parts[1].trim()) else Cmd.Text(target, null)
                         }
-                        "SEARCH" -> Cmd.Search(target)
                         else -> null
                     }
                     if (cmd != null) {
@@ -882,6 +964,12 @@ class BubbleService : Service() {
                             if (cleanResponse.isBlank()) cleanResponse = writeMsg
                         } else {
                             IntentExecutor.execute(this, cmd)
+                        }
+                    } else {
+                        // Any other unrecognized ACTION:<VERB>:<TARGET> tag -> run as PhoneAgent task
+                        val fallbackGoal = "${actionType.lowercase(java.util.Locale.US)} $target".trim()
+                        if (fallbackGoal.isNotBlank()) {
+                            return PhoneAgent.run(this, fallbackGoal, null) { setChatVisible(it) }
                         }
                     }
                 }
@@ -893,19 +981,37 @@ class BubbleService : Service() {
     private fun brainAvailable(): Boolean =
         (LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)) || OnDeviceAiClient.isAvailable(this)
 
-    private suspend fun handleReply(reply: String): String {
-        val task = Regex("\\[ACTION:TASK:(.+)\\]", RegexOption.DOT_MATCHES_ALL).find(reply)
+    private suspend fun handleReply(reply: String, allowSee: Boolean = true): String {
+        val see = Regex("\\[?ACTION[=:]\\s*SEE_SCREEN(?:[=:]([^]\\n]*))?\\]?", RegexOption.IGNORE_CASE).find(reply)
+        if (see != null && allowSee) {
+            val question = see.groupValues.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() } ?: "Describe what is on screen and answer the user."
+            setChatVisible(false)
+            val shotBytes = try {
+                CapriAccessibilityService.instance?.captureScreenBitmap()
+            } finally {
+                setChatVisible(true)
+            }
+            if (shotBytes != null) {
+                return askBrain(question, shotBytes) ?: "i looked at the screen, choom, but couldn't get an answer."
+            }
+            return "i couldn't capture the screen right now, choom. make sure accessibility is enabled."
+        }
+        val cleaned = Regex("\\[?ACTION[=:]\\s*SEE_SCREEN(?:[=:][^]\\n]*)?\\]?", RegexOption.IGNORE_CASE).replace(reply, "").trim()
+        val task = Regex("\\[?ACTION[=:]\\s*TASK[=:]\\s*(.+?)\\]?$", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).find(cleaned)
         if (task != null) {
-            val goal = task.groupValues[1].trim()
+            val goal = task.groupValues[1].trim().removeSuffix("]").trim()
             return PhoneAgent.run(this, goal, null) { flag -> setChatVisible(flag) }
         }
-        return executeEmbeddedActionTag(reply).ifBlank { "on it, choom." }
+        return executeEmbeddedActionTag(cleaned).ifBlank { "on it, choom." }
     }
+
+    suspend fun executeBrainReply(reply: String): String = handleReply(reply, allowSee = true)
 
     // 3-way brain: API -> local model -> null (caller falls back to commands / canned lines)
     private suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
         var apiError: String? = null
         val wantsCloud = LlmRouter.getActiveProviderName(this) != "Local" && LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)
+        val allowSee = imageBytes == null
 
         // Tier 1: cloud API (needs a key, internet, and NOT explicitly set to Local)
         if (wantsCloud) {
@@ -914,7 +1020,7 @@ class BubbleService : Service() {
             }
             val text = result.getOrNull()?.takeIf { it.isNotBlank() }
             if (text != null && !text.contains("No brain installed", ignoreCase = true) && !text.contains("brain chip in my slot", ignoreCase = true)) {
-                return handleReply(text)
+                return handleReply(text, allowSee)
             }
             apiError = result.exceptionOrNull()?.message ?: "empty reply"
             android.util.Log.w("CAPRI_BRAIN", "API tier failed ($apiError), trying local")
@@ -924,7 +1030,7 @@ class BubbleService : Service() {
         if (OnDeviceAiClient.isAvailable(this)) {
             val local = OnDeviceAiClient.generateResponse(this, prompt, imageBytes)
             val text = local.getOrNull()?.takeIf { it.isNotBlank() }
-            if (text != null) return handleReply(text)
+            if (text != null) return handleReply(text, allowSee)
             android.util.Log.w("CAPRI_BRAIN", "Local tier failed (${local.exceptionOrNull()?.message})")
         }
 
@@ -1014,6 +1120,41 @@ class BubbleService : Service() {
             return com.dot.capri.macro.MacroRunner.run(this, macro) { setChatVisible(it) }
         }
 
+        // "calibrate attack 0.9 0.55" stores a button as fractions of the screen (0..1).
+        Regex("^calibrate\\s+([a-z0-9_]+)\\s+([01](?:\\.\\d+)?)\\s+([01](?:\\.\\d+)?)$", RegexOption.IGNORE_CASE)
+            .find(trimmedInput)?.let { m ->
+                ControlRegions.set(this, m.groupValues[1], m.groupValues[2].toFloat(), m.groupValues[3].toFloat())
+                return "saved ${m.groupValues[1].lowercase()} at ${m.groupValues[2]}, ${m.groupValues[3]}."
+            }
+        if (Regex("^(?:add\\s+mb|new\\s+mb|spawn\\s+mb)$", RegexOption.IGNORE_CASE).matches(trimmedInput)) {
+            val mb = ControlRegions.addNextMacroButton(this)
+            minimizeToChat()
+            return "spawned ${mb.name.uppercase()}. drag it over the button on screen (tap it to set role, or leave it on auto so i learn what it does)."
+        }
+        if (Regex("^(?:show\\s+mbs?|mbs\\s+on)$", RegexOption.IGNORE_CASE).matches(trimmedInput)) {
+            ControlRegions.showOverlays(this)
+            minimizeToChat()
+            return "showing macro buttons on screen."
+        }
+        if (Regex("^(?:hide\\s+mbs?|mbs\\s+off)$", RegexOption.IGNORE_CASE).matches(trimmedInput)) {
+            ControlRegions.hideOverlays(this)
+            return "hidden macro buttons (their positions are still saved for me to use)."
+        }
+        if (Regex("^(?:clear\\s+mbs?|delete\\s+mbs?|reset\\s+mbs?)$", RegexOption.IGNORE_CASE).matches(trimmedInput)) {
+            ControlRegions.clearAll(this)
+            return "cleared all macro buttons, choom."
+        }
+        if (trimmedInput.equals("regions", ignoreCase = true) || trimmedInput.equals("mbs", ignoreCase = true)) {
+            return ControlRegions.names(this).ifEmpty { "no macro buttons yet. tap [ +MB ] in the bubble header to drop one on screen!" }
+        }
+
+        // INSTANT MACRO BUTTON EXECUTION:
+        // If the user mentions anything that resembles the name/label of ANY Macro Button (e.g. "tap peashooter and tap lane 1", "resume game"),
+        // execute it immediately without LLM delay!
+        ControlRegions.tryExecuteUserMbCommand(this, trimmedInput) { setChatVisible(it) }?.let { instantResult ->
+            return instantResult
+        }
+
         val taskMatch = Regex("^(?:task|agent|do\\s+this)\\s*[:\\-]\\s*(.+)$", RegexOption.IGNORE_CASE)
             .find(trimmedInput)
         if (taskMatch != null) {
@@ -1021,28 +1162,47 @@ class BubbleService : Service() {
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
         }
 
-        // Direct game & screen control requests ("can you play the game for me?", "take over the screen and play")
-        val gameAgentRequest = Regex(
-            "^(?:can\\s+you\\s+|please\\s+|could\\s+you\\s+|i\\s+want\\s+you\\s+to\\s+)?(?:play\\s+(?:this|the)?\\s*game|play\\s+for\\s+me|take\\s+over|control\\s+the\\s+screen|play\\s+on\\s+screen|help\\s+me\\s+(?:win|play|beat)|win\\s+(?:this|the)\\s+game|beat\\s+this\\s+level|make\\s+a\\s+new\\s+world|mine\\s+wood)(?:\\s+.*)?$",
+        // Setting or querying default video player (reels app)
+        val setDefaultVideoMatch = Regex(
+            "^(?:set\\s+(?:default\\s+)?(?:reels|videos?|vids?|videoplayer|video\\s+player)(?:\\s+(?:app|player))?\\s+(?:to\\s+|is\\s+)?|default\\s+(?:videoplayer|video\\s+player|reels|videos?|vids?)\\s+|(?i)(?:reels|videos?|vids?)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+)(.+?)(?:\\s+by\\s+default)?$",
             RegexOption.IGNORE_CASE
-        ).matches(trimmedInput)
-        if (gameAgentRequest) {
-            PhoneAgent.pending = null
-            return PhoneAgent.run(this, trimmedInput, null) { setChatVisible(it) }
+        ).find(trimmedInput)
+        if (setDefaultVideoMatch != null) {
+            val targetApp = setDefaultVideoMatch.groupValues[1].trim()
+            val resolved = com.dot.capri.intents.AppChooser.findBestMatch(this, targetApp)
+            val appName = resolved?.label ?: targetApp
+            MainActivity.setDefaultReelsApp(this, appName)
+            return "set default video player to $appName, choom."
+        }
+        if (Regex("^(?:what(?:'s|\\s+is)\\s+(?:the\\s+)?default\\s+(?:videoplayer|video\\s+player|reels\\s+app)|default\\s+(?:videoplayer|video\\s+player)\\??)$", RegexOption.IGNORE_CASE).containsMatchIn(trimmedInput)) {
+            return "default video player is ${MainActivity.getDefaultReelsApp(this)}, choom."
         }
 
-        // Multi-step compound app launch + game handoff ("go on Minecraft, make a new world, and mine wood")
-        val compoundAppMatch = Regex("^(?:go\\s+(?:on|to)|open|launch|play|run)\\s+(?:the\\s+)?(?:app\\s+)?([a-z0-9\\s_]+?)(?:\\s+app)?(?:,|\\s+and|\\s+to|\\s+then)\\s+(.+)$", RegexOption.IGNORE_CASE)
-            .find(trimmedInput)
-        if (compoundAppMatch != null) {
-            val appTarget = compoundAppMatch.groupValues[1].trim()
-            val remainingGoal = compoundAppMatch.groupValues[2].trim()
-            if (appTarget.isNotEmpty() && remainingGoal.isNotEmpty()) {
-                IntentExecutor.execute(this, Cmd.Open(appTarget))
-                delay(2500)
-                PhoneAgent.pending = null
-                return PhoneAgent.run(this, trimmedInput, null) { setChatVisible(it) }
-            }
+        // Setting or querying default media player (music app)
+        val setDefaultMusicMatch = Regex(
+            "^(?:set\\s+(?:default\\s+)?(?:music|songs?|mediaplayer|media\\s+player|music\\s+player)(?:\\s+(?:app|player))?\\s+(?:to\\s+|is\\s+)?|default\\s+(?:mediaplayer|media\\s+player|music\\s+player|music|songs?)\\s+|(?i)(?:songs?|music)\\s+(?:play|plays|should\\s+play|open|opens)\\s+(?:on|in|using|via)\\s+)(.+?)(?:\\s+by\\s+default)?$",
+            RegexOption.IGNORE_CASE
+        ).find(trimmedInput)
+        if (setDefaultMusicMatch != null) {
+            val targetApp = setDefaultMusicMatch.groupValues[1].trim()
+            val resolved = com.dot.capri.intents.AppChooser.findBestMatch(this, targetApp)
+            val appName = resolved?.label ?: targetApp
+            MainActivity.setDefaultMusicPlayer(this, appName)
+            return "set default media player to $appName, choom."
+        }
+        if (Regex("^(?:what(?:'s|\\s+is)\\s+(?:the\\s+)?default\\s+(?:mediaplayer|media\\s+player|music\\s+player)|default\\s+(?:mediaplayer|media\\s+player)\\??)$", RegexOption.IGNORE_CASE).containsMatchIn(trimmedInput)) {
+            return "default media player is ${MainActivity.getDefaultMusicPlayer(this)}, choom."
+        }
+
+        // ANY Action Request (e.g. "open spotify", "open my liked songs", "walk to that tree",
+        // "take over the screen and mine wood", "turn on bluetooth", "search for cat videos", "craft a bed"):
+        // Activates screen control via PhoneAgent immediately.
+        // Normal questions (e.g. "what is the capital of France?", "why is the sky blue?", "tell me a joke", "what is on my screen?")
+        // are identified as informational questions and fall through to askBrain without touching the screen!
+        val actionGoal = extractActionRequest(trimmedInput)
+        if (actionGoal != null) {
+            PhoneAgent.pending = null
+            return PhoneAgent.run(this, actionGoal, null) { setChatVisible(it) }
         }
 
         // Dev overlay: "dev grid on" / "dev grid off".
@@ -1072,32 +1232,94 @@ class BubbleService : Service() {
             return if (ok) "tapped $cell ($tx, $ty)." else "the tap at $cell ($tx, $ty) didn't go through."
         }
 
-        // "calibrate attack 0.9 0.55" stores a button as fractions of the screen (0..1).
-        Regex("^calibrate\\s+([a-z0-9_]+)\\s+([01](?:\\.\\d+)?)\\s+([01](?:\\.\\d+)?)$", RegexOption.IGNORE_CASE)
-            .find(trimmedInput)?.let { m ->
-                ControlRegions.set(this, m.groupValues[1], m.groupValues[2].toFloat(), m.groupValues[3].toFloat())
-                return "saved ${m.groupValues[1].lowercase()} at ${m.groupValues[2]}, ${m.groupValues[3]}."
-            }
-        if (trimmedInput.equals("regions", ignoreCase = true)) {
-            return ControlRegions.names(this).ifEmpty { "no regions yet. say: calibrate attack 0.9 0.55" }
-        }
-
-        // Brain first. There is no keyword fallback: without a brain she says so.
+        // Brain interprets all requests (no hardcoded keyword/Cmd parser fallback).
         if (brainAvailable()) {
-            val cmd = IntentParser.parse(trimmedInput)
-            if (cmd is Cmd.SeeScreen || Regex("what(?:'s|\\s+is)\\s+on\\s+(?:my\\s+|the\\s+)?screen|what\\s+do\\s+you\\s+see", RegexOption.IGNORE_CASE).containsMatchIn(trimmedInput)) {
-                val shotBytes = CapriAccessibilityService.instance?.captureScreenBitmap()
-                if (shotBytes != null) {
-                    return askBrain(text, shotBytes) ?: "i didn't get an answer, try again."
-                }
-            }
             return askBrain(text) ?: "i didn't get an answer, try again."
         }
         return noBrainReply()
     }
 
+    private fun extractActionRequest(input: String): String? {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return null
+
+        // 1. Casual chat greetings are never device action requests
+        val isCasualGreeting = Regex(
+            "^(?:hello|hi|hey|howdy|sup|yo|good\\s+(?:morning|afternoon|evening|night))\\b[!?.]*$",
+            RegexOption.IGNORE_CASE
+        ).matches(trimmed)
+        if (isCasualGreeting) return null
+
+        val cleaned = trimmed
+            .replace(Regex("^(?:(?:hey|yo|ok|hi)\\s+)?capri[,!.:]?\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^(?:please\\s+|just\\s+)+", RegexOption.IGNORE_CASE), "")
+            .trim()
+
+        // 2. Questions seeking explanations, definitions, facts, or reasons are NORMAL QUESTIONS
+        val isPureInformationQuestion = Regex(
+            "^(?:what(?:'s|\\s+is|\\s+are|\\s+was|\\s+were|\\s+does|\\s+did|\\s+do|\\s+causes|\\s+makes|\\s+happened)\\b|" +
+                    "who(?:'s|\\s+is|\\s+was|\\s+are|\\s+were)\\b|" +
+                    "why(?:'s|\\s+is|\\s+are|\\s+do|\\s+does|\\s+did|\\s+was|\\s+were)\\b|" +
+                    "how\\s+(?:do\\s+i|does|did|is|are|come|much|many|far|old|long)\\b|" +
+                    "which\\b|when\\b|where\\b|" +
+                    "tell\\s+me\\s+(?:about|a\\s+joke|a\\s+story|something)|" +
+                    "explain\\b|describe\\b|define\\b|" +
+                    "do\\s+you\\s+(?:know|think|like|have)|are\\s+you\\b)",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(cleaned)
+
+        val isPoliteExplanationQuestion = Regex(
+            "^(?:can|could|would|will)\\s+you\\s+(?:tell|explain|describe|answer|help\\s+me\\s+understand)\\b",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(cleaned)
+
+        val isScreenQueryQuestion = Regex(
+            "^(?:what(?:'s|\\s+is)|what\\s+do\\s+you\\s+see|describe|read|tell\\s+me\\s+what).*screen",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(cleaned)
+
+        if (isPureInformationQuestion || isPoliteExplanationQuestion || isScreenQueryQuestion) {
+            return null
+        }
+
+        // 3. Strip polite request wrappers: "Can you...", "Could you please...", "Take over the screen and..."
+        val stripped = cleaned
+            .replace(Regex("^(?:can|could|will|would)\\s+you\\s+(?:please\\s+)?(?:just\\s+)?", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^(?:i\\s+want\\s+you\\s+to|i\\s+need\\s+you\\s+to)\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^(?:take\\s+over(?:\\s+the\\s+screen)?|take\\s+control)\\s*(?:and\\s+|then\\s+|,\\s*)?", RegexOption.IGNORE_CASE), "")
+            .trim()
+
+        // 4. Match Action Directive verbs and patterns
+        val isActionDirective = Regex(
+            "^(?:open|launch|start|close|exit|quit|" +
+                    "play|stream|pause|resume|unpause|skip|" +
+                    "go\\s+(?:to|on|in)|navigate\\s+to|switch\\s+to|" +
+                    "turn\\s+(?:on|off)|switch\\s+(?:on|off)|enable|disable|mute|unmute|" +
+                    "volume\\s+(?:up|down)|increase\\s+volume|decrease\\s+volume|" +
+                    "tap|click|press|hold|long\\s+press|double\\s+tap|swipe|scroll|drag|pinch|" +
+                    "walk|move|run|mine|chop|break|dig|attack|hit|kill|shoot|jump|craft|make|build|buy|collect|gather|place|put|farm|plant|harvest|" +
+                    "look\\s+(?:up|down|left|right|around)|" +
+                    "search(?:\\s+for)?|find|" +
+                    "text|message|send\\s+a\\s+message|call|dial|" +
+                    "type|write|clear\\s+field)\\b",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(stripped) ||
+                Regex("\\b(and\\s+mine|and\\s+walk|and\\s+craft|and\\s+attack|and\\s+turn\\s+on|and\\s+play|and\\s+open|and\\s+search)\\b", RegexOption.IGNORE_CASE).containsMatchIn(stripped) ||
+                Regex("\\b(take\\s+over(?:\\s+the\\s+screen)?|take\\s+control)\\b", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
+
+        if (isActionDirective) {
+            return stripped.ifEmpty { cleaned }
+        }
+
+        // Questions ending with '?' without action verbs are normal questions
+        if (trimmed.endsWith("?")) return null
+
+        return null
+    }
+
     override fun onDestroy() {
         CapriCursor.hide()
+        ControlRegions.hideOverlays(this)
         proactivityEngine?.stop()
         proactivityEngine = null
         instance = null

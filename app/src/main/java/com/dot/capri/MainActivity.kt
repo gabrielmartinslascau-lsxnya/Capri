@@ -119,6 +119,10 @@ class MainActivity : AppCompatActivity() {
 
         setupVisionResolutionControl()
 
+        findViewById<android.view.View>(R.id.btnBrainInspector)?.setOnClickListener {
+            startActivity(android.content.Intent(this, BrainInspectorActivity::class.java))
+        }
+
         val permissionsToRequest = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -261,6 +265,34 @@ class MainActivity : AppCompatActivity() {
         switchLocalLlm?.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(com.dot.capri.ai.OnDeviceAiClient.KEY_LOCAL_LLM_ENABLED, isChecked).apply()
             updateLocalLlmStatus()
+        }
+
+        val backendSpinner = findViewById<Spinner>(R.id.spinner_local_backend)
+        if (backendSpinner != null) {
+            val backendLabels = listOf(
+                "Auto GPU (GPU Text + Safe Vision)",
+                "Full GPU (OpenCL Text + Vision)",
+                "NPU (Snapdragon Hexagon / QNN)",
+                "CPU Only (Compatibility Mode)"
+            )
+            val backendCodes = listOf("AUTO_GPU", "FULL_GPU", "NPU", "CPU")
+            val backendAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, backendLabels).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            backendSpinner.adapter = backendAdapter
+            val savedCode = com.dot.capri.ai.OnDeviceAiClient.getBackendMode(this)
+            val initIdx = backendCodes.indexOf(savedCode).coerceAtLeast(0)
+            backendSpinner.setSelection(initIdx)
+            backendSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, pos: Int, id: Long) {
+                    val chosenCode = backendCodes.getOrElse(pos) { "AUTO_GPU" }
+                    if (chosenCode != com.dot.capri.ai.OnDeviceAiClient.getBackendMode(this@MainActivity)) {
+                        com.dot.capri.ai.OnDeviceAiClient.setBackendMode(this@MainActivity, chosenCode)
+                        updateLocalLlmStatus()
+                    }
+                }
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            }
         }
 
         findViewById<Button>(R.id.btn_import_local_llm)?.setOnClickListener {

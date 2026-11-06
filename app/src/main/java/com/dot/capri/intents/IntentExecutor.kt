@@ -133,6 +133,14 @@ object IntentExecutor {
 
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
         val rawQuery = cmd.query.trim().lowercase()
+
+        // Handle short video / reels queries ("play video", "play a vid", "reels")
+        if (rawQuery in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid") ||
+            Regex("^play\\s+(?:a\\s+)?(?:video|vid|reels?|shorts?)$").matches(rawQuery)) {
+            val reelsApp = MainActivity.getDefaultReelsApp(context)
+            return executeOpen(context, Cmd.Open(reelsApp))
+        }
+
         val isExplicitMusic = rawQuery.contains("song") || rawQuery.contains("music") || rawQuery.contains("track") || rawQuery.contains("by ") || !cmd.app.isNullOrBlank()
 
         // Adaptive Check: If query matches an installed game/app (e.g. "play minecraft", "play roblox", "play pvz"),
@@ -149,12 +157,6 @@ object IntentExecutor {
                 return AppChooser.open(context, matchingApp.pkg)
             }
             return false
-        }
-
-        // Handle short video / reels queries ("play video", "play a vid", "reels")
-        if (rawQuery in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid")) {
-            val reelsApp = MainActivity.getDefaultReelsApp(context)
-            return executeOpen(context, Cmd.Open(reelsApp))
         }
 
         // Handle random song queries ("play something", "play a song")
@@ -351,7 +353,12 @@ object IntentExecutor {
             return AppChooser.open(context, it.pkg)
         }
 
-        // 3) Partial matches: one clear winner opens, several means ask the user.
+        // 3) Priority whole-word / prefix match before ambiguous partial list
+        AppChooser.findBestMatch(context, appQuery)?.let {
+            return AppChooser.open(context, it.pkg)
+        }
+
+        // 4) Partial matches: one clear winner opens, several means ask the user.
         val partial = launchers
             .filter { it.label.lowercase().contains(appQuery) }
             .distinctBy { it.pkg }

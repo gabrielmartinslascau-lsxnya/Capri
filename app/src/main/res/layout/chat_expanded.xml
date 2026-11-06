@@ -45,6 +45,36 @@
                 android:textSize="11sp" />
 
             <TextView
+                android:id="@+id/btn_add_mb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingStart="5dp"
+                android:paddingEnd="5dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="[ +MB ]"
+                android:textColor="#34D399"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btn_toggle_mb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingStart="5dp"
+                android:paddingEnd="5dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="[ MBs ]"
+                android:textColor="#A78BFA"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
                 android:id="@+id/btn_real_talk"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

@@ -18,6 +18,8 @@ object IntentParser {
         "(?:can|could|would)?\\s*(?:you|ya|u|ya'll)?\\s*(?:see|look\\s+at|read|describe|analyze|scan|peek|check)\\s+(?:at\\s+)?(?:my\\s+|the\\s+)?(?:screen|phone|display)|" +
         "(?:can|could)?\\s*(?:you|ya|u)?\\s*see\\s+(?:this|my\\s+screen)|" +
         "(?:take\\s+a\\s+)?look\\s+(?:at\\s+)?(?:my\\s+|the\\s+)?screen|" +
+        "(?:(?:can|could|would)\\s+you\\s+|please\\s+)?(?:take|grab|capture)\\s+(?:a\\s+)?screenshot(?:\\s+of\\s+(?:my\\s+|the\\s+)?screen)?|" +
+        "^screenshot$|" +
         "tell\\s+me\\s+what\\s+you\\s+see|" +
         "screen\\s+(?:capture|read|scan|check)" +
         ")(?:\\s+(.+))?$",
@@ -245,6 +247,15 @@ object IntentParser {
         seeScreenRegex.find(cleaned)?.let { match ->
             val prompt = match.groups[1]?.value?.trim() ?: "what is on this screen?"
             return Cmd.SeeScreen(prompt)
+        }
+
+        val requiresUiNavigation = Regex(
+            "\\b(liked\\s+songs?|my\\s+liked|my\\s+playlists?|my\\s+library|in\\s+library|into\\s+library|saved\\s+songs?|favorites?|favourites?|pick\\s+(?:one|a\\s+song)|choose\\s+(?:one|a\\s+song)|from\\s+my\\s+library|scroll\\s+(?:down|up))\\b|(?:,|\\band\\b|\\bthen\\b).*\\b(go|scroll|click|tap|pick|choose|search)\\b",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(cleaned)
+
+        if (requiresUiNavigation) {
+            return Cmd.Unknown(raw)
         }
 
         playOnRegex.find(cleaned)?.let { match ->

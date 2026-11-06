@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -19,6 +20,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.Calendar
+import java.util.concurrent.Executors
 
 /**
  * Tier 2 of the brain: a model that runs on the phone itself.
@@ -29,6 +31,7 @@ object OnDeviceAiClient {
 
     private const val TAG = "CAPRI_LOCAL"
     const val KEY_LOCAL_LLM_ENABLED = "local_llm_enabled"
+    const val KEY_LOCAL_BACKEND_MODE = "local_backend_mode" // "AUTO_GPU", "FULL_GPU", "NPU", "CPU"
 
     private const val MODEL_FILE_NAME = "capri-local.litertlm"
     // Open repo (no login, no gate). Apache 2.0. Multimodal Gemma 4 E2B.
@@ -37,7 +40,6 @@ object OnDeviceAiClient {
     private const val EXPECTED_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
     private const val MIN_MODEL_BYTES = 5_000_000L
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
-    // CPU is enforced as default backend (no GPU/NPU) to avoid OpenCL/driver errors
     private const val IDLE_RELEASE_MS = 30 * 60 * 1000L   // keep the model warm for 30 idle minutes
     private const val GENERATION_TIMEOUT_MS = 60_000L
     private const val HISTORY_TURNS = 2                   // trimmed for speed
@@ -45,13 +47,39 @@ object OnDeviceAiClient {
     private const val MAX_HISTORY_CHARS = 200
     private const val MAX_REPLY_TOKENS = 64               // lightning-fast action JSON replies
 
+    // CRITICAL FOR ADRENO GPU / HEXAGON NPU:
+    // OpenCL and QNN contexts are thread-local! A single-thread executor MUST own Engine init, streaming, cancelProcess, and close.
+    private val singleThreadExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "CapriLiteRtEngineThread").apply { isDaemon = true }
+    }
+    private val singleThreadDispatcher = singleThreadExecutor.asCoroutineDispatcher()
     private val mutex = Mutex()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + singleThreadDispatcher)
     private var engine: Engine? = null
     private var engineHasVision = false
+    private var activeBackendLabel = "unloaded"
+    private var loadedBackendPref = ""
     @Volatile private var visionBroken = false
     @Volatile var lastError: String? = null
     private var idleJob: Job? = null
+
+    fun getBackendMode(context: Context): String =
+        context.getSharedPreferences("capri_prefs", Context.MODE_PRIVATE)
+            .getString(KEY_LOCAL_BACKEND_MODE, "AUTO_GPU") ?: "AUTO_GPU"
+
+    fun setBackendMode(context: Context, mode: String) {
+        context.getSharedPreferences("capri_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_LOCAL_BACKEND_MODE, mode)
+            .apply()
+        scope.launch {
+            mutex.withLock {
+                closeEngine()
+            }
+        }
+    }
+
+    fun getActiveBackendLabel(): String = activeBackendLabel
 
     // ---- availability ------------------------------------------------
 
@@ -76,11 +104,13 @@ object OnDeviceAiClient {
 
     fun statusLine(context: Context): String {
         val file = modelFile(context)
+        val prefMode = getBackendMode(context)
+        val hwInfo = if (activeBackendLabel != "unloaded") "active: $activeBackendLabel" else "mode: $prefMode"
         val base = when {
             !hasEnoughRam(context) -> "this phone doesn't have enough RAM for the local model."
             !file.exists() -> "no local model yet. tap Auto-Download or import a .litertlm file."
             !isEnabled(context) -> "local model imported but switched off."
-            else -> "local model ready (${file.length() / 1_000_000} MB). used when the API is unavailable."
+            else -> "local model ready (${file.length() / 1_000_000} MB · $hwInfo)."
         }
         return lastError?.let { "$base\nlast error: $it" } ?: base
     }
@@ -271,53 +301,119 @@ object OnDeviceAiClient {
 
     // ---- engine lifecycle (always call with the mutex held) ----------
 
+    private data class BackendCandidate(
+        val label: String,
+        val textBackend: Backend,
+        val visionBackend: Backend?,
+        val hasVision: Boolean
+    )
+
+    private fun buildBackendCandidates(prefMode: String, wantVision: Boolean): List<BackendCandidate> {
+        val list = mutableListOf<BackendCandidate>()
+        val canVision = wantVision && !visionBroken
+        when (prefMode.uppercase()) {
+            "NPU" -> {
+                if (canVision) {
+                    list.add(BackendCandidate("NPU+CPU_Vision", Backend.NPU(), Backend.CPU(), true))
+                }
+                list.add(BackendCandidate("NPU(Text)", Backend.NPU(), null, false))
+                if (canVision) {
+                    list.add(BackendCandidate("GPU+CPU_Vision", Backend.GPU(), Backend.CPU(), true))
+                    list.add(BackendCandidate("CPU+Vision", Backend.CPU(), Backend.CPU(), true))
+                }
+                list.add(BackendCandidate("CPU", Backend.CPU(), null, false))
+            }
+            "FULL_GPU" -> {
+                if (canVision) {
+                    list.add(BackendCandidate("Full_GPU", Backend.GPU(), Backend.GPU(), true))
+                    list.add(BackendCandidate("GPU+CPU_Vision", Backend.GPU(), Backend.CPU(), true))
+                    list.add(BackendCandidate("CPU+Vision", Backend.CPU(), Backend.CPU(), true))
+                } else {
+                    list.add(BackendCandidate("GPU(Text)", Backend.GPU(), null, false))
+                }
+                list.add(BackendCandidate("CPU", Backend.CPU(), null, false))
+            }
+            "CPU" -> {
+                if (canVision) {
+                    list.add(BackendCandidate("CPU+Vision", Backend.CPU(), Backend.CPU(), true))
+                }
+                list.add(BackendCandidate("CPU", Backend.CPU(), null, false))
+            }
+            else -> { // "AUTO_GPU" (Recommended: Text on Adreno GPU, Vision on CPU or GPU with fallback)
+                if (canVision) {
+                    list.add(BackendCandidate("GPU+CPU_Vision", Backend.GPU(), Backend.CPU(), true))
+                    list.add(BackendCandidate("Full_GPU", Backend.GPU(), Backend.GPU(), true))
+                    list.add(BackendCandidate("CPU+Vision", Backend.CPU(), Backend.CPU(), true))
+                } else {
+                    list.add(BackendCandidate("GPU(Text)", Backend.GPU(), null, false))
+                }
+                list.add(BackendCandidate("CPU", Backend.CPU(), null, false))
+            }
+        }
+        return list
+    }
+
     private fun loadEngine(context: Context, wantVision: Boolean): Engine? {
-        engine?.let { if (!wantVision || engineHasVision || visionBroken) return it }
+        val prefMode = getBackendMode(context)
+        engine?.let {
+            if (loadedBackendPref == prefMode && (!wantVision || engineHasVision || visionBroken)) {
+                return it
+            }
+        }
         closeEngine()
         val file = modelFile(context)
         if (!file.exists()) {
             lastError = "model file missing"
             return null
         }
-        // Strictly use CPU backend to avoid Adreno OpenCL/GPU native crashes and vision tensor failures
-        val visionTries = if (wantVision && !visionBroken) listOf(true, false) else listOf(false)
 
-        for (vision in visionTries) {
+        val candidates = buildBackendCandidates(prefMode, wantVision)
+        for (cand in candidates) {
+            var created: Engine? = null
             try {
-                val cfg = if (vision) {
+                val cfg = if (cand.hasVision && cand.visionBackend != null) {
                     EngineConfig(
                         modelPath = file.absolutePath,
-                        backend = Backend.CPU(),
-                        visionBackend = Backend.CPU(),
+                        backend = cand.textBackend,
+                        visionBackend = cand.visionBackend,
                         cacheDir = context.cacheDir.path
                     )
                 } else {
                     EngineConfig(
                         modelPath = file.absolutePath,
-                        backend = Backend.CPU(),
+                        backend = cand.textBackend,
                         cacheDir = context.cacheDir.path
                     )
                 }
                 val e = Engine(cfg)
+                created = e
                 e.initialize()
                 engine = e
-                engineHasVision = vision
+                engineHasVision = cand.hasVision
+                activeBackendLabel = cand.label
+                loadedBackendPref = prefMode
                 lastError = null
-                Log.d(TAG, "engine ready on CPU (vision=$vision)")
+                Log.d(TAG, "engine ready on ${cand.label} (vision=${cand.hasVision})")
                 return e
             } catch (t: Throwable) {
-                if (vision) visionBroken = true
-                lastError = "engine init failed (vision=$vision): ${t.message ?: t.javaClass.simpleName}"
-                Log.e(TAG, lastError!!, t)
+                // Never call close() on an engine whose initialize() threw (per Google litert-lm spec)
+                created = null
+                val msg = "${cand.label} init failed: ${t.message ?: t.javaClass.simpleName}"
+                lastError = msg
+                Log.w(TAG, msg)
             }
         }
         return null
     }
 
     private fun closeEngine() {
-        runCatching { engine?.close() }
+        val e = engine
         engine = null
         engineHasVision = false
+        activeBackendLabel = "unloaded"
+        if (e != null) {
+            runCatching { e.close() }
+        }
     }
 
     private fun scheduleRelease() {
@@ -336,8 +432,8 @@ object OnDeviceAiClient {
     // Same persona as the API tier, minus the long lore block, so the first word comes faster.
     private fun buildSystemPrompt(context: Context): String {
         val full = CloudAiClient.SYSTEM_PROMPT
-        val loreStart = full.indexOf("LORE (")
-        val loreEnd = full.indexOf("HOW TO ANSWER")
+        val loreStart = full.indexOf("LORE\n")
+        val loreEnd = full.indexOf("VOICE\n")
         val slim = if (loreStart in 0 until loreEnd) full.removeRange(loreStart, loreEnd) else full
 
         val cal = Calendar.getInstance()
@@ -349,10 +445,12 @@ object OnDeviceAiClient {
         } catch (e: Exception) {
             -1
         }
+        val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
 
-        return slim + "\n\n[Context]: it is $weekday, $time. battery: $battery%.\n" +
-                "You are Capri running on-device. You CAN control the phone screen and play games using your autonomous agent loop. " +
-                "When asked to play a game or control the screen, reply with: [ACTION:TASK:your goal]. " +
+        return slim + "\n\n[Context]: it is $weekday, $time. battery: $battery%. macro buttons: $mbSummary.\n" +
+                "You are Capri running on-device (Jarvis mode). You CAN control the phone screen and play games directly using your autonomous agent loop. " +
+                "When asked to play a game or control the screen, NEVER reply with text tutorials or instructions — reply ONLY with: [ACTION:TASK:your goal]. " +
+                "When asked what is on screen, reply ONLY with: [ACTION:SEE_SCREEN:question]. " +
                 "Keep chat replies to 1-2 short sentences."
     }
 
@@ -392,43 +490,47 @@ object OnDeviceAiClient {
 
         var imageFile: File? = null
         val sb = StringBuilder()
+        var conversation: Conversation? = null
         try {
-            eng.createConversation(config).use { conversation ->
-                withTimeout(GENERATION_TIMEOUT_MS) {
-                    val useImage = imageBytes != null && engineHasVision
-                    val maxChars = if (historyOverride != null) 4000 else (if (isTask) 3000 else MAX_PROMPT_CHARS)
-                    val flow = if (useImage) {
-                        imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
-                            writeBytes(shrinkImage(context, imageBytes!!))
-                        }
-                        conversation.sendMessageAsync(
-                            Contents.of(
-                                Content.Text(prompt.take(maxChars)),
-                                Content.ImageFile(imageFile.absolutePath)
-                            )
-                        )
-                    } else {
-                        conversation.sendMessageAsync(prompt.take(maxChars))
+            conversation = eng.createConversation(config)
+            withTimeout(GENERATION_TIMEOUT_MS) {
+                val useImage = imageBytes != null && engineHasVision
+                val maxChars = if (historyOverride != null) 4000 else (if (isTask) 3000 else MAX_PROMPT_CHARS)
+                val flow = if (useImage) {
+                    imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
+                        writeBytes(shrinkImage(context, imageBytes!!))
                     }
-                    try {
-                        flow.collect { chunk ->
-                            sb.append(chunk.toString())
-                            if (isTask) {
-                                val cur = sb.toString().trimStart()
-                                // Stop immediately once a single JSON object or single-line command is complete
-                                val hasCompleteJson = cur.startsWith("{") && cur.contains("}")
-                                val hasCompleteLine = !cur.startsWith("{") && !cur.startsWith("`") && cur.contains("\n") && cur.lineSequence().first().trim().length >= 4
-                                if (hasCompleteJson || hasCompleteLine) {
-                                    throw CancellationException("COMPLETE_AGENT_COMMAND")
-                                }
+                    conversation.sendMessageAsync(
+                        Contents.of(
+                            Content.Text(prompt.take(maxChars)),
+                            Content.ImageFile(imageFile.absolutePath)
+                        )
+                    )
+                } else {
+                    conversation.sendMessageAsync(prompt.take(maxChars))
+                }
+                var stoppedEarly = false
+                try {
+                    flow.collect { chunk ->
+                        sb.append(chunk.toString())
+                        if (isTask && !stoppedEarly) {
+                            val cur = sb.toString().trimStart()
+                            val hasCompleteJson = cur.startsWith("{") && cur.contains("}")
+                            val hasCompleteLine = !cur.startsWith("{") && !cur.startsWith("`") && cur.contains("\n") && cur.lineSequence().first().trim().length >= 3
+                            if (hasCompleteJson || hasCompleteLine) {
+                                stoppedEarly = true
+                                // Gracefully stop native C++/GPU generation instead of throwing inside collect
+                                runCatching { conversation.cancelProcess() }
                             }
                         }
-                    } catch (ce: CancellationException) {
-                        if (ce.message != "COMPLETE_AGENT_COMMAND") throw ce
                     }
+                } catch (ce: CancellationException) {
+                    runCatching { conversation.cancelProcess() }
+                    throw ce
                 }
             }
         } finally {
+            runCatching { conversation?.close() }
             imageFile?.delete()
         }
         return sb.toString().trim()
@@ -442,7 +544,8 @@ object OnDeviceAiClient {
         historyOverride: List<Pair<String, String>>? = null,
         maxTokensOverride: Int? = null
     ): Result<String> =
-        withContext(Dispatchers.Default) {
+        // CRITICAL: Always run on singleThreadDispatcher so GPU OpenCL / NPU QNN thread-local contexts never hop threads!
+        withContext(singleThreadDispatcher) {
             mutex.withLock {
                 idleJob?.cancel()
                 try {
@@ -458,8 +561,23 @@ object OnDeviceAiClient {
                     }
                 } catch (t: Throwable) {
                     if (t is CancellationException && t !is TimeoutCancellationException) throw t
-                    lastError = "generation failed: ${t.message ?: t.javaClass.simpleName}"
+                    val errText = t.message ?: t.javaClass.simpleName
+                    lastError = "generation failed ($activeBackendLabel): $errText"
                     Log.e(TAG, lastError!!, t)
+                    // If GPU or NPU failed during first token generation (e.g. missing OpenCL kernel on this ROM),
+                    // automatically fall back to CPU and retry once so the user is never stuck!
+                    if (activeBackendLabel.contains("GPU") || activeBackendLabel.contains("NPU")) {
+                        Log.w(TAG, "Hardware backend $activeBackendLabel failed mid-generation; falling back to CPU...")
+                        closeEngine()
+                        context.getSharedPreferences("capri_prefs", Context.MODE_PRIVATE)
+                            .edit().putString(KEY_LOCAL_BACKEND_MODE, "CPU").apply()
+                        return@withLock try {
+                            val retryReply = generateOnce(context, prompt, imageBytes, systemOverride, historyOverride, maxTokensOverride)
+                            Result.success(retryReply)
+                        } catch (t2: Throwable) {
+                            Result.failure(if (t2 is Exception) t2 else RuntimeException(t2.message))
+                        }
+                    }
                     Result.failure(if (t is Exception) t else RuntimeException(t.message))
                 } finally {
                     scheduleRelease()

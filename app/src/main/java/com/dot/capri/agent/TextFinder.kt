@@ -63,6 +63,9 @@ object TextFinder {
             for (line in block.lines) {
                 val clean = line.text.trim().replace("\n", " ")
                 if (clean.isEmpty() || clean.length > 45) continue
+                // Never register the STOP pill as an OCR target
+                if (clean.equals("stop", ignoreCase = true)) continue
+
                 val box: Rect = line.boundingBox ?: continue
                 val cx = (box.exactCenterX() * scaleX).toInt().coerceIn(0, orientedW - 1)
                 val cy = (box.exactCenterY() * scaleY).toInt().coerceIn(0, orientedH - 1)
@@ -82,6 +85,13 @@ object TextFinder {
     suspend fun formatForPrompt(screenshot: ByteArray?, screenW: Int, screenH: Int): String {
         if (screenshot == null) return "none"
         val hits = scanAll(screenshot, screenW, screenH, maxItems = 28)
+        return formatHitsForPrompt(hits)
+    }
+
+    /**
+     * Formats pre-scanned OCR hits into a general-purpose list of visible text and normalized coordinates.
+     */
+    fun formatHitsForPrompt(hits: List<Hit>): String {
         if (hits.isEmpty()) return "(no text detected by OCR)"
         return hits.joinToString("\n") { h ->
             String.format(Locale.US, "- \"%s\" at (x=%.2f, y=%.2f)", h.text, h.normX, h.normY)

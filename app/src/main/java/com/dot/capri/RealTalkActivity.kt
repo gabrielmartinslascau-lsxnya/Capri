@@ -159,35 +159,30 @@ class RealTalkActivity : AppCompatActivity() {
 
         val historySnapshot = messages.dropLast(1)
 
-        val gameAgentRequest = Regex("^(?:can\\s+you\\s+|please\\s+|could\\s+you\\s+|i\\s+want\\s+you\\s+to\\s+)?(?:play\\s+(?:this|the)?\\s*game|play\\s+for\\s+me|take\\s+over|control\\s+the\\s+screen|play\\s+on\\s+screen|help\\s+me\\s+(?:win|play|beat)|win\\s+(?:this|the)\\s+game|beat\\s+this\\s+level|make\\s+a\\s+new\\s+world|mine\\s+wood)(?:\\s+.*)?$", RegexOption.IGNORE_CASE).matches(userText)
-        val isDeviceWork = com.dot.capri.agent.DeviceTasks.mentionsDeviceWork(userText) || gameAgentRequest
-        val parsedCmd = com.dot.capri.intents.IntentParser.parse(userText)
-        val isSeeScreen = parsedCmd is com.dot.capri.intents.Cmd.SeeScreen || Regex("what(?:'s|\\s+is)\\s+on\\s+(?:my\\s+|the\\s+)?screen|what\\s+do\\s+you\\s+see", RegexOption.IGNORE_CASE).containsMatchIn(userText)
-
         lifecycleScope.launch {
             try {
-                val (replyText, modelUsed) = if (isDeviceWork || isSeeScreen) {
+                // 1. If the user directly named a Macro Button, execute it immediately!
+                val mbInstant = com.dot.capri.agent.ControlRegions.tryExecuteUserMbCommand(this@RealTalkActivity, userText) {}
+                val (replyText, modelUsed) = if (mbInstant != null) {
                     moveTaskToBack(true)
-                    delay(350)
-                    val result = if (isDeviceWork) {
-                        BubbleService.instance?.processCommand(userText)
-                            ?: com.dot.capri.agent.PhoneAgent.run(applicationContext, userText, null) {}
-                    } else {
-                        val shot = CapriAccessibilityService.instance?.captureScreenBitmap()
-                        if (shot != null && com.dot.capri.ai.OnDeviceAiClient.isAvailable(applicationContext)) {
-                            com.dot.capri.ai.OnDeviceAiClient.generateResponse(applicationContext, "Describe what is on screen: $userText", shot).getOrNull()
-                                ?: "i couldn't read the screen, choom."
-                        } else {
-                            BubbleService.instance?.processCommand(userText) ?: "i couldn't capture the screen, choom."
-                        }
-                    }
-                    Pair(result, RealTalkBridge.getActiveModelBadge(this@RealTalkActivity))
+                    delay(200)
+                    Pair(mbInstant, RealTalkBridge.getActiveModelBadge(this@RealTalkActivity))
                 } else {
-                    RealTalkBridge.sendMessage(
+                    // 2. Otherwise let the brain interpret the request (no keyword/Cmd parser gating).
+                    val (rawReply, badge) = RealTalkBridge.sendMessage(
                         context = this@RealTalkActivity,
                         history = historySnapshot,
                         userMessage = userText
                     )
+                    if (rawReply.contains("[ACTION", ignoreCase = true)) {
+                        moveTaskToBack(true)
+                        delay(350)
+                        val executed = BubbleService.instance?.executeBrainReply(rawReply)
+                            ?: com.dot.capri.agent.PhoneAgent.run(applicationContext, userText, null) {}
+                        Pair(executed, badge)
+                    } else {
+                        Pair(rawReply, badge)
+                    }
                 }
 
                 typingIndicatorContainer.visibility = View.GONE

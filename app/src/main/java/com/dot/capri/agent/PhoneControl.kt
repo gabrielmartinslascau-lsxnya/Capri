@@ -16,6 +16,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.Locale
 import kotlin.coroutines.resume
 
 /** Everything Capri can do to the screen: look at it, tap, swipe, scroll, type, press send. */
@@ -58,6 +59,51 @@ object PhoneControl {
             anim.join()
             ok
         }
+    }
+
+    /** Press at center (fx, fy), deflect to (tx, ty) over dragMs, and KEEP HOLDING at (tx, ty) for holdMs before releasing. */
+    suspend fun dragAndHold(fx: Int, fy: Int, tx: Int, ty: Int, dragMs: Long = 100L, holdMs: Long = 1500L): Boolean {
+        val (sfx, sfy) = clampToScreen(fx, fy)
+        val (stx, sty) = clampToScreen(tx, ty)
+        val max = GestureDescription.getMaxGestureDuration()
+        CapriCursor.moveTo(sfx, sfy)
+        CapriCursor.pulse()
+        val movePath = Path().apply { moveTo(sfx.toFloat(), sfy.toFloat()); lineTo(stx.toFloat(), sty.toFloat()) }
+        val holdPath = Path().apply { moveTo(stx.toFloat(), sty.toFloat()); lineTo(stx.toFloat(), sty.toFloat()) }
+        val safeMoveMs = dragMs.coerceIn(50L, 200L)
+        val safeHoldMs = holdMs.coerceIn(50L, max - safeMoveMs - 10L)
+        val first = GestureDescription.StrokeDescription(movePath, 0L, safeMoveMs, true)
+        if (!dispatchStroke(first)) return false
+        val second = first.continueStroke(holdPath, 0L, safeHoldMs, false)
+        return coroutineScope {
+            val anim = launch { CapriCursor.glideAlongPath(sfx.toFloat(), sfy.toFloat(), stx.toFloat(), sty.toFloat(), safeMoveMs) }
+            val ok = async { dispatchStroke(second) }.await()
+            anim.join()
+            ok
+        }
+    }
+
+    /**
+     * Controls an on-screen virtual joystick: touches down at center (cx, cy),
+     * deflects in the given direction by radius pixels, and holds for durationMs before releasing.
+     */
+    suspend fun joystick(cx: Int, cy: Int, dir: String, durationMs: Long, sh: Int): Boolean {
+        val radius = (sh * 0.12f).coerceIn(80f, 180f)
+        val d = dir.lowercase(Locale.US).trim()
+        val (dx, dy) = when (d) {
+            "forward", "up", "north" -> 0f to -radius
+            "backward", "back", "down", "south" -> 0f to radius
+            "left", "west" -> -radius to 0f
+            "right", "east" -> radius to 0f
+            "forward_left", "up_left" -> -radius * 0.707f to -radius * 0.707f
+            "forward_right", "up_right" -> radius * 0.707f to -radius * 0.707f
+            "back_left", "down_left" -> -radius * 0.707f to radius * 0.707f
+            "back_right", "down_right" -> radius * 0.707f to radius * 0.707f
+            else -> 0f to -radius
+        }
+        val targetX = (cx + dx).toInt()
+        val targetY = (cy + dy).toInt()
+        return dragAndHold(cx, cy, targetX, targetY, dragMs = 90L, holdMs = durationMs)
     }
 
     /** Turns the camera: a drag from (zoneX, zoneY) by (dx, dy) pixels. */
@@ -116,13 +162,13 @@ object PhoneControl {
     }
 
     /**
-     * Keeps a point inside the screen. Only a small margin is kept clear, so the point that
-     * Capri taps is the same point the ring and the red marker show.
+     * Keeps a point inside the screen. Uses a 2px margin so Macro Buttons placed in the very
+     * corners (e.g. pause/menu/inventory buttons in landscape games) are tapped accurately.
      */
     fun clampToScreen(x: Int, y: Int): Pair<Int, Int> {
         val s = screenSize() ?: return Pair(x, y)
-        val edge = 12
-        return Pair(x.coerceIn(edge, s.first - edge), y.coerceIn(edge, s.second - edge))
+        val edge = 2
+        return Pair(x.coerceIn(edge, (s.first - edge).coerceAtLeast(edge)), y.coerceIn(edge, (s.second - edge).coerceAtLeast(edge)))
     }
 
     // Windows that are never the app the user is working in.
@@ -224,8 +270,8 @@ object PhoneControl {
         CapriCursor.moveTo(item.cx, item.cy)
         CapriCursor.pulse()
         val gestureOk = dispatchTap(item.cx, item.cy)
-        val actionOk = if (item.node.isClickable) item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK) else false
-        return gestureOk || actionOk
+        if (gestureOk) return true
+        return if (item.node.isClickable) item.node.performAction(AccessibilityNodeInfo.ACTION_CLICK) else false
     }
 
     suspend fun longPress(item: UiItem, durationMs: Long = 800): Boolean {
@@ -254,10 +300,10 @@ object PhoneControl {
         CapriCursor.moveTo(safeX, safeY)
         CapriCursor.pulse()
         val gestureOk = dispatchTap(safeX, safeY)
+        if (gestureOk) return true
         val root = foregroundRoot()
         val target = root?.let { smallestClickableAt(it, safeX, safeY) }
-        val actionOk = target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
-        return gestureOk || actionOk
+        return target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
     }
 
     suspend fun doubleTapAt(x: Int, y: Int): Boolean {

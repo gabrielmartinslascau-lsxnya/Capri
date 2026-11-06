@@ -22,10 +22,6 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.dot.capri.BubbleService
 import com.dot.capri.R
-import com.dot.capri.ai.CloudAiClient
-import com.dot.capri.intents.Cmd
-import com.dot.capri.intents.IntentExecutor
-import com.dot.capri.intents.IntentParser
 import com.dot.capri.personality.Personality
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -151,13 +147,7 @@ class CapriVoiceInteractionSession(context: Context) : VoiceInteractionSession(c
                 if (service != null) {
                     service.processCommand(text)
                 } else {
-                    val cmd = IntentParser.parse(text)
-                    if (cmd !is Cmd.Unknown) {
-                        IntentExecutor.execute(context, cmd)
-                        Personality.respond(cmd, true)
-                    } else {
-                        "i can't reach a brain right now, choom."
-                    }
+                    "my bubble service isn't running, choom. open capri once to wake me up."
                 }
             }
             thinkingContainer?.visibility = View.GONE
