@@ -170,15 +170,21 @@ You are Capri, the user's playful, chaotic, loyal best friend living in their ph
     ).random()
 
     private val playSuccessTemplatesWithApp = listOf(
+        "playing {q} on {app}. don't get used to me being your personal dj.",
+        "fine, playing {q} on {app}. you better have good taste.",
+        "firing up {q} on {app}~ turn it up!",
         "sure, playing {q} on {app}.. if there are any good songs lol~",
         "cranking up {q} on {app}! let's see what you've got queued up~",
-        "firing up {q} on {app}~ turn it up!"
+        "putting {q} on {app} right now, dummy~ enjoy the tunes!"
     )
 
     private val playSuccessTemplates = listOf(
+        "playing {q}. setting the vibe for you, dummy.",
+        "fine, put {q} on. don't say i never do anything for you.",
+        "playing {q}~ hope your music taste is decent today lol!",
         "sure, putting {q} on.. setting the vibe for you~",
         "putting {q} on right now! enjoy the tunes~",
-        "playing {q}~ hope your music taste is decent today lol!"
+        "playing {q}~ don't blame me if it's mid!"
     )
 
     private val mediaControlTemplates = listOf(
