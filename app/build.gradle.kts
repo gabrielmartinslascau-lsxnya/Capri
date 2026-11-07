@@ -54,7 +54,7 @@ android {
 }
 
 base {
-    archivesName.set("Capri-v12")
+    archivesName.set("Capri-v15")
 }
 
 dependencies {
