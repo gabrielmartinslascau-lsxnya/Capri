@@ -27,8 +27,8 @@ android {
         minSdk = 29
         //noinspection EditedTargetSdkVersion
         targetSdk = 37
-        versionCode = 70
-        versionName = "v12"
+        versionCode = 71
+        versionName = "v15"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
 
