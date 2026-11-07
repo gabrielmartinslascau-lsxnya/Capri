@@ -2,6 +2,7 @@ package com.dot.capri
 
 import com.dot.capri.intents.Cmd
 import com.dot.capri.intents.IntentParser
+import com.dot.capri.intents.ScrollDirection
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -203,5 +204,20 @@ class IntentParserTest {
 
         val cmdReply4 = IntentParser.parse("reply on my way")
         assert(cmdReply4 is Cmd.ReplyNotification && cmdReply4.targetSender == null && cmdReply4.replyText == "on my way")
+
+        val cmdReply5 = IntentParser.parse("tell him: im impressed")
+        assert(cmdReply5 is Cmd.ReplyNotification && cmdReply5.targetSender == "him" && cmdReply5.replyText == "im impressed")
+
+        val cmdReply6 = IntentParser.parse("reply back that I am on my way")
+        assert(cmdReply6 is Cmd.ReplyNotification && cmdReply6.replyText == "I am on my way")
+
+        val cmdTxt1 = IntentParser.parse("msg Alex: dinner at 8")
+        assert(cmdTxt1 is Cmd.Text && cmdTxt1.contact == "Alex" && cmdTxt1.message == "dinner at 8")
+
+        val cmdTxt2 = IntentParser.parse("txt Sarah about party")
+        assert(cmdTxt2 is Cmd.Text && cmdTxt2.contact == "Sarah" && cmdTxt2.message == "party")
+
+        val cmdScrollTypo = IntentParser.parse("scrol down")
+        assert(cmdScrollTypo is Cmd.Scroll && cmdScrollTypo.direction == ScrollDirection.DOWN)
     }
 }

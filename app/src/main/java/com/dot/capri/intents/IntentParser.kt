@@ -12,10 +12,11 @@ object IntentParser {
     private val emailWithSubjRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+?)\\s+(?:with\\s+subject|about)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val emailWithBodyRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+?)\\s+(?:saying|that|to\\s+say|body)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val emailSimpleRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+)$", RegexOption.IGNORE_CASE)
-    private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:about|saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
-    private val replyToRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:reply(?:\\s+to\\s+(.+?))?|respond(?:\\s+to\\s+(.+?))?)\\s+(?:saying|that|with)?\\s*(.+))$", RegexOption.IGNORE_CASE)
-    private val textBackRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:text|message)\\s+(.+?)\\s+back\\s+(?:saying|that|with)?\\s*(.+))$", RegexOption.IGNORE_CASE)
-    private val sayToRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:say|tell)\\s+(?:to\\s+)?(him|her|them|someone|[a-zA-Z0-9_ ]+?)\\s+(?:that|to\\s+say|saying)?\\s*(.+))$", RegexOption.IGNORE_CASE)
+    private val textRegex = Regex("^(?:text|txt|message|msg|dm|whatsapp|send\\s+a\\s+(?:text|message|msg)\\s+to|send\\s+(?:text|message|msg)\\s+to|shoot\\s+a\\s+text\\s+to|drop\\s+a\\s+text\\s+to|write\\s+to)\\s+(.+?)(?:\\s*[:\\-]\\s*|\\s+(?:about|saying|that|to\\s+say|with|body)\\s+)(.+)$", RegexOption.IGNORE_CASE)
+    private val textSimpleRegex = Regex("^(?:text|txt|message|msg|dm|whatsapp|send\\s+a\\s+(?:text|message|msg)\\s+to|send\\s+(?:text|message|msg)\\s+to)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val replyToRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:reply|respond|answer)(?:\\s+back)?(?:\\s+to\\s+(.+?)|\\s+(him|her|them))?(?:\\s*[:\\-]\\s*|\\s+(?:saying|that|with|to\\s+say)\\s+|\\s+)(.+))$", RegexOption.IGNORE_CASE)
+    private val textBackRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:text|txt|message|msg)\\s+(.+?)\\s+back(?:\\s*[:\\-]\\s*|\\s+(?:saying|that|with|to\\s+say)\\s+|\\s+)(.+))$", RegexOption.IGNORE_CASE)
+    private val sayToRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:say|tell)(?:\\s+to)?\\s+(him|her|them|someone|[a-zA-Z0-9_ ]+?)(?:\\s*[:\\-]\\s*|\\s+(?:that|to\\s+say|saying|about)\\s+|\\s+)(.+))$", RegexOption.IGNORE_CASE)
     private val openRegex = Regex("^(?:open|launch|start|go to|run)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val conversationalOpenRegex = Regex("^(?:can\\s+i\\s+|i\\s+want\\s+to\\s+|let's\\s+|let\\s+us\\s+)(?:watch|use|view|open|check|go\\s+to)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val searchRegex = Regex("^(?:can\\s+you\\s+|could\\s+you\\s+|please\\s+)?(?:search(?:\\s+for)?|google|look\\s+up)\\s+(.+?)\\??$", RegexOption.IGNORE_CASE)
@@ -40,12 +41,12 @@ object IntentParser {
     private val nextRegex = Regex("^(?:next|next\\s+song|skip|skip\\s+song|next\\s+track)$", RegexOption.IGNORE_CASE)
     private val prevRegex = Regex("^(?:previous|prev|previous\\s+song|last\\s+song|back\\s+a\\s+song)$", RegexOption.IGNORE_CASE)
 
-    private val scrollDownRegex = Regex("^(?:scroll|page)\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
-    private val scrollUpRegex = Regex("^(?:scroll|page)\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
-    private val swipeDownRegex = Regex("^swipe\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
-    private val swipeUpRegex = Regex("^swipe\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
-    private val scrollLeftRegex = Regex("^(?:scroll|swipe)\\s+(?:left|sideways)(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
-    private val scrollRightRegex = Regex("^(?:scroll|swipe)\\s+right(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollDownRegex = Regex("^(?:scroll|scrol|page|swipe|swip)\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollUpRegex = Regex("^(?:scroll|scrol|page|swipe|swip)\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val swipeDownRegex = Regex("^(?:swipe|swip)\\s+down(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val swipeUpRegex = Regex("^(?:swipe|swip)\\s+up(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollLeftRegex = Regex("^(?:scroll|scrol|swipe|swip)\\s+(?:left|sideways)(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
+    private val scrollRightRegex = Regex("^(?:scroll|scrol|swipe|swip)\\s+right(?:\\s+(?:a\\s+bit|further|twice|thrice|\\d+\\s+times|\\w+\\s+times))?$", RegexOption.IGNORE_CASE)
 
     private fun parseRepeatCount(text: String): Int {
         val lower = text.lowercase()
@@ -400,6 +401,14 @@ object IntentParser {
             val contact = cleanContactName(rawContact)
             if (contact.isNotEmpty()) {
                 return Cmd.Text(contact, msg)
+            }
+        }
+
+        textSimpleRegex.find(cleaned)?.let { match ->
+            val rawContact = match.groups[1]?.value?.trim() ?: ""
+            val contact = cleanContactName(rawContact)
+            if (contact.isNotEmpty()) {
+                return Cmd.Text(contact, null)
             }
         }
 
