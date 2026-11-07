@@ -117,11 +117,16 @@ class BubbleService : Service() {
     private var pendingDraftText: String? = null
     private var pendingSend: Cmd.Text? = null
     data class PendingTextSend(val contactName: String, val contactNumber: String, val message: String)
+    data class PendingNotificationReplySend(
+        val notif: com.dot.capri.monitor.CapriNotificationListenerService.NotificationItem,
+        val message: String
+    )
     private var pendingContactMatches: List<com.dot.capri.util.ContactUtils.ContactMatch>? = null
     private var pendingContactCmd: Cmd.Text? = null
     private var pendingTextConfirmation: PendingTextSend? = null
     private var pendingNotificationReply: com.dot.capri.monitor.CapriNotificationListenerService.NotificationItem? = null
     private var awaitingNotificationReplyText: Boolean = false
+    private var pendingNotificationReplyConfirmation: PendingNotificationReplySend? = null
     private val easterEggCounts = mutableMapOf<String, Int>()
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -148,29 +153,58 @@ class BubbleService : Service() {
 
     fun getProactivityEngine(): ProactivityEngine? = proactivityEngine
 
-    private suspend fun executeNotificationReply(
+    private fun cleanNotificationReplyText(raw: String): String {
+        var text = raw.trim()
+        val actionMatch = Regex("\\[?ACTION[=:]\\s*(?:MESSAGE|TEXT|WHATSAPP)[=:]\\s*(?:[^:\\]\\n]+:)?\\s*([^\\]\\n]+)\\]?", RegexOption.IGNORE_CASE).find(text)
+        if (actionMatch != null) {
+            text = actionMatch.groupValues[1].trim()
+        }
+        repeat(3) {
+            text = text.replace(Regex("^\\[?(?:MESSAGE|REPLY|RESPONSE|TEXT|CHAT)\\]?[:\\-\\s]+", RegexOption.IGNORE_CASE), "").trim()
+            text = text.replace(Regex("^\\[[^\\]]+\\]\\s*"), "").trim()
+            text = text.removeSurrounding("\"").removeSurrounding("'").removeSurrounding("`").trim()
+        }
+        text = text.lines().firstOrNull { it.isNotBlank() }?.trim() ?: text
+        return text.trim()
+    }
+
+    private suspend fun generateRawReplyText(prompt: String): String? {
+        val wantsCloud = LlmRouter.getActiveProviderName(this) != "Local" && LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)
+        if (wantsCloud) {
+            val result = withContext(Dispatchers.IO) {
+                CloudAiClient.generateResponse(this@BubbleService, prompt, null)
+            }
+            val text = result.getOrNull()?.takeIf { it.isNotBlank() }
+            if (text != null && !text.contains("No brain installed", ignoreCase = true)) {
+                return text
+            }
+        }
+        if (OnDeviceAiClient.isAvailable(this)) {
+            val local = OnDeviceAiClient.generateResponse(this, prompt, null)
+            val text = local.getOrNull()?.takeIf { it.isNotBlank() }
+            if (text != null) return text
+        }
+        return null
+    }
+
+    private suspend fun prepareNotificationReplyConfirmation(
         notif: com.dot.capri.monitor.CapriNotificationListenerService.NotificationItem,
         replyInstruction: String
     ): String {
-        val actualMessage = if (brainAvailable()) {
+        val generated = if (brainAvailable()) {
             val prompt = "User wants to reply to a notification from ${notif.senderOrTitle}: \"${notif.messageText}\". " +
                     "User's instruction: \"$replyInstruction\". " +
                     "Generate 1 short, natural, conversational chat reply text (under 15 words) to send back as the message. " +
-                    "Output ONLY the text of the message to send, nothing else."
-            askBrain(prompt)?.trim()?.removeSurrounding("\"")?.ifBlank { null } ?: replyInstruction
+                    "CRITICAL: Do NOT include prefixes like 'MESSAGE:' or 'Reply:'. Output ONLY the literal message text to send, nothing else."
+            generateRawReplyText(prompt)?.let { cleanNotificationReplyText(it) }?.ifBlank { null }
+                ?: cleanNotificationReplyText(replyInstruction)
         } else {
-            replyInstruction
+            cleanNotificationReplyText(replyInstruction)
         }
 
-        val replied = com.dot.capri.monitor.CapriNotificationListenerService.replyToNotification(this, notif, actualMessage)
-        return if (replied) {
-            "sure. texted ${notif.senderOrTitle}: \"$actualMessage\"."
-        } else {
-            IntentExecutor.execute(this, Cmd.Text(notif.senderOrTitle, actualMessage))
-            delay(1000)
-            PhoneControl.pressSend(this)
-            "sent \"$actualMessage\" to ${notif.senderOrTitle}."
-        }
+        val actualMessage = cleanNotificationReplyText(generated)
+        pendingNotificationReplyConfirmation = PendingNotificationReplySend(notif, actualMessage)
+        return "about to reply to ${notif.senderOrTitle}: \"$actualMessage\". send it? (yes/no)"
     }
 
     private fun resolveBubbleAsset(state: BubbleState): Int {
@@ -1309,11 +1343,36 @@ class BubbleService : Service() {
             }
         }
 
+        pendingNotificationReplyConfirmation?.let { pending ->
+            pendingNotificationReplyConfirmation = null
+            if (yes.matches(trimmedInput)) {
+                val replied = com.dot.capri.monitor.CapriNotificationListenerService.replyToNotification(this, pending.notif, pending.message)
+                return if (replied) {
+                    "sure. replied to ${pending.notif.senderOrTitle}: \"${pending.message}\"."
+                } else {
+                    setChatVisible(false)
+                    IntentExecutor.execute(this, Cmd.Text(pending.notif.senderOrTitle, pending.message))
+                    delay(1200)
+                    try {
+                        PhoneControl.pressSend(this)
+                    } finally {
+                        setChatVisible(true)
+                    }
+                    delay(300)
+                    PhoneControl.home()
+                    "sent \"${pending.message}\" to ${pending.notif.senderOrTitle}."
+                }
+            }
+            if (no.matches(trimmedInput)) {
+                return "okay, didn't send it."
+            }
+        }
+
         pendingNotificationReply?.let { notif ->
             if (awaitingNotificationReplyText) {
                 awaitingNotificationReplyText = false
                 pendingNotificationReply = null
-                return executeNotificationReply(notif, trimmedInput)
+                return prepareNotificationReplyConfirmation(notif, trimmedInput)
             } else if (yes.matches(trimmedInput)) {
                 awaitingNotificationReplyText = true
                 return "what do you want me to say to ${notif.senderOrTitle}?"
@@ -1534,7 +1593,7 @@ class BubbleService : Service() {
                 }
 
                 if (notif != null) {
-                    return executeNotificationReply(notif, parsedCmd.replyText)
+                    return prepareNotificationReplyConfirmation(notif, parsedCmd.replyText)
                 } else {
                     val target = parsedCmd.targetSender ?: "them"
                     return "i don't see any recent notification to reply to. you can say 'text $target about ${parsedCmd.replyText}' instead."
