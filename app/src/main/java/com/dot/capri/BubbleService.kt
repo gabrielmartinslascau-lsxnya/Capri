@@ -1419,16 +1419,26 @@ class BubbleService : Service() {
             }
             is com.dot.capri.intents.Cmd.Play -> {
                 IntentExecutor.execute(this, parsedCmd)
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                if (audioManager?.isMusicActive == true) {
+                    return "playing your music. don't get used to me being your personal dj."
+                }
                 delay(1800)
                 PhoneAgent.pending = null
                 val qLower = parsedCmd.query.trim().lowercase(java.util.Locale.US)
                 val isReelsOrVideo = qLower in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid") ||
                         Regex("^(?:a\\s+)?(?:video|vid|reels?|shorts?)$").matches(qLower)
                 val targetApp = if (isReelsOrVideo) MainActivity.getDefaultReelsApp(this) else MainActivity.getDefaultMusicPlayer(this)
-                val goalDesc = if (isReelsOrVideo) {
-                    "User wants to: $trimmedInput. Video player ($targetApp) is open. Verify video is playing on screen."
-                } else {
-                    "User wants to: $trimmedInput. Media player ($targetApp) is open for '${parsedCmd.query}'. Look at the screen in $targetApp and tap the song or Play button so playback starts."
+                val goalDesc = when {
+                    isReelsOrVideo -> {
+                        "User wants to: $trimmedInput. Video player ($targetApp) is open. Verify video is playing on screen."
+                    }
+                    parsedCmd.isGeneric -> {
+                        "User wants to listen to music. $targetApp is open. Tap the Play button, Shuffle button, or a song on screen so music starts playing."
+                    }
+                    else -> {
+                        "User wants to: $trimmedInput. Media player ($targetApp) is open for '${parsedCmd.query}'. Look at the screen in $targetApp and tap the song or Play button so playback starts."
+                    }
                 }
                 return PhoneAgent.run(this, goalDesc, null) { setChatVisible(it) }
             }

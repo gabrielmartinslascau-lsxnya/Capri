@@ -26,6 +26,24 @@ class IntentParserTest {
     }
 
     @Test
+    fun testParseConversationalMusicRequests() {
+        val cmd1 = IntentParser.parse("can you play some music please")
+        assertEquals(Cmd.Play("music", null, isGeneric = true), cmd1)
+
+        val cmd2 = IntentParser.parse("play some music")
+        assertEquals(Cmd.Play("music", null, isGeneric = true), cmd2)
+
+        val cmd3 = IntentParser.parse("put on some tunes")
+        assertEquals(Cmd.Play("music", null, isGeneric = true), cmd3)
+
+        val cmd4 = IntentParser.parse("shuffle my music")
+        assertEquals(Cmd.Play("music", null, isGeneric = true), cmd4)
+
+        val cmd5 = IntentParser.parse("hey capri could you play some songs for me")
+        assertEquals(Cmd.Play("music", null, isGeneric = true), cmd5)
+    }
+
+    @Test
     fun testParsePlayKnownApp() {
         val cmd1 = IntentParser.parse("play spotify")
         assertEquals(Cmd.Open("spotify"), cmd1)

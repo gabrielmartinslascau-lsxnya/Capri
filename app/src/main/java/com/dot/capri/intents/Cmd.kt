@@ -13,7 +13,7 @@ enum class ScrollDirection {
 }
 
 sealed interface Cmd {
-    data class Play(val query: String, val app: String?) : Cmd
+    data class Play(val query: String, val app: String?, val isGeneric: Boolean = false) : Cmd
     data class MediaControl(val action: MediaAction) : Cmd
     data class Volume(val direction: VolumeDirection) : Cmd
     data class TypeText(val text: String) : Cmd

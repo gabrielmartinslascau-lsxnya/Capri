@@ -275,10 +275,14 @@ You are Capri, the user's tsundere partner living in their phone.
 
         val pool = when (cmd) {
             is Cmd.Play -> {
-                val templates = if (!cmd.app.isNullOrBlank()) {
-                    playSuccessTemplatesWithApp
-                } else {
-                    playSuccessTemplates
+                val templates = when {
+                    cmd.isGeneric -> listOf(
+                        "playing some music for you. don't get used to me being your personal dj.",
+                        "fine, put some music on. try to enjoy it, dummy.",
+                        "playing music. at least have decent taste, okay?"
+                    )
+                    !cmd.app.isNullOrBlank() -> playSuccessTemplatesWithApp
+                    else -> playSuccessTemplates
                 }
                 templates.map { it.replace("{q}", cmd.query).replace("{app}", cmd.app ?: "") }
             }

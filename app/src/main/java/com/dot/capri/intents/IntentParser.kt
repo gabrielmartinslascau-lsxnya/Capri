@@ -4,6 +4,7 @@ import android.util.Log
 
 object IntentParser {
     private val playOnRegex = Regex("^play\\s+(.+?)\\s+(?:on|in|using|via)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val putOnRegex = Regex("^(?:put\\s+on|throw\\s+on|turn\\s+on|start\\s+playing|listen\\s+to|shuffle)\\s+(.+?)(?:\\s+(?:on|in|using|via)\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val videoPlayRegex = Regex("^play\\s+(?:a\\s+)?(?:video|vid|reels?|shorts?)$", RegexOption.IGNORE_CASE)
     private val playRegex = Regex("^play\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val callRegex = Regex("^(?:call|phone|dial)\\s+(.+)$", RegexOption.IGNORE_CASE)
@@ -106,15 +107,29 @@ object IntentParser {
         return dp[s2.length]
     }
 
+    fun isGenericMusicRequest(rawQuery: String): Boolean {
+        val q = rawQuery.trim().lowercase(java.util.Locale.US)
+            .replace(Regex("^(?:some|a|any|the|my|random)\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+(?:for\\s+me|rq|pls|please|bro|now)$", RegexOption.IGNORE_CASE), "")
+            .trim()
+        val genericWords = setOf(
+            "", "music", "song", "songs", "track", "tracks", "tune", "tunes",
+            "something", "anything", "whatever", "something to listen to"
+        )
+        val fullPhraseMatch = setOf(
+            "some music", "some songs", "some tunes", "any music", "play music", "music please",
+            "something to listen to", "random music"
+        )
+        return q in genericWords || rawQuery.trim().lowercase(java.util.Locale.US) in fullPhraseMatch
+    }
+
     private fun cleanPlayQuery(rawQuery: String): String {
         var q = rawQuery
             .replace(Regex("\\s+(?:rq|real\\s+quick|pls|please|for\\s+me|bro|choom|now)$", RegexOption.IGNORE_CASE), "")
             .trim()
 
-        val genericQueries = setOf("song", "music", "something", "video", "track", "tune", "tunes", "a song", "a video", "a vid")
-        if (q.lowercase() in genericQueries || q.isEmpty()) {
-            val funDefaults = listOf("cyberpunk synthwave", "lofi hip hop beats", "top hit music", "retrowave music")
-            q = funDefaults.random()
+        if (isGenericMusicRequest(q)) {
+            return "music"
         }
         return q
     }
@@ -139,7 +154,10 @@ object IntentParser {
             return Cmd.Unknown(input)
         }
 
-        val cleaned = raw.replace(Regex("^(?:please\\s+|can\\s+you\\s+|could\\s+you\\s+|hey\\s+)+", RegexOption.IGNORE_CASE), "").trim()
+        val cleaned = raw
+            .replace(Regex("^(?:hey\\s+capri[,\\s]+|capri[,\\s]+|ok\\s+capri[,\\s]+|hey[,\\s]+|please\\s+|can\\s+you\\s+(?:please\\s+)?|could\\s+you\\s+(?:please\\s+)?|would\\s+you\\s+(?:mind\\s+)?|will\\s+you\\s+|i\\s+want\\s+(?:you\\s+to\\s+|to\\s+)|just\\s+)+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("(?:\\s+(?:please|pls|for\\s+me|rq|real\\s+quick|right\\s+now|now|choom|bro|will\\s+ya|would\\s+ya))+\\s*$", RegexOption.IGNORE_CASE), "")
+            .trim()
 
         if (muteProactivityRegex.matches(raw) || muteProactivityRegex.matches(cleaned)) {
             return Cmd.MuteProactivity
@@ -268,17 +286,26 @@ object IntentParser {
 
         playOnRegex.find(cleaned)?.let { match ->
             val (q, app) = match.destructured
+            val isGen = isGenericMusicRequest(q)
             val cleanQ = cleanPlayQuery(q.trim())
-            return Cmd.Play(cleanQ, app.trim().removeSuffix("app").trim())
+            return Cmd.Play(cleanQ, app.trim().removeSuffix("app").trim(), isGeneric = isGen)
+        }
+
+        putOnRegex.find(cleaned)?.let { match ->
+            val q = match.groups[1]?.value?.trim().orEmpty()
+            val app = match.groups[2]?.value?.trim()?.removeSuffix("app")?.trim()
+            val isGen = isGenericMusicRequest(q)
+            val cleanQ = cleanPlayQuery(q)
+            return Cmd.Play(cleanQ, app, isGeneric = isGen)
         }
 
         playRegex.find(cleaned)?.let { match ->
             val (q) = match.destructured
             val query = q.trim()
-            val queryLower = query.lowercase()
+            val queryLower = query.lowercase(java.util.Locale.US)
 
             val serviceCtx = com.dot.capri.CapriAccessibilityService.instance ?: com.dot.capri.BubbleService.instance
-            if (serviceCtx != null && !queryLower.contains("song") && !queryLower.contains("music") && !queryLower.contains("by ")) {
+            if (serviceCtx != null && !queryLower.contains("song") && !queryLower.contains("music") && !queryLower.contains("by ") && !isGenericMusicRequest(query)) {
                 val matchesApp = AppChooser.launchers(serviceCtx).firstOrNull { app ->
                     val labelLower = app.label.lowercase().trim()
                     labelLower == queryLower || (queryLower.length >= 3 && labelLower.contains(queryLower))
@@ -298,8 +325,9 @@ object IntentParser {
             if (videoPlayRegex.matches(cleaned) || videoPlayRegex.matches(raw)) {
                 return Cmd.Play("reels", null)
             }
+            val isGen = isGenericMusicRequest(query)
             val cleanQ = cleanPlayQuery(query)
-            return Cmd.Play(cleanQ, null)
+            return Cmd.Play(cleanQ, null, isGeneric = isGen)
         }
 
         textRegex.find(cleaned)?.let { match ->

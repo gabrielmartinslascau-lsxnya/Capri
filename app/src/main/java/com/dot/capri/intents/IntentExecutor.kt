@@ -172,7 +172,23 @@ object IntentExecutor {
             return executeOpen(context, Cmd.Open(reelsApp))
         }
 
-        val isExplicitMusic = rawQuery.contains("song") || rawQuery.contains("music") || rawQuery.contains("track") || rawQuery.contains("by ") || !cmd.app.isNullOrBlank()
+        // Fast resume check: If user requested generic music and music is paused in background, resume instantly!
+        if (cmd.isGeneric) {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (audioManager != null) {
+                if (audioManager.isMusicActive) {
+                    return true
+                }
+                audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+                audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
+                try { Thread.sleep(250) } catch (_: Exception) {}
+                if (audioManager.isMusicActive) {
+                    return true
+                }
+            }
+        }
+
+        val isExplicitMusic = cmd.isGeneric || rawQuery.contains("song") || rawQuery.contains("music") || rawQuery.contains("track") || rawQuery.contains("by ") || !cmd.app.isNullOrBlank()
 
         // Adaptive Check: If query matches an installed game/app (e.g. "play minecraft", "play roblox", "play pvz"),
         // open the game instead of searching for music on Spotify!
@@ -199,7 +215,7 @@ object IntentExecutor {
             "The Weeknd Blinding Lights",
             "Daft Punk One More Time"
         )
-        val finalQuery = if (rawQuery in setOf("something", "a song", "music", "a track", "a tune", "songs")) {
+        val finalQuery = if (!cmd.isGeneric && rawQuery in setOf("something", "a song", "music", "a track", "a tune", "songs")) {
             randomTracks.random()
         } else {
             cmd.query.trim()
@@ -210,7 +226,7 @@ object IntentExecutor {
         val rawChoice = if (!cmd.app.isNullOrBlank()) {
             cmd.app.lowercase().trim()
         } else {
-            if (MediaUtils.isTrackDownloadedLocally(context, finalQuery)) {
+            if (!cmd.isGeneric && MediaUtils.isTrackDownloadedLocally(context, finalQuery)) {
                 "local"
             } else {
                 MainActivity.getDefaultMusicPlayer(context).lowercase().trim()
@@ -230,10 +246,30 @@ object IntentExecutor {
 
         val intent: Intent = when (playerChoice) {
             "spotify" -> {
-                Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:$encodedQuery"))
+                if (cmd.isGeneric) {
+                    val mediaIntent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
+                        putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+                        setPackage("com.spotify.music")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (mediaIntent.resolveActivity(context.packageManager) != null) {
+                        mediaIntent
+                    } else {
+                        Intent(Intent.ACTION_VIEW, Uri.parse("spotify:collection:tracks"))
+                    }
+                } else {
+                    Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:$encodedQuery"))
+                }
             }
             "ytmusic" -> {
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$encodedQuery"))
+                if (cmd.isGeneric) {
+                    val pm = context.packageManager
+                    pm.getLaunchIntentForPackage("com.google.android.apps.youtube.music")?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    } ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com"))
+                } else {
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$encodedQuery"))
+                }
             }
             "apple" -> {
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://music.apple.com/search?term=$encodedQuery"))
