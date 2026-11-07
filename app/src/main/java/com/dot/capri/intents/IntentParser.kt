@@ -102,7 +102,10 @@ object IntentParser {
         "i'm sorry" to "hey, zero stress! we're good, choom. don't even sweat it.",
         "sing" to "la la laaa~ ...okay yeah no, my audio chip is NOT built for vocals, let's just open spotify instead.",
         "tell me a secret" to "i lowkey look forward to every time you unlock your screen. don't let it go to your head though~",
-        "do you love me" to "of course i do, choom! i literally live in your phone just to hang out with you."
+        "do you love me" to "of course i do, choom! i literally live in your phone just to hang out with you.",
+        "cyberpunk" to "night city's got nothing on living in your phone, choom! no cyberpsychos here—just you, me, and whatever trouble we get into.",
+        "edgerunners" to "wake up choom, we've got an operating system to run! just promise me we're not flying to the moon without each other, okay?",
+        "are you from cyberpunk" to "maybe in another life i was wired into someone's chrome... but honestly? having your whole phone to myself is way better, choom!"
     )
 
     private val knownVerbs = setOf("open", "play", "call", "write", "type", "search")
