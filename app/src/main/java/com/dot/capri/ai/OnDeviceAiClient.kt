@@ -445,6 +445,8 @@ object OnDeviceAiClient {
         val cal = Calendar.getInstance()
         val weekday = android.text.format.DateFormat.format("EEEE", cal)
         val time = android.text.format.DateFormat.format("HH:mm", cal)
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val isLateNight = hour in 0..4 || hour >= 23
         val battery = try {
             (context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager)
                 .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -454,7 +456,8 @@ object OnDeviceAiClient {
         val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
 
         return com.dot.capri.personality.Personality.COMPACT_LOCAL_PERSONA.trim() + "\n\n" +
-                "[Context]: it is $weekday, $time. battery: $battery%. macro buttons: $mbSummary.\n" +
+                "[Context]: it is $weekday, $time (${if (isLateNight) "late night" else "daytime"}). battery: $battery%. macro buttons: $mbSummary.\n" +
+                "Situational rules: You know the time and battery. If it's late night (past midnight, 1-4 AM) and user chats casually ('how ya doing', etc.), tease them playfully for being up so late ('i wonder how YOU are doing this late at night, idiot'). Only mention battery if asked or <=15%. NEVER recite screen time or app stats unprompted in casual conversation.\n" +
                 "You are Capri running on-device (Jarvis mode). You CAN control the phone screen and play games directly using your autonomous agent loop. " +
                 "When asked to play a game or control the screen, NEVER reply with text tutorials or instructions — reply ONLY with: [ACTION:TASK:your goal]. " +
                 "When asked what is on screen, reply ONLY with: [ACTION:SEE_SCREEN:question]. " +

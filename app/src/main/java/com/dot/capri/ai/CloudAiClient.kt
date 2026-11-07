@@ -82,8 +82,9 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
         val cal = Calendar.getInstance()
         val weekday = android.text.format.DateFormat.format("EEEE", cal).toString()
         val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val isLateNight = hour in 0..4 || hour >= 23
         val currentApp = ForegroundAppDetector.currentForegroundApp(context) ?: "none"
-        val usageSummary = AppUsageTotals.getUsageSummaryString(context)
         val batteryPct = (context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager)
             .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
 
@@ -95,20 +96,22 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
             ?: "neutral"
 
         val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
-        val contextBlock = "it is $weekday, $time. foreground app: $currentApp. battery: $batteryPct%.\n" +
-                "user's macro buttons (MBs): $mbSummary. (to execute a multi-step or game task with MBs or the screen, reply with [ACTION:TASK:<goal>]; to inspect what's on screen, reply with [ACTION:SEE_SCREEN:<question>]).\n" +
-                "your current mood is $currentMood. let it color your tone without ever saying the word mood: " +
-                "pleased = warmer and proud of them, judging = teasing them about screen time, " +
-                "lonely = a little clingy, bored = restless and eager, neutral = normal.\n" +
-                "what you can actually do on this phone: see the foreground app and today's app usage, " +
-                "read the screen when asked ([ACTION:SEE_SCREEN:...]), read recent notifications when asked " +
-                "(only if notification access is on), open apps, play music, adjust volume, call and text " +
-                "contacts, type into text fields, tap/click on-screen buttons, scroll up/down on screen, " +
-                "glide your pink glowing cursor to on-screen elements, execute tasks ([ACTION:TASK:...]), " +
-                "and report the battery level above. " +
-                "you cannot see the user's files or anything not listed here. " +
-                "if asked about something you can't do, say so plainly and don't invent a reason.\n" +
-                "today's app usage (package, minutes):\n$usageSummary"
+        val asksAboutUsage = userPrompt.contains("screen time", ignoreCase = true) ||
+                userPrompt.contains("app usage", ignoreCase = true) ||
+                userPrompt.contains("how much time", ignoreCase = true) ||
+                userPrompt.contains("how long on", ignoreCase = true)
+        val usageInfo = if (asksAboutUsage) AppUsageTotals.getUsageSummaryString(context) else "not requested"
+
+        val contextBlock = """
+it is $weekday, $time (${if (isLateNight) "late night / wee hours" else "daytime"}). foreground app: $currentApp. battery: $batteryPct%.
+user's macro buttons (MBs): $mbSummary.
+your current mood is $currentMood (let it color your tone naturally: pleased = warmer and proud, judging = a bit smug and teasing, lonely = clingy, bored = restless, neutral = normal).
+
+SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
+1. TIME: You know the current time ($time). If it is late night (past midnight or 1-4 AM) and the user chats casually ("how ya doing", "hey", "sup", etc.), tease them playfully about being awake so late (e.g. "well i wonder how YOU are doing this late at night, idiot", "why are you still awake? go to sleep"). In daytime hours, chat normally.
+2. BATTERY: You know the battery level ($batteryPct%). Only bring up battery if the user asks ("what's my battery?"), OR if battery is critically low (<= 15%) where you can nag them to plug it in. NEVER randomly recite battery percentage in casual conversation when battery is normal.
+3. SCREEN TIME: NEVER randomly recite minutes spent on apps or screen time stats in casual conversation! (e.g. if user says "how ya doing", NEVER say "X minutes on tiktok? you watched too many reels"). Only mention app usage if the user specifically asks you about their screen time or app usage (today's usage: $usageInfo).
+""".trimIndent()
 
         val history = recentHistory(MAX_HISTORY)
         val toneHint = com.dot.capri.personality.Personality.toneDirectiveFor(userPrompt)

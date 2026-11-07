@@ -132,13 +132,24 @@ object RealTalkBridge {
             }
         }
         
+        val cal = java.util.Calendar.getInstance()
+        val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val isLateNight = hour in 0..4 || hour >= 23
+        val battery = try {
+            (context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager)
+                .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } catch (_: Throwable) { -1 }
+
+        val situationalHint = "\n[Situational awareness: time is $time (${if (isLateNight) "late night / past midnight" else "daytime"}), battery is $battery%. If it's late night, tease them playfully for being up so late ('i wonder how YOU are doing this late at night'). Only mention battery if asked or <=15%. Never recite app usage/screen time stats unprompted.]"
+
         // 1. Direct call to LlmRouter if API key is configured and not local
         val wantsCloud = com.dot.capri.llm.LlmRouter.getActiveProviderName(context) != "Local"
         if (wantsCloud && com.dot.capri.llm.LlmRouter.hasAnyApiKey(context)) {
             try {
                 val req = com.dot.capri.llm.LlmRequest(
                     prompt = rawUserMessage,
-                    systemPrompt = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user. Respond naturally, thoughtfully, and conversationally. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them.",
+                    systemPrompt = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user. Respond naturally, thoughtfully, and conversationally. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them." + situationalHint,
                     history = historyPairs.takeLast(8)
                 )
                 val res = com.dot.capri.llm.LlmRouter.complete(context, req)
@@ -153,7 +164,7 @@ object RealTalkBridge {
         // 2. Direct call to OnDeviceAiClient if available
         if (com.dot.capri.ai.OnDeviceAiClient.isAvailable(context)) {
             try {
-                val systemInst = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user. Respond naturally, thoughtfully, and conversationally. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them."
+                val systemInst = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user. Respond naturally, thoughtfully, and conversationally. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them." + situationalHint
                 val res = com.dot.capri.ai.OnDeviceAiClient.generateResponse(
                     context = context,
                     prompt = rawUserMessage,
