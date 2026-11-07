@@ -29,17 +29,11 @@ import com.dot.capri.R
 import com.dot.capri.RealTalkActivity
 import com.dot.capri.agent.ControlRegions
 import com.dot.capri.personality.Personality
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class CapriVoiceInteractionSession(context: Context) : VoiceInteractionSession(context) {
 
     private var rootContainer: FrameLayout? = null
     private var cardView: View? = null
-    private val scope = CoroutineScope(Dispatchers.Main + Job())
 
     override fun onCreateContentView(): View {
         val themedContext = ContextThemeWrapper(context, R.style.Theme_Capri)
@@ -113,6 +107,17 @@ class CapriVoiceInteractionSession(context: Context) : VoiceInteractionSession(c
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
         Log.d("CAPRI_ASSIST", "CapriVoiceInteractionSession onShow with showFlags=$showFlags")
+
+        BubbleService.onRequestCloseAssistant = {
+            hide()
+            finish()
+        }
+        BubbleService.onAssistantVisibilityChanged = { visible ->
+            if (!visible) {
+                hide()
+                finish()
+            }
+        }
 
         val service = BubbleService.instance
         if (service == null) {
@@ -215,6 +220,18 @@ class CapriVoiceInteractionSession(context: Context) : VoiceInteractionSession(c
         }
     }
 
+    override fun onHide() {
+        super.onHide()
+        BubbleService.onRequestCloseAssistant = null
+        BubbleService.onAssistantVisibilityChanged = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        BubbleService.onRequestCloseAssistant = null
+        BubbleService.onAssistantVisibilityChanged = null
+    }
+
     private fun dpToPx(dp: Int): Int {
         return (dp * context.resources.displayMetrics.density).toInt()
     }
@@ -236,18 +253,22 @@ class CapriVoiceInteractionSession(context: Context) : VoiceInteractionSession(c
         thinkingText?.text = Personality.thinking()
         thinkingContainer?.visibility = View.VISIBLE
 
-        scope.launch {
-            val response = withContext(Dispatchers.IO) {
-                val service = BubbleService.instance
-                if (service != null) {
-                    service.processCommand(text)
-                } else {
-                    "my bubble service isn't running, choom. open capri once to wake me up."
+        val service = BubbleService.instance
+        if (service != null) {
+            service.processCommandFromAssistant(text) { response ->
+                if (window?.isShowing == true) {
+                    thinkingContainer?.visibility = View.GONE
+                    addMessage(historyContainer, "Capri", response)
+                    chatScroll?.post { chatScroll.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
             }
+        } else {
+            val intent = Intent(context, BubbleService::class.java)
+            ContextCompat.startForegroundService(context, intent)
             thinkingContainer?.visibility = View.GONE
-            BubbleService.getPersistentChatHistory().add(Pair("Capri", response))
-            addMessage(historyContainer, "Capri", response)
+            val fallback = "my bubble service is waking up, choom. try again in a second."
+            BubbleService.getPersistentChatHistory().add(Pair("Capri", fallback))
+            addMessage(historyContainer, "Capri", fallback)
             chatScroll?.post { chatScroll.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }

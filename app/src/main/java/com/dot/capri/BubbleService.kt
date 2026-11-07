@@ -73,6 +73,8 @@ class BubbleService : Service() {
         const val CHANNEL_ID = "bubble_service"
         const val NOTIFICATION_ID = 1001
         var instance: BubbleService? = null
+        var onRequestCloseAssistant: (() -> Unit)? = null
+        var onAssistantVisibilityChanged: ((Boolean) -> Unit)? = null
 
         private val persistentChatHistory = mutableListOf<Pair<String, String>>()
         fun getPersistentChatHistory(): MutableList<Pair<String, String>> = persistentChatHistory
@@ -117,13 +119,19 @@ class BubbleService : Service() {
 
     private suspend fun setChatVisible(visible: Boolean) {
         withContext(Dispatchers.Main) {
-            val v = chatView ?: return@withContext
+            val v = chatView
+            if (v != null) {
+                if (!visible) {
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                    imm.hideSoftInputFromWindow(v.windowToken, 0)
+                    v.visibility = View.GONE
+                } else {
+                    v.visibility = View.VISIBLE
+                }
+            }
+            onAssistantVisibilityChanged?.invoke(visible)
             if (!visible) {
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-                imm.hideSoftInputFromWindow(v.windowToken, 0)
-                v.visibility = View.GONE
-            } else {
-                v.visibility = View.VISIBLE
+                onRequestCloseAssistant?.invoke()
             }
         }
         if (!visible) delay(350)
@@ -669,6 +677,7 @@ class BubbleService : Service() {
         mainHandler.post {
             removeChatWindow()
             showBubble()
+            onRequestCloseAssistant?.invoke()
         }
     }
 
@@ -724,6 +733,28 @@ class BubbleService : Service() {
             streamMessageView(themedContext, historyContainer, response, chatScroll)
 
             triggerSpeakingDoublePulse()
+        }
+    }
+
+    fun processCommandFromAssistant(
+        command: String,
+        onSessionResponse: ((String) -> Unit)? = null
+    ) {
+        proactivityEngine?.recordUserInteraction()
+        serviceScope.launch {
+            val response = try {
+                withContext(Dispatchers.IO) { processCommand(command) }
+            } catch (e: Exception) {
+                Log.e("CAPRI_BUBBLE", "processCommand from assistant crashed", e)
+                "something glitched on my end... try that again."
+            }
+
+            persistentChatHistory.add(Pair("Capri", response))
+            triggerSpeakingDoublePulse()
+
+            withContext(Dispatchers.Main) {
+                onSessionResponse?.invoke(response)
+            }
         }
     }
 
@@ -1377,7 +1408,6 @@ class BubbleService : Service() {
             }
             is com.dot.capri.intents.Cmd.Volume,
             is com.dot.capri.intents.Cmd.MediaControl,
-            is com.dot.capri.intents.Cmd.GoHome,
             is com.dot.capri.intents.Cmd.SetDefaultApp -> {
                 IntentExecutor.execute(this, parsedCmd)
                 if (brainAvailable()) {
@@ -1385,6 +1415,11 @@ class BubbleService : Service() {
                         ?: "done."
                 }
                 return "done."
+            }
+            is com.dot.capri.intents.Cmd.GoHome -> {
+                minimizeToChat()
+                IntentExecutor.execute(this, parsedCmd)
+                return "going home."
             }
             else -> {
                 // Not a direct Cmd - proceed to general action request extraction or dev commands
