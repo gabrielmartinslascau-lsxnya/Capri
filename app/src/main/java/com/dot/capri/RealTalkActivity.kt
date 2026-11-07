@@ -51,7 +51,7 @@ class RealTalkActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "capri_real_talk_prefs"
         private const val KEY_HISTORY_JSON = "real_talk_history_v1"
-        private const val MAX_SAVED_MESSAGES = 100
+        private const val MAX_SAVED_MESSAGES = 500
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

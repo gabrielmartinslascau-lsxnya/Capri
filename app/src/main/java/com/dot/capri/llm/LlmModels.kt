@@ -4,7 +4,8 @@ data class LlmRequest(
     val prompt: String,
     val systemPrompt: String,
     val history: List<Pair<String, String>> = emptyList(),
-    val imageBytes: ByteArray? = null
+    val imageBytes: ByteArray? = null,
+    val maxTokens: Int? = null
 )
 
 data class LlmResponse(

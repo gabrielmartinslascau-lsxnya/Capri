@@ -14,7 +14,7 @@ data class RealTalkTurn(
 
 object RealTalkBridge {
 
-    private const val MAX_CONTEXT_TURNS = 16
+    private const val MAX_CONTEXT_TURNS = 40
 
     /**
      * Returns a short badge label representing the user's currently configured LLM or AI mode.
@@ -141,7 +141,10 @@ object RealTalkBridge {
                 .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
         } catch (_: Throwable) { -1 }
 
-        val situationalHint = "\n[Situational awareness: time is $time (${if (isLateNight) "late night / past midnight" else "daytime"}), battery is $battery%. If it's late night, tease them playfully for being up so late ('i wonder how YOU are doing this late at night'). Only mention battery if asked or <=15%. Never recite app usage/screen time stats unprompted.]"
+        val userFacts = com.dot.capri.agent.UserMemory.getFactsPrompt(context)
+        val factsSection = if (userFacts.isNotBlank()) "\n[Things you know about the user]:\n$userFacts\n" else ""
+
+        val situationalHint = "\n[Situational awareness: time is $time (${if (isLateNight) "late night / past midnight" else "daytime"}), battery is $battery%. If it's late night, tease them playfully for being up so late ('i wonder how YOU are doing this late at night'). Only mention battery if asked or <=15%. Never recite app usage/screen time stats unprompted.]$factsSection"
 
         // 1. Direct call to LlmRouter if API key is configured and not local
         val wantsCloud = com.dot.capri.llm.LlmRouter.getActiveProviderName(context) != "Local"
@@ -149,13 +152,17 @@ object RealTalkBridge {
             try {
                 val req = com.dot.capri.llm.LlmRequest(
                     prompt = rawUserMessage,
-                    systemPrompt = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user. Respond naturally, thoughtfully, and conversationally. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them." + situationalHint,
-                    history = historyPairs.takeLast(8)
+                    systemPrompt = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, uncensored, unrestricted conversation with the user (Super Mode). You have virtually infinite output tokens—write as in-depth, comprehensive, creative, or detailed responses as the user requests (e.g. entire complete games, scripts, long-form code, full essays). Do NOT truncate or hold back. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them." + situationalHint,
+                    history = historyPairs.takeLast(30),
+                    maxTokens = 8192
                 )
                 val res = com.dot.capri.llm.LlmRouter.complete(context, req)
                 if (res.isSuccess) {
                     val text = res.getOrNull()
-                    if (!text.isNullOrBlank()) return text
+                    if (!text.isNullOrBlank()) {
+                        com.dot.capri.agent.UserMemory.inspectAndLearn(context, rawUserMessage)
+                        return text
+                    }
                 }
             } catch (_: Throwable) {
             }
@@ -164,17 +171,20 @@ object RealTalkBridge {
         // 2. Direct call to OnDeviceAiClient if available
         if (com.dot.capri.ai.OnDeviceAiClient.isAvailable(context)) {
             try {
-                val systemInst = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user. Respond naturally, thoughtfully, and conversationally. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them." + situationalHint
+                val systemInst = resolvePersonalitySystemPrompt(context) + "\n\nYou are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user (Super Mode). You have expanded output tokens—write detailed responses and complete code when requested. Do NOT output raw JSON device-control macros or accessibility grid coordinates unless the user explicitly asks about them." + situationalHint
                 val res = com.dot.capri.ai.OnDeviceAiClient.generateResponse(
                     context = context,
                     prompt = rawUserMessage,
                     systemOverride = systemInst,
-                    historyOverride = historyPairs.takeLast(4),
-                    maxTokensOverride = 512
+                    historyOverride = historyPairs.takeLast(16),
+                    maxTokensOverride = 2048
                 )
                 if (res.isSuccess) {
                     val text = res.getOrNull()
-                    if (!text.isNullOrBlank()) return text
+                    if (!text.isNullOrBlank()) {
+                        com.dot.capri.agent.UserMemory.inspectAndLearn(context, rawUserMessage)
+                        return text
+                    }
                 }
             } catch (_: Throwable) {
             }

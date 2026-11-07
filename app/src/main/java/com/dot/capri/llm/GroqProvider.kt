@@ -114,7 +114,7 @@ class GroqProvider(
             val payload = JSONObject().apply {
                 put("model", effectiveModel)
                 put("messages", messages)
-                put("max_tokens", 1024)
+                put("max_tokens", req.maxTokens ?: 1024)
                 if (req.systemPrompt.contains("JSON object")) {
                     put("response_format", JSONObject().put("type", "json_object"))
                 }

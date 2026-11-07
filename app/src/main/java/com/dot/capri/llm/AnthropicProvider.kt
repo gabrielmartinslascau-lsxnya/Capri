@@ -57,7 +57,7 @@ class AnthropicProvider(
 
             val payload = JSONObject().apply {
                 put("model", currentModel)
-                put("max_tokens", 1024)
+                put("max_tokens", req.maxTokens ?: 1024)
                 put("system", req.systemPrompt)
 
                 val messages = JSONArray()
