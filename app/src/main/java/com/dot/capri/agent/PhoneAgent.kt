@@ -1049,7 +1049,7 @@ Rules:
         }
 
         val reply = try {
-            withTimeoutOrNull(12_000L) {
+            withTimeoutOrNull(20_000L) {
                 if (useApi(context)) {
                     LlmRouter.complete(
                         context,
@@ -2803,11 +2803,11 @@ Rules:
                     return "we won! level cleared, choom. ${summary(log)}"
                 }
 
-                // 2. Screen Freeze Sentinel: If screen fingerprint produced 0 change for >= 8s, stop immediately!
+                // 2. Screen Freeze Sentinel: If screen fingerprint produced 0 change for >= 20s, stop immediately!
                 if (lastSeenFrameHash == frameHash && steps > 0) {
-                    if (System.currentTimeMillis() - lastProgressTime >= 8_000L) {
-                        log.add("screen frozen with zero progress for >= 8s; cleanly deactivating")
-                        return "no screen progress after 8 seconds, choom. shutting down screen control. ${summary(log)}"
+                    if (System.currentTimeMillis() - lastProgressTime >= 20_000L) {
+                        log.add("screen frozen with zero progress for >= 20s; cleanly deactivating")
+                        return "no screen progress after 20 seconds, choom. shutting down screen control. ${summary(log)}"
                     }
                 } else {
                     lastSeenFrameHash = frameHash
@@ -2843,7 +2843,22 @@ Rules:
                     }
                 }
 
-                // 3. Visual State Triage (<50ms): If screen is paused or prompting to Resume/Continue/Start, tap it first!
+                // 3. Autonomic Background Reflex (<10ms): In real-time games, collect falling resource drops (sun, coins, bonuses)
+                // automatically before or during model turns without waiting for the slow LLM!
+                if (isGameMode && rawBytes != null) {
+                    val highlights = GameReflexScanner.detectDynamicHighlights(rawBytes, sw, sh, maxTargets = 2)
+                    if (highlights.isNotEmpty()) {
+                        for (hl in highlights) {
+                            log.add("autonomic reflex: collected dynamic resource drop at (${hl.screenX}, ${hl.screenY})")
+                            CapriCursor.moveTo(hl.screenX, hl.screenY)
+                            CapriCursor.pulse()
+                            PhoneControl.tapAt(hl.screenX, hl.screenY)
+                            delay(60)
+                        }
+                    }
+                }
+
+                // 4. Visual State Triage (<50ms): If screen is paused or prompting to Resume/Continue/Start, tap it first!
                 if (chosen == null) {
                     val macroButtons = ControlRegions.allMacroButtons(context)
                     val resumeMb = macroButtons.firstOrNull { mb ->
@@ -2972,7 +2987,7 @@ Rules:
 
                     if (rawReplyWithTrace == null) {
                         consecutiveNoOpTurns++
-                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 8_000L)) {
+                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 20_000L)) {
                             return "brain timed out with zero progress, choom. shutting down screen control. ${summary(log)}"
                         }
                         log.add("brain unresponsive, retrying once")
@@ -2995,7 +3010,7 @@ Rules:
                         steps++
                         consecutiveNoOpTurns++
                         if (lastTraceId != -1) BrainTraceStore.updateTurnOutcome(lastTraceId, "Unreadable/Failed Parse", "FAILED")
-                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 8_000L)) {
+                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 20_000L)) {
                             return "brain could not decide next move with screen frozen, choom. shutting down. ${summary(log)}"
                         }
                         carriedBytes = rawBytes

@@ -1482,9 +1482,15 @@ class BubbleService : Service() {
                     null
                 ) { setChatVisible(it) }
             }
+            is com.dot.capri.intents.Cmd.Scroll -> {
+                repeat(parsedCmd.count) {
+                    PhoneControl.scroll(parsedCmd.direction)
+                    if (it < parsedCmd.count - 1) delay(250)
+                }
+                return "scrolled."
+            }
             is com.dot.capri.intents.Cmd.Tap,
             is com.dot.capri.intents.Cmd.LongPress,
-            is com.dot.capri.intents.Cmd.Scroll,
             is com.dot.capri.intents.Cmd.Pinch,
             is com.dot.capri.intents.Cmd.Write,
             is com.dot.capri.intents.Cmd.ClearField -> {
