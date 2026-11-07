@@ -62,6 +62,7 @@ object IntentExecutor {
                 is Cmd.ClearHistory -> true
                 is Cmd.EasterEgg -> true
                 is Cmd.CheckNotifications -> true
+                is Cmd.ReplyNotification -> true
                 is Cmd.WhatIsPlaying -> true
                 is Cmd.Chat, is Cmd.Compliment, is Cmd.Mention, Cmd.MuteProactivity, Cmd.UnmuteProactivity -> true
                 is Cmd.Unknown -> false

@@ -2608,6 +2608,12 @@ Rules:
     ): Boolean {
         val prompt = promptSay?.takeIf { it.isNotBlank() } ?: "Show me what to tap or scroll, dummy. Just once."
         CapriCursor.setStatus(prompt)
+        CapriCursor.pulse()
+        try {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(context, prompt, android.widget.Toast.LENGTH_LONG).show()
+            }
+        } catch (_: Exception) {}
         chatVisible(false) // Option 2: Hide chat bubble so user has full screen touch freedom
         log.add("asking user demonstration: \"$prompt\"")
 
@@ -2945,9 +2951,9 @@ Rules:
                     }
                 }
 
-                // Autonomous Demonstration Request: If stuck, dead-clicking, or clicked wrong thing 2x in app mode, ask user to show once!
-                if (chosen == null && !isGameMode && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 } || unproductiveClicks >= 2)) {
-                    log.add("uncertain/stuck in app mode; requesting user demonstration (unproductiveClicks=$unproductiveClicks)")
+                // Autonomous Demonstration Request: If stuck, dead-clicking, or clicked wrong thing 2x, ask user to show once!
+                if (chosen == null && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 } || unproductiveClicks >= 2)) {
+                    log.add("uncertain/stuck; requesting user demonstration (unproductiveClicks=$unproductiveClicks)")
                     val demonstrated = triggerHumanDemonstration(
                         context = context,
                         pkg = pkg,

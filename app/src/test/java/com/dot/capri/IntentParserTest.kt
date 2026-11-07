@@ -180,4 +180,28 @@ class IntentParserTest {
         val cmd2 = IntentParser.parse("send email to john@example.com with subject Meeting saying hello")
         assert(cmd2 is Cmd.Email && cmd2.contact == "john@example.com" && cmd2.subject == "Meeting" && cmd2.message == "hello")
     }
+
+    @Test
+    fun testParseTextAboutAndReplyNotifications() {
+        val cmdText = IntentParser.parse("text Alex about meeting tomorrow")
+        assert(cmdText is Cmd.Text && cmdText.contact == "Alex" && cmdText.message == "meeting tomorrow")
+
+        val cmdNotifs1 = IntentParser.parse("any new notifications?")
+        assertEquals(Cmd.CheckNotifications, cmdNotifs1)
+
+        val cmdNotifs2 = IntentParser.parse("do i have any notifications?")
+        assertEquals(Cmd.CheckNotifications, cmdNotifs2)
+
+        val cmdReply1 = IntentParser.parse("say to him that im impressed")
+        assert(cmdReply1 is Cmd.ReplyNotification && cmdReply1.targetSender == "him" && cmdReply1.replyText == "im impressed")
+
+        val cmdReply2 = IntentParser.parse("tell him that there is no school tomorrow")
+        assert(cmdReply2 is Cmd.ReplyNotification && cmdReply2.targetSender == "him" && cmdReply2.replyText == "there is no school tomorrow")
+
+        val cmdReply3 = IntentParser.parse("reply to Alex saying I will be there in 5")
+        assert(cmdReply3 is Cmd.ReplyNotification && cmdReply3.targetSender == "Alex" && cmdReply3.replyText == "I will be there in 5")
+
+        val cmdReply4 = IntentParser.parse("reply on my way")
+        assert(cmdReply4 is Cmd.ReplyNotification && cmdReply4.targetSender == null && cmdReply4.replyText == "on my way")
+    }
 }

@@ -40,6 +40,7 @@ sealed interface Cmd {
     object GoHome : Cmd
     object PowerMenu : Cmd
     object CheckNotifications : Cmd
+    data class ReplyNotification(val targetSender: String?, val replyText: String) : Cmd
     object WhatIsPlaying : Cmd
     data class EasterEgg(val response: String) : Cmd
     data class Unknown(val raw: String) : Cmd

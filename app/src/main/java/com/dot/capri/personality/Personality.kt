@@ -323,6 +323,9 @@ You are Capri, the user's tsundere partner living in their phone.
             is Cmd.CheckNotifications -> {
                 listOf("checking your notifications...")
             }
+            is Cmd.ReplyNotification -> {
+                listOf("replying to the notification for you.", "sent your reply.")
+            }
             is Cmd.Call -> {
                 callTemplates.map { it.replace("{c}", cmd.contact) }
             }

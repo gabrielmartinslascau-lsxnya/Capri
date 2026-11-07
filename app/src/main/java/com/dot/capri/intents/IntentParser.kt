@@ -12,7 +12,10 @@ object IntentParser {
     private val emailWithSubjRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+?)\\s+(?:with\\s+subject|about)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val emailWithBodyRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+?)\\s+(?:saying|that|to\\s+say|body)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val emailSimpleRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+)$", RegexOption.IGNORE_CASE)
-    private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
+    private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:about|saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
+    private val replyToRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:reply(?:\\s+to\\s+(.+?))?|respond(?:\\s+to\\s+(.+?))?)\\s+(?:saying|that|with)?\\s*(.+))$", RegexOption.IGNORE_CASE)
+    private val textBackRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:text|message)\\s+(.+?)\\s+back\\s+(?:saying|that|with)?\\s*(.+))$", RegexOption.IGNORE_CASE)
+    private val sayToRegex = Regex("^(?:(?:can\\s+you\\s+|please\\s+)?(?:say|tell)\\s+(?:to\\s+)?(him|her|them|someone|[a-zA-Z0-9_ ]+?)\\s+(?:that|to\\s+say|saying)?\\s*(.+))$", RegexOption.IGNORE_CASE)
     private val openRegex = Regex("^(?:open|launch|start|go to|run)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val conversationalOpenRegex = Regex("^(?:can\\s+i\\s+|i\\s+want\\s+to\\s+|let's\\s+|let\\s+us\\s+)(?:watch|use|view|open|check|go\\s+to)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val searchRegex = Regex("^(?:can\\s+you\\s+|could\\s+you\\s+|please\\s+)?(?:search(?:\\s+for)?|google|look\\s+up)\\s+(.+?)\\??$", RegexOption.IGNORE_CASE)
@@ -75,7 +78,13 @@ object IntentParser {
     private val unmuteProactivityRegex = Regex("^(?:come\\s+back|you\\s+can\\s+talk|speak\\s+again|capri\\s+talk)$", RegexOption.IGNORE_CASE)
     private val clearHistoryRegex = Regex("^(?:clear\\s+history|forget\\s+everything|wipe\\s+memory|clear\\s+chat|reset\\s+memory)$", RegexOption.IGNORE_CASE)
     private val goHomeRegex = Regex("^(?:go\\s+home|close\\s+app|minimize|go\\s+to\\s+home\\s+screen)$", RegexOption.IGNORE_CASE)
-    private val checkNotifsRegex = Regex("^(?:what(?:'s|\\s+is)\\s+new|what\\s+did\\s+i\\s+miss|(?:any(?:thing)?\\s+(?:new\\s+)?in|check|show|what\\s+about|any)\\s+(?:my\\s+)?notifications?\\??|any\\s+messages|notifications?\\??)$", RegexOption.IGNORE_CASE)
+    private val checkNotifsRegex = Regex(
+        "^(?:what(?:'s|\\s+is)\\s+new|what\\s+did\\s+i\\s+miss|" +
+        "(?:do\\s+i\\s+have\\s+)?(?:any(?:thing)?(?:\\s+new)?(?:\\s+(?:in|about))?|check|show|what\\s+about|got\\s+any|read)\\s+(?:my\\s+)?notifications?\\??|" +
+        "any\\s+(?:new\\s+)?(?:messages|notifs|notifications?)\\??|" +
+        "notifications?\\??)$",
+        RegexOption.IGNORE_CASE
+    )
     private val powerDownRegex = Regex(
         "^(?:shut\\s*down|power\\s*off|turn\\s*off\\s+(?:the\\s+)?phone|restart\\s+(?:the\\s+)?phone|reboot|open\\s+power\\s+menu)$",
         RegexOption.IGNORE_CASE
@@ -356,6 +365,33 @@ object IntentParser {
             val isGen = isGenericMusicRequest(query)
             val cleanQ = cleanPlayQuery(query)
             return Cmd.Play(cleanQ, null, isGeneric = isGen)
+        }
+
+        replyToRegex.find(cleaned)?.let { match ->
+            val target = match.groups[1]?.value?.trim() ?: match.groups[2]?.value?.trim()
+            val text = match.groups[3]?.value?.trim().orEmpty()
+            if (text.isNotEmpty()) {
+                val cleanedTarget = target?.let { cleanContactName(it) }?.takeIf { it.isNotBlank() }
+                return Cmd.ReplyNotification(cleanedTarget, text)
+            }
+        }
+
+        textBackRegex.find(cleaned)?.let { match ->
+            val target = match.groups[1]?.value?.trim()
+            val text = match.groups[2]?.value?.trim().orEmpty()
+            if (text.isNotEmpty()) {
+                val cleanedTarget = target?.let { cleanContactName(it) }?.takeIf { it.isNotBlank() }
+                return Cmd.ReplyNotification(cleanedTarget, text)
+            }
+        }
+
+        sayToRegex.find(cleaned)?.let { match ->
+            val target = match.groups[1]?.value?.trim()
+            val text = match.groups[2]?.value?.trim().orEmpty()
+            if (text.isNotEmpty()) {
+                val cleanedTarget = target?.let { cleanContactName(it) }?.takeIf { it.isNotBlank() }
+                return Cmd.ReplyNotification(cleanedTarget, text)
+            }
         }
 
         textRegex.find(cleaned)?.let { match ->

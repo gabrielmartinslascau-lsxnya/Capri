@@ -116,6 +116,12 @@ class BubbleService : Service() {
     private var lastWriteTimestamp = 0L
     private var pendingDraftText: String? = null
     private var pendingSend: Cmd.Text? = null
+    data class PendingTextSend(val contactName: String, val contactNumber: String, val message: String)
+    private var pendingContactMatches: List<com.dot.capri.util.ContactUtils.ContactMatch>? = null
+    private var pendingContactCmd: Cmd.Text? = null
+    private var pendingTextConfirmation: PendingTextSend? = null
+    private var pendingNotificationReply: com.dot.capri.monitor.CapriNotificationListenerService.NotificationItem? = null
+    private var awaitingNotificationReplyText: Boolean = false
     private val easterEggCounts = mutableMapOf<String, Int>()
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -141,6 +147,31 @@ class BubbleService : Service() {
     }
 
     fun getProactivityEngine(): ProactivityEngine? = proactivityEngine
+
+    private suspend fun executeNotificationReply(
+        notif: com.dot.capri.monitor.CapriNotificationListenerService.NotificationItem,
+        replyInstruction: String
+    ): String {
+        val actualMessage = if (brainAvailable()) {
+            val prompt = "User wants to reply to a notification from ${notif.senderOrTitle}: \"${notif.messageText}\". " +
+                    "User's instruction: \"$replyInstruction\". " +
+                    "Generate 1 short, natural, conversational chat reply text (under 15 words) to send back as the message. " +
+                    "Output ONLY the text of the message to send, nothing else."
+            askBrain(prompt)?.trim()?.removeSurrounding("\"")?.ifBlank { null } ?: replyInstruction
+        } else {
+            replyInstruction
+        }
+
+        val replied = com.dot.capri.monitor.CapriNotificationListenerService.replyToNotification(this, notif, actualMessage)
+        return if (replied) {
+            "sure. texted ${notif.senderOrTitle}: \"$actualMessage\"."
+        } else {
+            IntentExecutor.execute(this, Cmd.Text(notif.senderOrTitle, actualMessage))
+            delay(1000)
+            PhoneControl.pressSend(this)
+            "sent \"$actualMessage\" to ${notif.senderOrTitle}."
+        }
+    }
 
     private fun resolveBubbleAsset(state: BubbleState): Int {
         return when (state) {
@@ -1066,10 +1097,9 @@ class BubbleService : Service() {
                     return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                 }
                 "SEARCH" -> {
-                    IntentExecutor.execute(this, Cmd.Search(target))
-                    delay(1500)
-                    val out = PhoneAgent.run(this, "search for $target", null) { setChatVisible(it) }
-                    return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
+                    val query = target.replace(':', ' ').trim()
+                    IntentExecutor.execute(this, Cmd.Search(query))
+                    return if (cleanResponse.isNotBlank()) cleanResponse else "searched for '$query'."
                 }
                 "CALL" -> {
                     val ok = IntentExecutor.execute(this, Cmd.Call(target))
@@ -1234,6 +1264,66 @@ class BubbleService : Service() {
         val yes = Regex("^(?:yes|yeah|yep|y|sure|ok|okay|go|go ahead|do it|send it|send)$", RegexOption.IGNORE_CASE)
         val no = Regex("^(?:no|nope|n|nah|cancel|stop|don't|dont|drop it)$", RegexOption.IGNORE_CASE)
 
+        pendingContactMatches?.let { matches ->
+            val num = trimmedInput.toIntOrNull()
+            val chosen = when {
+                num != null && num in 1..matches.size -> matches[num - 1]
+                else -> matches.firstOrNull { it.name.contains(trimmedInput, ignoreCase = true) }
+            }
+            if (chosen != null) {
+                val origCmd = pendingContactCmd
+                pendingContactMatches = null
+                pendingContactCmd = null
+                val msg = origCmd?.message
+                if (!msg.isNullOrBlank()) {
+                    pendingTextConfirmation = PendingTextSend(chosen.name, chosen.number, msg)
+                    return "about to text ${chosen.name} (${chosen.number.ifBlank { "unknown" }}): \"$msg\". should i send it? (yes/no)"
+                } else {
+                    IntentExecutor.execute(this, Cmd.Text(chosen.number.ifBlank { chosen.name }, null))
+                    return "opened chat with ${chosen.name}."
+                }
+            } else if (no.matches(trimmedInput)) {
+                pendingContactMatches = null
+                pendingContactCmd = null
+                return "okay, canceled."
+            }
+        }
+
+        pendingTextConfirmation?.let { pending ->
+            pendingTextConfirmation = null
+            if (yes.matches(trimmedInput)) {
+                setChatVisible(false)
+                IntentExecutor.execute(this, Cmd.Text(pending.contactNumber.ifBlank { pending.contactName }, pending.message))
+                delay(1200)
+                try {
+                    PhoneControl.pressSend(this)
+                } finally {
+                    setChatVisible(true)
+                }
+                delay(300)
+                PhoneControl.home()
+                return "sent \"${pending.message}\" to ${pending.contactName}."
+            }
+            if (no.matches(trimmedInput)) {
+                return "okay, canceled. won't send it."
+            }
+        }
+
+        pendingNotificationReply?.let { notif ->
+            if (awaitingNotificationReplyText) {
+                awaitingNotificationReplyText = false
+                pendingNotificationReply = null
+                return executeNotificationReply(notif, trimmedInput)
+            } else if (yes.matches(trimmedInput)) {
+                awaitingNotificationReplyText = true
+                return "what do you want me to say to ${notif.senderOrTitle}?"
+            } else if (no.matches(trimmedInput)) {
+                pendingNotificationReply = null
+                awaitingNotificationReplyText = false
+                return "okay, won't reply."
+            }
+        }
+
         pendingSend?.let { p ->
             pendingSend = null
             if (yes.matches(trimmedInput)) {
@@ -1393,19 +1483,62 @@ class BubbleService : Service() {
                 ) { setChatVisible(it) }
             }
             is com.dot.capri.intents.Cmd.Text -> {
-                val opened = IntentExecutor.execute(this, parsedCmd)
-                delay(1500)
-                PhoneAgent.pending = null
-                return PhoneAgent.run(
-                    this,
-                    if (opened && !parsedCmd.message.isNullOrBlank())
-                        "User wants to: $trimmedInput. ${parsedCmd.contact}'s chat is open with '${parsedCmd.message}' pre-filled. Look at the screen and tap the Send button."
-                    else if (opened)
-                        "User wants to: $trimmedInput. ${parsedCmd.contact}'s chat is open on screen. Read the screen or type/send the appropriate message."
-                    else
-                        "User wants to: $trimmedInput. Open WhatsApp or Messages, find '${parsedCmd.contact}', and send the message.",
-                    null
-                ) { setChatVisible(it) }
+                val matches = com.dot.capri.util.ContactUtils.findMatchingContacts(this, parsedCmd.contact)
+                if (matches.size > 1) {
+                    pendingContactMatches = matches
+                    pendingContactCmd = parsedCmd
+                    val listStr = matches.take(5).mapIndexed { i, c -> "${i + 1}. ${c.name} (${c.number})" }.joinToString("\n")
+                    return "found ${matches.size} contacts for '${parsedCmd.contact}':\n$listStr\nwhich one do you want to text? (reply 1-${matches.take(5).size})"
+                }
+                val chosenContact = matches.firstOrNull()
+                val targetName = chosenContact?.name ?: parsedCmd.contact
+                val targetNum = chosenContact?.number ?: ""
+
+                if (!parsedCmd.message.isNullOrBlank()) {
+                    pendingTextConfirmation = PendingTextSend(targetName, targetNum, parsedCmd.message)
+                    return "about to text $targetName${if (targetNum.isNotBlank()) " ($targetNum)" else ""}: \"${parsedCmd.message}\". should i send it? (yes/no)"
+                }
+
+                val opened = IntentExecutor.execute(this, Cmd.Text(targetNum.ifBlank { targetName }, null))
+                return if (opened) "opened chat with $targetName." else "couldn't open chat with $targetName."
+            }
+            is com.dot.capri.intents.Cmd.CheckNotifications -> {
+                val notifs = com.dot.capri.monitor.CapriNotificationListenerService.getRecentNotifications()
+                if (notifs.isEmpty()) {
+                    return "no new notifications right now. phone's quiet."
+                }
+                val msgNotif = com.dot.capri.monitor.CapriNotificationListenerService.getLatestMessageNotification()
+                if (msgNotif != null) {
+                    pendingNotificationReply = msgNotif
+                    awaitingNotificationReplyText = false
+                    if (brainAvailable()) {
+                        val prompt = "User asked: \"$trimmedInput\". There is a recent notification from ${msgNotif.senderOrTitle}: \"${msgNotif.messageText}\" (app: ${msgNotif.appPkg}). " +
+                                "In 1 short, witty tsundere sentence, tell the user what ${msgNotif.senderOrTitle} said and ask if they want to respond. No action tags."
+                        return askBrain(prompt) ?: "well ${msgNotif.senderOrTitle} said \"${msgNotif.messageText}\", wanna respond?"
+                    }
+                    return "well ${msgNotif.senderOrTitle} said \"${msgNotif.messageText}\", wanna respond?"
+                }
+                return com.dot.capri.monitor.CapriNotificationListenerService.getRecentSummary()
+            }
+            is com.dot.capri.intents.Cmd.ReplyNotification -> {
+                val notif = if (!parsedCmd.targetSender.isNullOrBlank() &&
+                    !parsedCmd.targetSender.equals("him", ignoreCase = true) &&
+                    !parsedCmd.targetSender.equals("her", ignoreCase = true) &&
+                    !parsedCmd.targetSender.equals("them", ignoreCase = true)
+                ) {
+                    com.dot.capri.monitor.CapriNotificationListenerService.findNotificationBySender(parsedCmd.targetSender)
+                        ?: com.dot.capri.monitor.CapriNotificationListenerService.getLatestMessageNotification()
+                } else {
+                    pendingNotificationReply
+                        ?: com.dot.capri.monitor.CapriNotificationListenerService.getLatestMessageNotification()
+                }
+
+                if (notif != null) {
+                    return executeNotificationReply(notif, parsedCmd.replyText)
+                } else {
+                    val target = parsedCmd.targetSender ?: "them"
+                    return "i don't see any recent notification to reply to. you can say 'text $target about ${parsedCmd.replyText}' instead."
+                }
             }
             is com.dot.capri.intents.Cmd.Email -> {
                 val opened = IntentExecutor.execute(this, parsedCmd)
@@ -1424,13 +1557,11 @@ class BubbleService : Service() {
             }
             is com.dot.capri.intents.Cmd.Search -> {
                 IntentExecutor.execute(this, parsedCmd)
-                delay(1500)
-                PhoneAgent.pending = null
-                return PhoneAgent.run(
-                    this,
-                    "User wants to search: '${parsedCmd.query}'. Google search results are now open on screen. Inspect the results and tap the most relevant one or summarize.",
-                    null
-                ) { setChatVisible(it) }
+                if (brainAvailable()) {
+                    return askBrain("I just opened search results for '${parsedCmd.query}'. Give a 1-sentence quick tsundere confirmation telling the user their results are on screen, with NO action tags.")
+                        ?: "searched for '${parsedCmd.query}'. there's your results."
+                }
+                return "searched for '${parsedCmd.query}'."
             }
             is com.dot.capri.intents.Cmd.Play -> {
                 IntentExecutor.execute(this, parsedCmd)
