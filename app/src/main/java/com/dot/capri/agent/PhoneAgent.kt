@@ -2070,6 +2070,54 @@ Rules:
                     val ok = PhoneControl.joystick(cx, cy, dir, dur, shInit)
                     log.add("joystick $dir for ${dur}ms" + if (ok) "" else " (failed)")
                 }
+                "tap" -> {
+                    val curRoot = PhoneControl.foregroundRoot()
+                    val curItems = if (curRoot != null) PhoneControl.snapshot(curRoot) else emptyList()
+                    val targetItem = actToRun.id?.let { id -> curItems.firstOrNull { it.id == id } }
+                    val tx = actToRun.x ?: targetItem?.cx
+                    val ty = actToRun.y ?: targetItem?.cy
+                    if (tx != null && ty != null) {
+                        CapriCursor.moveTo(tx, ty)
+                        CapriCursor.pulse()
+                        PhoneControl.tapAt(tx, ty)
+                        log.add("CMD: tap at ($tx, $ty)")
+                    } else if (targetItem != null) {
+                        CapriCursor.moveTo(targetItem.cx, targetItem.cy)
+                        CapriCursor.pulse()
+                        PhoneControl.tap(targetItem)
+                        log.add("CMD: tap '${targetItem.label}'")
+                    }
+                }
+                "scroll" -> {
+                    val dir = when (actToRun.dir?.lowercase(Locale.US)) {
+                        "up" -> com.dot.capri.intents.ScrollDirection.UP
+                        "left" -> com.dot.capri.intents.ScrollDirection.LEFT
+                        "right" -> com.dot.capri.intents.ScrollDirection.RIGHT
+                        else -> com.dot.capri.intents.ScrollDirection.DOWN
+                    }
+                    CapriCursor.setStatus("scrolling $dir...")
+                    PhoneControl.scroll(dir)
+                    log.add("CMD: scroll $dir")
+                }
+                "type" -> {
+                    val textToType = actToRun.text.orEmpty()
+                    if (textToType.isNotBlank()) {
+                        CapriCursor.setStatus("typing...")
+                        com.dot.capri.accessibility.ScreenWriter.writeToFocusedField(textToType)
+                        log.add("CMD: typed '$textToType'")
+                    }
+                }
+                "back" -> {
+                    PhoneControl.back()
+                    log.add("CMD: back")
+                }
+                "home" -> {
+                    PhoneControl.home()
+                    log.add("CMD: home")
+                }
+                "wait" -> {
+                    delay(actToRun.durationMs ?: 400L)
+                }
             }
             stateMachine.recordStep(actToRun)
             steps++
@@ -2664,20 +2712,29 @@ Rules:
                 val pkg = root?.packageName?.toString() ?: "game_surface"
                 if (pkg in BLOCKED_PACKAGES) return "yeah, no. i'm not touching your wallet or payment apps. handle your own money."
 
-                // If this is a pure app launch request or video playback request (e.g. "open spotify", "play a vid", "reels"),
+                // If this is a pure app launch request or verify-open request (e.g. "open spotify", "open spotify and verify it is on screen", "play a vid", "reels"),
                 // verify that the app is actively visible in the foreground on the live screen!
                 val goalTrimmed = goal.trim()
-                val isPureOpenGoal = Regex("^\\s*(?:open|launch|start|run|switch\\s+to)\\s+[a-z0-9_\\s]+$", RegexOption.IGNORE_CASE).matches(goalTrimmed)
+                val isOpenOrVerifyGoal = Regex(
+                    "^\\s*(?:open|launch|start|run|switch\\s+to|check|verify)\\s+[a-z0-9_\\s]+?(?:\\s+and\\s+verify(?:\\s+it)?(?:\\s+is)?\\s+on\\s+screen)?$",
+                    RegexOption.IGNORE_CASE
+                ).matches(goalTrimmed) ||
+                        Regex("\\b(?:verify|check)\\b.*\\b(?:open|on\\s+screen|visible)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goalTrimmed)
                 val isVideoPlayGoal = Regex("^\\s*(?:play|watch|open|start|view)\\s+(?:a\\s+)?(?:reels?|videos?|vids?|shorts?)$", RegexOption.IGNORE_CASE).matches(goalTrimmed)
 
-                if ((isPureOpenGoal || isVideoPlayGoal) && targetAppPkg != null && pkg.lowercase(Locale.US) == targetAppPkg) {
-                    CapriCursor.show(context)
+                val currentForegroundPkg = pkg.lowercase(Locale.US)
+                val isTargetAppForeground = (targetAppPkg != null && currentForegroundPkg == targetAppPkg) ||
+                        AppChooser.extractExplicitAppName(goal)?.let { AppChooser.findBestMatch(context, it)?.pkg?.lowercase(Locale.US) } == currentForegroundPkg
+
+                if ((isOpenOrVerifyGoal || isVideoPlayGoal) && isTargetAppForeground) {
                     val appLabel = AppChooser.findBestMatch(context, goal)?.label ?:
                             AppChooser.launchers(context).firstOrNull { it.pkg.equals(pkg, ignoreCase = true) }?.label ?: pkg
                     val statusMsg = if (isVideoPlayGoal) "playing video in $appLabel" else "opened $appLabel"
+                    CapriCursor.show(context)
                     CapriCursor.setStatus(statusMsg)
                     CapriCursor.pulse()
                     delay(350)
+                    CapriCursor.hide()
                     return "$statusMsg. next time tap it yourself, dummy."
                 }
 
@@ -2827,6 +2884,20 @@ Rules:
                         carriedBytes = rawBytes
                         carriedRoot = root
                         delay(300)
+                        continue
+                    }
+
+                    if (parsedActs.size > 1 && parsedActs.none { it.doWhat == "ask_user" }) {
+                        log.add("executing multi-step CMD plan (${parsedActs.size} actions back-to-back with zero delay)")
+                        val fpRes = executeFastPathChunk(context, service, goal, parsedActs, sw, sh, stateMachine, log)
+                        steps += fpRes.stepsTaken
+                        carriedBytes = fpRes.carriedBytes
+                        carriedRoot = fpRes.carriedRoot
+                        consecutiveNoOpTurns = 0
+                        if (fpRes.completedEarly != null) {
+                            return fpRes.completedEarly
+                        }
+                        delay(250)
                         continue
                     }
 

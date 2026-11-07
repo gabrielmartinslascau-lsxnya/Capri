@@ -977,9 +977,12 @@ class BubbleService : Service() {
                     return PhoneAgent.run(this, goalFromTag, null) { setChatVisible(it) }
                 }
                 "OPEN" -> {
-                    IntentExecutor.execute(this, Cmd.Open(target))
-                    delay(1200)
-                    val out = PhoneAgent.run(this, "open $target and verify it is on screen", null) { setChatVisible(it) }
+                    minimizeToChat()
+                    val opened = IntentExecutor.execute(this, Cmd.Open(target))
+                    if (opened) {
+                        return if (cleanResponse.isNotBlank()) cleanResponse else "opened $target."
+                    }
+                    val out = PhoneAgent.run(this, "open $target", null) { setChatVisible(it) }
                     return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                 }
                 "PLAY" -> {
