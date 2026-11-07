@@ -1026,17 +1026,27 @@ Rules:
         val sysPromptLocal = if (hasMbs) SYSTEM_LOCAL_WITH_MBS else SYSTEM_LOCAL_NO_MBS
 
         // In app mode with UI tags, use the much faster tag method with zero vision/screenshot overhead.
-        // Only send screenshots when in game mode / canvas surfaces lacking accessibility tags.
-        val effectiveShot = if (!isGameMode && items.isNotEmpty()) null else rawShot
-
-        val reply = if (useApi(context)) {
-            LlmRouter.complete(
-                context,
-                LlmRequest(prompt = prompt, systemPrompt = sysPrompt, history = emptyList(), imageBytes = effectiveShot)
-            ).getOrNull()
-        } else {
-            OnDeviceAiClient.generateResponse(context, prompt, effectiveShot, systemOverride = sysPromptLocal, maxTokensOverride = 80).getOrNull()
+        // In game mode when Macro Buttons exist and local on-device model is used, skip heavy vision
+        // encoding since all MB buttons, labels, and coordinates are already completely listed in the text prompt!
+        // This avoids the 5-minute on-device vision latency and generates the move in ~0.2s!
+        val effectiveShot = when {
+            !isGameMode && items.isNotEmpty() -> null
+            hasMbs && !useApi(context) -> null
+            else -> rawShot
         }
+
+        val reply = try {
+            withTimeoutOrNull(8_000L) {
+                if (useApi(context)) {
+                    LlmRouter.complete(
+                        context,
+                        LlmRequest(prompt = prompt, systemPrompt = sysPrompt, history = emptyList(), imageBytes = effectiveShot)
+                    ).getOrNull()
+                } else {
+                    OnDeviceAiClient.generateResponse(context, prompt, effectiveShot, systemOverride = sysPromptLocal, maxTokensOverride = 80).getOrNull()
+                }
+            }
+        } catch (_: Exception) { null }
 
         val elapsed = System.currentTimeMillis() - t0
         val providerLabel = if (useApi(context)) {

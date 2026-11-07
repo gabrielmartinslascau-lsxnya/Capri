@@ -265,27 +265,44 @@ object ControlRegions {
     private fun parseScreenTargetInClause(clause: String, screenW: Int, screenH: Int): DirectStep.TapTarget? {
         val lower = clause.lowercase(Locale.US).trim()
 
-        // 1. Check "lane 1..5" or "row 1..5" or "top/middle/bottom lane/row"
-        val laneNumMatch = Regex("\\b(?:lane|row)\\s*([1-5])\\b").find(lower)
-        val namedLaneIdx = when {
-            laneNumMatch != null -> laneNumMatch.groupValues[1].toInt() - 1
+        val laneYs = floatArrayOf(0.25f, 0.39f, 0.53f, 0.68f, 0.82f)
+        val colXs = floatArrayOf(0.25f, 0.33f, 0.41f, 0.49f, 0.57f, 0.65f, 0.73f, 0.81f, 0.88f)
+
+        // 1. Check "lane 1..5", "row 1..5", or "top/middle/bottom lane/row"
+        val explicitLaneMatch = Regex("\\blane\\s*([1-5])\\b").find(lower)
+        val explicitColMatch = Regex("\\b(?:col|collum|colum|column|cloumn|slot|spot|tile|square|box)\\s*([1-9])\\b").find(lower)
+        val secondaryRowMatch = if (explicitLaneMatch != null) Regex("\\brow\\s*([1-9])\\b").find(lower) else null
+        val colMatch = explicitColMatch ?: secondaryRowMatch
+        val explicitRowMatch = if (explicitLaneMatch == null) Regex("\\brow\\s*([1-5])\\b").find(lower) else null
+
+        val laneIdx = when {
+            explicitLaneMatch != null -> explicitLaneMatch.groupValues[1].toInt() - 1
+            explicitRowMatch != null -> explicitRowMatch.groupValues[1].toInt() - 1
             Regex("\\b(?:top|first|upper)\\s+(?:lane|row)\\b").containsMatchIn(lower) -> 0
             Regex("\\b(?:middle|center|centre|mid)\\s+(?:lane|row)\\b").containsMatchIn(lower) -> 2
             Regex("\\b(?:bottom|last|lower)\\s+(?:lane|row)\\b").containsMatchIn(lower) -> 4
             else -> -1
         }
-        if (namedLaneIdx in 0..4) {
-            val laneYs = floatArrayOf(0.25f, 0.39f, 0.53f, 0.68f, 0.82f)
-            val colNumMatch = Regex("\\b(?:col|column|spot|tile)\\s*([1-9])\\b").find(lower)
-            val colXs = floatArrayOf(0.25f, 0.33f, 0.41f, 0.49f, 0.57f, 0.65f, 0.73f, 0.81f, 0.88f)
-            val targetX = when {
-                colNumMatch != null -> colXs[(colNumMatch.groupValues[1].toInt() - 1).coerceIn(0, 8)]
-                lower.contains("back") || lower.contains("left") -> 0.25f
-                lower.contains("front") || lower.contains("right") -> 0.65f
-                lower.contains("mid") || lower.contains("center") -> 0.45f
-                else -> 0.35f
+
+        val colIdx = when {
+            colMatch != null -> (colMatch.groupValues[1].toInt() - 1).coerceIn(0, 8)
+            lower.contains("back") || lower.contains("left") -> 0
+            lower.contains("front") || lower.contains("right") -> 6
+            lower.contains("mid") || lower.contains("center") -> 3
+            else -> null
+        }
+
+        if (laneIdx in 0..4 || colIdx != null) {
+            val targetY = if (laneIdx in 0..4) laneYs[laneIdx] else 0.53f
+            val targetX = if (colIdx != null) colXs[colIdx] else 0.35f
+            val desc = buildString {
+                if (laneIdx in 0..4) append("lane ${laneIdx + 1}")
+                if (colIdx != null) {
+                    if (isNotEmpty()) append(" ")
+                    append("col ${colIdx + 1}")
+                }
             }
-            return DirectStep.TapTarget(targetX, laneYs[namedLaneIdx], "lane ${namedLaneIdx + 1}")
+            return DirectStep.TapTarget(targetX, targetY, desc)
         }
 
         // 2. Grid cell (e.g. "C4", "E5")
@@ -411,11 +428,11 @@ object ControlRegions {
         var matchedAtLeastOneMb = false
 
         for (clause in rawClauses) {
-            // Check if the clause has both an MB and a target separated by "on/to/at/in" or a trailing lane/row
-            // e.g. "tap peashooter on lane 1" or "peashooter lane 1"
+            // Check if the clause has both an MB and a target separated by "on/to/at/in" or a trailing lane/row/col
+            // e.g. "tap peashooter on lane 1" or "peashooter lane 1 collum 3"
             val inlineTarget = parseScreenTargetInClause(clause, screenW, screenH)
             val clauseWithoutTarget = if (inlineTarget != null) {
-                clause.replace(Regex("\\b(?:on|to|at|in)?\\s*(?:(?:top|middle|center|bottom|first|last)\\s+)?(?:lane|row)\\s*[1-5]?\\b.*", RegexOption.IGNORE_CASE), "")
+                clause.replace(Regex("\\b(?:on|to|at|in)?\\s*(?:(?:top|middle|center|bottom|first|last)\\s+)?(?:lane|row|col|collum|colum|column|cloumn|slot|spot|tile|square|box)\\s*[1-9]?\\b.*", RegexOption.IGNORE_CASE), "")
                     .replace(Regex("\\b(0\\.\\d+|1\\.0)\\s*[,\\s]+\\s*(0\\.\\d+|1\\.0)\\b"), "")
                     .trim()
             } else {
@@ -443,15 +460,27 @@ object ControlRegions {
                     steps.add(inlineTarget)
                 }
             } else if (inlineTarget != null) {
-                steps.add(inlineTarget)
+                val lastStep = steps.lastOrNull()
+                // If previous step was a TapTarget that lacked a column, merge this column into it!
+                if (lastStep is DirectStep.TapTarget && inlineTarget.desc.contains("col") && !lastStep.desc.contains("col")) {
+                    steps[steps.lastIndex] = DirectStep.TapTarget(inlineTarget.normX, lastStep.normY, "${lastStep.desc} ${inlineTarget.desc}")
+                } else {
+                    steps.add(inlineTarget)
+                }
             } else {
                 unresolvedClauses.add(clause)
             }
         }
 
+        // Filter out pure placement/grammar filler words from unresolvedClauses (e.g. "on row 2", "collum 3", "yard", "lawn")
+        val filteredUnresolved = unresolvedClauses.filterNot { unres ->
+            val u = unres.lowercase(Locale.US).trim()
+            u.isEmpty() || Regex("^(?:on|in|to|at|the|yard|lawn|screen|field|spot|tile|lane|row|col|collum|colum|column|cloumn|slot|box|square|\\d+|and)+$").matches(u.replace(Regex("[^a-z0-9]"), ""))
+        }
+
         // If any clause was an unresolved natural-language instruction (e.g. "walk towards that tree and mine"),
         // do NOT fire a partial blind MB tap — let PhoneAgent execute the complete multi-step goal in order!
-        if (!matchedAtLeastOneMb || steps.isEmpty() || unresolvedClauses.isNotEmpty()) return null
+        if (!matchedAtLeastOneMb || steps.isEmpty() || filteredUnresolved.isNotEmpty()) return null
 
         // Execute all resolved MB & target steps INSTANTLY!
         chatVisible(false)
@@ -806,11 +835,10 @@ object ControlRegions {
                     params.layoutInDisplayCutoutMode =
                         WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
-                // Hide overlay badges (alpha = 0f, INVISIBLE) during active touch dispatch so stacked MBs
-                // (e.g. "mine" + "attack" on top of each other) NEVER exceed Android 12+'s
-                // MaximumObscuringOpacityForTouch (0.8f) or block hold gestures!
-                view.alpha = if (enabled) 0f else 0.95f
-                view.visibility = if (enabled) View.INVISIBLE else View.VISIBLE
+                // Keep overlay badges visible (translucent at 0.65f, well below Android 12's 0.8f obscuring limit)
+                // so user can clearly see where all MBs are during active play!
+                view.alpha = if (enabled) 0.65f else 0.95f
+                view.visibility = View.VISIBLE
                 try {
                     if (view.isAttachedToWindow) wm.updateViewLayout(view, params)
                 } catch (_: Exception) {}
@@ -827,10 +855,11 @@ object ControlRegions {
         mainHandler.post {
             for ((_, pair) in activeOverlayViews) {
                 pair.first.alpha = when {
-                    hidden || passThroughMode -> 0f
+                    hidden -> 0f
+                    passThroughMode -> 0.65f
                     else -> 0.95f
                 }
-                pair.first.visibility = if (hidden || passThroughMode) View.INVISIBLE else View.VISIBLE
+                pair.first.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
             }
         }
     }
