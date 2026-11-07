@@ -273,7 +273,7 @@ object IntentExecutor {
                 }
             }
             else -> {
-                if (!cmd.app.isNullOrBlank() && executeOpen(context, Cmd.Open(playerChoice))) {
+                if (playerChoice.isNotBlank() && executeOpen(context, Cmd.Open(playerChoice))) {
                     return true
                 }
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery"))

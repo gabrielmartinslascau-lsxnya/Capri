@@ -216,27 +216,61 @@ object AgentMemory {
     @Synchronized
     fun beginNewTaskSession(pkg: String, goal: String) {
         val key = planKey(pkg, goal)
-        activePlans.keys.removeAll { it.startsWith("$pkg|") && it != key }
+        activePlans.remove(key)
+        activePlans.keys.removeAll { it.startsWith("$pkg|") }
         activePlans.remove(pkg)
         recentSessionLog.clear()
+        activePlans[key] = buildInitialPlan(pkg, goal)
+    }
+
+    fun buildInitialPlan(pkg: String, goal: String): String {
+        val gLower = goal.lowercase(Locale.US)
+        val isMusic = Regex("\\b(songs?|music|track|tracks|audio|tune|playlist|liked)\\b").containsMatchIn(gLower)
+        val isReels = Regex("\\b(reels?|shorts?|tiktok)\\b|\\b(?:play|watch)\\s+(?:a\\s+)?(?:vid|video)\\b").containsMatchIn(gLower) && !isMusic
+        val isSearch = Regex("\\b(search|find|google)\\b").containsMatchIn(gLower)
+        val isCall = Regex("\\b(call|dial|phone)\\b").containsMatchIn(gLower)
+        val isText = Regex("\\b(text|message|chat|sms|whatsapp)\\b").containsMatchIn(gLower)
+
+        return when {
+            isMusic -> "Target: Play music in current media app. Roadmap: 1. Stay in current app (do NOT switch apps or open TikTok/YouTube). 2. Find/search the song or open playlist. 3. Tap Play/Shuffle button or song row so audio plays. 4. Output DONE once playback starts."
+            isReels -> "Target: Watch video/reels in video app. Roadmap: 1. Stay in current video app. 2. Verify video is playing. 3. Output DONE."
+            isSearch -> "Target: Search '$goal'. Roadmap: 1. In browser/search app, inspect results. 2. Tap most relevant result or summarize. 3. Output DONE."
+            isCall -> "Target: Place call. Roadmap: 1. Verify dialer is open. 2. Tap Call button to place call. 3. Output DONE."
+            isText -> "Target: Send message. Roadmap: 1. Verify chat is open with draft message. 2. Tap Send button. 3. Output DONE."
+            else -> "Target: \"$goal\". Roadmap: 1. Identify target action on screen. 2. Execute necessary tap/action. 3. Output DONE."
+        }
     }
 
     @Synchronized
     fun updatePlan(pkg: String, goal: String, newPlan: String?) {
         val key = planKey(pkg, goal)
+        val currentPlan = activePlans[key] ?: buildInitialPlan(pkg, goal)
         val clean = newPlan?.trim().orEmpty()
-        if (clean.length >= 4) {
+        if (clean.isBlank()) return
+
+        val gLower = goal.lowercase(Locale.US)
+        val isMusic = Regex("\\b(songs?|music|track|tracks|audio|tune|playlist|liked)\\b").containsMatchIn(gLower)
+        val cleanLower = clean.lowercase(Locale.US)
+
+        // Prevent plan corruption: If user wants music, never accept a plan that switches to tiktok or unrelated video apps!
+        if (isMusic && (cleanLower.contains("tiktok") || (cleanLower.contains("video") && !cleanLower.contains("music")))) {
+            return
+        }
+
+        // If newPlan is a full multi-step strategic plan, update it:
+        if (clean.contains("->") || clean.contains("1.") || clean.contains("roadmap", ignoreCase = true) || clean.contains("step", ignoreCase = true) || clean.contains("then", ignoreCase = true)) {
             activePlans[key] = clean
-        } else if (!activePlans.containsKey(key)) {
-            activePlans[key] = "Current Goal: \"$goal\" -> 1. Check screen to see if already done or ready for final action. 2. Execute only the needed step, then output DONE."
+        } else {
+            // It's a micro-action for the current turn: update the sub-step without destroying the overarching strategic plan!
+            val basePlan = currentPlan.substringBefore("\n[Current Step:").trim()
+            activePlans[key] = "$basePlan\n[Current Step: $clean]"
         }
     }
 
     @Synchronized
     fun getActivePlan(pkg: String, goal: String): String {
         val key = planKey(pkg, goal)
-        return activePlans[key]
-            ?: "Current Goal: \"$goal\" -> 1. Check screen to see if already done or ready for final action. 2. Execute only the needed step, then output DONE."
+        return activePlans[key] ?: buildInitialPlan(pkg, goal)
     }
 
     // ---- Spatial Board & Lane Memory (Tier 2) ------------------------

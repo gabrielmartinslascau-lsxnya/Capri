@@ -138,6 +138,7 @@ CRITICAL ADAPTIVE, CONTEXT & TIMING RULES:
 3. SMART HOLD DURATION: When holding a gameplay MB (like mining, breaking, or walking), ALWAYS pass `duration_ms` (e.g. ~4500ms for breaking/mining, ~1000ms for soft blocks, ~2000ms for walking).
 4. LOOKING AROUND IN 3D: For multi-block 3D tasks, after mining/breaking a block (4500ms), use `{"do":"look","dir":"up|down|left|right|around"}` to aim at the remaining blocks.
 5. RESPECT BLACKLISTED MOVES: Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
+6. PLAN INTEGRITY & APP FOCUS: Always stay inside the current app and follow the ACTIVE STRATEGIC PLAN. NEVER switch to unrelated apps (e.g. NEVER open TikTok or YouTube during a music task). Keep your plan focused on completing the goal until DONE.
 """.trimIndent()
 
     private val SYSTEM_NO_MBS = """
@@ -175,6 +176,7 @@ CRITICAL RULES:
 3. SMART TIMING & LOOKING AROUND: Use `hold` with an appropriate `duration_ms` for timed actions (e.g. ~4500ms for hard blocks, ~1000ms for soft blocks) and `{"do":"look","dir":"up|down|left|right|around"}` or `swipe` to rotate the 3D camera.
 4. RESPECT BLACKLISTED MOVES: Never repeat any move listed in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 5. NEVER tap a "STOP" button unless the user explicitly requested it.
+6. PLAN INTEGRITY & APP FOCUS: Always stay inside the current app and follow the ACTIVE STRATEGIC PLAN. NEVER switch to unrelated apps (e.g. NEVER open TikTok or YouTube during a music task). Keep your plan focused on completing the goal until DONE.
 """.trimIndent()
 
     private val SYSTEM_LOCAL_WITH_MBS = """
@@ -206,6 +208,7 @@ Rules:
 - FIRST check the screenshot and STEPS SO FAR: (1) Have I ALREADY completed the task? -> Reply DONE immediately! (2) If crafting/buying/selecting an item: tap your menu/inventory MB first to open the screen. Once open, DO NOT tap movement/action MBs again — look at the image to locate the target item/recipe icon and use `TAP <x> <y> <confirm_MB>` or `SEQ <x1> <y1> <x2> <y2>` or `TAP <x> <y>`! (3) For multi-target 3D tasks: alternate action (4500ms) with LOOK UP / LOOK DOWN / LOOK AROUND. (4) For joystick games: use JOYSTICK FORWARD <ms>.
 - ALWAYS include <ms> when mining/breaking/walking (e.g. MB1 4500 for breaking, MB1 1000 for soft blocks, MB1 2000 for walking).
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
+- PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
 """.trimIndent()
 
     private val SYSTEM_LOCAL_NO_MBS = """
@@ -236,6 +239,7 @@ Rules:
 - FIRST check the screenshot and STEPS SO FAR: Have I ALREADY completed the task? If yes, reply DONE immediately! Do NOT repeat the same action just because the screen changed. If looking at a target to mine/break, use HOLD <x> <y> 4500, and use LOOK UP / LOOK DOWN / LOOK LEFT / LOOK RIGHT to aim at more targets or look around.
 - Prefer TAP_ID <id> when SCREEN ELEMENTS are listed, or TAP_TEXT <words> when OCR text matches.
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
+- PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
 """.trimIndent()
 
     private fun screenSignature(root: AccessibilityNodeInfo?, items: List<PhoneControl.UiItem>, frameHash: Long = 0L): String {
@@ -1054,16 +1058,13 @@ Rules:
         val goalLower = goal.lowercase(Locale.US).trim()
 
         val explicitAppName = AppChooser.extractExplicitAppName(goal)
+        val isMusicGoal = Regex("\\b(songs?|music|track|tracks|audio|tune|playlist|liked)\\b").containsMatchIn(goalLower)
+        val isReelsGoal = Regex("\\b(reels?|shorts?|tiktok)\\b|\\b(?:play|watch)\\s+(?:a\\s+)?(?:vid|video)\\b").containsMatchIn(goalLower)
+
         val candidateAppName = when {
             explicitAppName != null -> explicitAppName
-            // Handle reels / short video requests ("play a vid", "play video", "reels", "play shorts", "watch a vid")
-            Regex("\\b(reels?|videos?|vids?|shorts?|tiktok)\\b").containsMatchIn(goalLower) &&
-                    Regex("\\b(play|watch|open|start|view|see)\\b").containsMatchIn(goalLower) ->
-                MainActivity.getDefaultReelsApp(context)
-            // Handle general music requests without explicit app ("play music", "play song", "play track", "play something", "play a tune")
-            Regex("\\b(songs?|music|track|tracks|audio|tune|playlist|liked)\\b").containsMatchIn(goalLower) &&
-                    Regex("\\b(play|listen|stream|start)\\b").containsMatchIn(goalLower) ->
-                MainActivity.getDefaultMusicPlayer(context)
+            isMusicGoal && !isReelsGoal -> MainActivity.getDefaultMusicPlayer(context)
+            isReelsGoal -> MainActivity.getDefaultReelsApp(context)
             else -> null
         }
 
@@ -2211,24 +2212,29 @@ Rules:
                 CapriCursor.setStatus("opening app...")
                 val targetApp = a.app.orEmpty().lowercase(Locale.US)
                 val currentPkg = pkg.lowercase(Locale.US)
-                val isAlreadyInTargetApp = (targetAppPkg != null && currentPkg == targetAppPkg) ||
-                        (currentPkg != "game_surface" && !currentPkg.contains("launcher") && currentPkg != "none" &&
-                                (currentPkg.contains(targetApp) || targetApp.contains(currentPkg) || targetApp in setOf("library", "search", "song", "music")))
-
-                if (isAlreadyInTargetApp) {
-                    log.add("already inside target app ($pkg); ignoring OPEN '${a.app}'")
+                val isMusicGoal = Regex("\\b(songs?|music|track|tracks|audio|tune|playlist|liked)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goal)
+                if (isMusicGoal && (targetApp.contains("tiktok") || targetApp.contains("reels") || (targetApp.contains("youtube") && !targetApp.contains("music")))) {
+                    log.add("blocked switching away from music to '$targetApp'")
                 } else {
-                    val resolved = AppChooser.findBestMatch(context, targetApp)
-                    if (resolved != null && (targetAppPkg == null || resolved.pkg.equals(targetAppPkg, ignoreCase = true))) {
-                        val ok = AppChooser.open(context, resolved.pkg)
-                        if (ok) {
-                            log.add("opened ${resolved.label}")
-                            delay(800)
-                        } else {
-                            log.add("failed to open ${a.app}")
-                        }
+                    val isAlreadyInTargetApp = (targetAppPkg != null && currentPkg == targetAppPkg) ||
+                            (currentPkg != "game_surface" && !currentPkg.contains("launcher") && currentPkg != "none" &&
+                                    (currentPkg.contains(targetApp) || targetApp.contains(currentPkg) || targetApp in setOf("library", "search", "song", "music")))
+
+                    if (isAlreadyInTargetApp) {
+                        log.add("already inside target app ($pkg); ignoring OPEN '${a.app}'")
                     } else {
-                        log.add("blocked switching away from $pkg to '${a.app}'")
+                        val resolved = AppChooser.findBestMatch(context, targetApp)
+                        if (resolved != null && (targetAppPkg == null || resolved.pkg.equals(targetAppPkg, ignoreCase = true))) {
+                            val ok = AppChooser.open(context, resolved.pkg)
+                            if (ok) {
+                                log.add("opened ${resolved.label}")
+                                delay(800)
+                            } else {
+                                log.add("failed to open ${a.app}")
+                            }
+                        } else {
+                            log.add("blocked switching away from $pkg to '${a.app}'")
+                        }
                     }
                 }
             }

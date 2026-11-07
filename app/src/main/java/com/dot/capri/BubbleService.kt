@@ -940,7 +940,16 @@ class BubbleService : Service() {
                     val query = target.replace(':', ' ').trim()
                     IntentExecutor.execute(this, Cmd.Play(query, null))
                     delay(1800)
-                    val out = PhoneAgent.run(this, "play $query", null) { setChatVisible(it) }
+                    val qLower = query.lowercase(java.util.Locale.US)
+                    val isReelsOrVideo = qLower in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid") ||
+                            Regex("^(?:a\\s+)?(?:video|vid|reels?|shorts?)$").matches(qLower)
+                    val targetApp = if (isReelsOrVideo) MainActivity.getDefaultReelsApp(this) else MainActivity.getDefaultMusicPlayer(this)
+                    val goalDesc = if (isReelsOrVideo) {
+                        "User wants to: play $query. Video player ($targetApp) is open. Verify video is playing on screen."
+                    } else {
+                        "User wants to: play $query. Media player ($targetApp) is open for '$query'. Look at the screen in $targetApp and tap the song or Play button so playback starts."
+                    }
+                    val out = PhoneAgent.run(this, goalDesc, null) { setChatVisible(it) }
                     return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                 }
                 "SEARCH" -> {
@@ -1299,11 +1308,16 @@ class BubbleService : Service() {
                 IntentExecutor.execute(this, parsedCmd)
                 delay(1800)
                 PhoneAgent.pending = null
-                return PhoneAgent.run(
-                    this,
-                    "User wants to: $trimmedInput. The media app is now open for '${parsedCmd.query}'. Look at the screen and tap the song/video or Play button so it starts playing.",
-                    null
-                ) { setChatVisible(it) }
+                val qLower = parsedCmd.query.trim().lowercase(java.util.Locale.US)
+                val isReelsOrVideo = qLower in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid") ||
+                        Regex("^(?:a\\s+)?(?:video|vid|reels?|shorts?)$").matches(qLower)
+                val targetApp = if (isReelsOrVideo) MainActivity.getDefaultReelsApp(this) else MainActivity.getDefaultMusicPlayer(this)
+                val goalDesc = if (isReelsOrVideo) {
+                    "User wants to: $trimmedInput. Video player ($targetApp) is open. Verify video is playing on screen."
+                } else {
+                    "User wants to: $trimmedInput. Media player ($targetApp) is open for '${parsedCmd.query}'. Look at the screen in $targetApp and tap the song or Play button so playback starts."
+                }
+                return PhoneAgent.run(this, goalDesc, null) { setChatVisible(it) }
             }
             is com.dot.capri.intents.Cmd.Open -> {
                 val opened = IntentExecutor.execute(this, parsedCmd)
