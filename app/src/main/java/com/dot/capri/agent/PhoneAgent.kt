@@ -3,6 +3,7 @@ package com.dot.capri.agent
 import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import com.dot.capri.BubbleService
 import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.MainActivity
 import com.dot.capri.ai.OnDeviceAiClient
@@ -209,6 +210,7 @@ WAIT
 DONE
 
 Rules:
+- CHAIN OBVIOUS STEPS: When multiple sequential actions are obvious, chain them with '->' on one line to execute back-to-back as pure instant CMD with 0 delay (e.g. `JOYSTICK FORWARD 1500 -> MB1 4500 | PLAN: walk and mine`).
 - FIRST check the screenshot and STEPS SO FAR: (1) Have I ALREADY completed the task? -> Reply DONE immediately! (2) If crafting/buying/selecting an item: tap your menu/inventory MB first to open the screen. Once open, DO NOT tap movement/action MBs again — look at the image to locate the target item/recipe icon and use `TAP <x> <y> <confirm_MB>` or `SEQ <x1> <y1> <x2> <y2>` or `TAP <x> <y>`! (3) For multi-target 3D tasks: alternate action (4500ms) with LOOK UP / LOOK DOWN / LOOK AROUND. (4) For joystick games: use JOYSTICK FORWARD <ms>.
 - ALWAYS include <ms> when mining/breaking/walking (e.g. MB1 4500 for breaking, MB1 1000 for soft blocks, MB1 2000 for walking).
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
@@ -217,7 +219,7 @@ Rules:
 
     private val SYSTEM_LOCAL_NO_MBS = """
 You control an Android phone using screen coordinates, UI elements, and OCR text.
-Reply with ONLY ONE line (command + | PLAN: short strategy):
+Reply with ONE line (single command OR multiple chained commands separated by '->' + | PLAN: short strategy):
 TAP_ID <id> | PLAN: <strategy>               (taps UI element #id from SCREEN ELEMENTS)
 TAP_TEXT <words> | PLAN: <strategy>          (taps visible words from OCR TEXT)
 JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
@@ -241,6 +243,9 @@ WAIT
 DONE
 
 Rules:
+- CHAIN OBVIOUS STEPS: When multiple sequential actions are obvious (e.g. tap search -> type -> tap result, or tap album -> tap play, or walk -> mine), chain them with '->' on one line so they execute back-to-back as pure instant CMD (~0.1s):
+  Example: TAP_ID 4 -> TYPE_ID 4 Kendrick -> TAP_TEXT Search | PLAN: search Kendrick
+  Example: TAP_TEXT Albums -> TAP_TEXT Play | PLAN: open album and play
 - FIRST check the screenshot and STEPS SO FAR: Have I ALREADY completed the task? If yes, reply DONE immediately! Do NOT repeat the same action just because the screen changed. If looking at a target to mine/break, use HOLD <x> <y> 4500, and use LOOK UP / LOOK DOWN / LOOK LEFT / LOOK RIGHT to aim at more targets or look around.
 - Prefer TAP_ID <id> when SCREEN ELEMENTS are listed, or TAP_TEXT <words> when OCR text matches.
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
@@ -1030,7 +1035,7 @@ Rules:
                 LlmRequest(prompt = prompt, systemPrompt = sysPrompt, history = emptyList(), imageBytes = effectiveShot)
             ).getOrNull()
         } else {
-            OnDeviceAiClient.generateResponse(context, prompt, effectiveShot, systemOverride = sysPromptLocal, maxTokensOverride = 28).getOrNull()
+            OnDeviceAiClient.generateResponse(context, prompt, effectiveShot, systemOverride = sysPromptLocal, maxTokensOverride = 80).getOrNull()
         }
 
         val elapsed = System.currentTimeMillis() - t0
@@ -2631,6 +2636,7 @@ Rules:
             return "i need an api key or the on-device model downloaded before i can take over your screen, idiot."
         }
 
+        BubbleService.instance?.acquireActiveWakeLock()
         AgentMemory.init(context)
 
         val log = ArrayList<String>(resume?.log ?: emptyList())
@@ -2639,6 +2645,7 @@ Rules:
         val sentTexts = HashSet<String>()
         var previousCellHashes: LongArray? = null
         val deadClickCounts = mutableMapOf<String, Int>()
+        var unproductiveClicks = 0
         var lastExecutedTurn: ExecutedTurn? = null
         val visitedNavTabs = mutableSetOf<String>()
         var carriedBytes: ByteArray? = null
@@ -2806,21 +2813,22 @@ Rules:
                     }
                 }
 
-                // Autonomous Demonstration Request: If stuck or dead-clicking repeatedly in app mode, ask user to show once!
-                if (chosen == null && !isGameMode && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 })) {
-                    log.add("uncertain/stuck in app mode; requesting user demonstration")
+                // Autonomous Demonstration Request: If stuck, dead-clicking, or clicked wrong thing 2x in app mode, ask user to show once!
+                if (chosen == null && !isGameMode && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 } || unproductiveClicks >= 2)) {
+                    log.add("uncertain/stuck in app mode; requesting user demonstration (unproductiveClicks=$unproductiveClicks)")
                     val demonstrated = triggerHumanDemonstration(
                         context = context,
                         pkg = pkg,
                         goal = goal,
                         stateKey = stateKey,
-                        promptSay = "Show me what to tap or scroll, dummy. Just once.",
+                        promptSay = "Show me what to tap, dummy. Just once.",
                         chatVisible = chatVisible,
                         log = log
                     )
                     if (demonstrated) {
                         consecutiveNoOpTurns = 0
                         deadClickCounts.clear()
+                        unproductiveClicks = 0
                         steps++
                         carriedRoot = null
                         carriedBytes = null
@@ -3183,6 +3191,18 @@ Rules:
 
                 if (!changed || unintended != null) {
                     deadClickCounts[actionCmd] = (deadClickCounts[actionCmd] ?: 0) + 1
+                    unproductiveClicks++
+                } else if (a.doWhat == "back") {
+                    unproductiveClicks++
+                } else if (a.doWhat == "tap" || a.doWhat == "click") {
+                    val musicActive = audioManager?.isMusicActive == true
+                    if (isMusicGoal && !musicActive) {
+                        unproductiveClicks++
+                        log.add("tap did not start music playback (unproductiveClicks=$unproductiveClicks)")
+                    } else if (!isMusicGoal && steps > 0 && a.doWhat != "done") {
+                        unproductiveClicks++
+                        log.add("exploratory tap without goal completion (unproductiveClicks=$unproductiveClicks)")
+                    }
                 } else {
                     deadClickCounts.clear()
                 }
@@ -3250,6 +3270,7 @@ Rules:
             }
             return "h-hey, fine, i stopped! you didn't have to yank the leash like that. ${summary(log)}"
         } finally {
+            BubbleService.instance?.releaseActiveWakeLock()
             ControlRegions.setPassThrough(context, false)
             CapriCursor.hide()
             chatVisible(true)

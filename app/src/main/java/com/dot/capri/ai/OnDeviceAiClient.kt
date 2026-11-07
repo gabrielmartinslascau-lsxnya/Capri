@@ -416,6 +416,17 @@ object OnDeviceAiClient {
         }
     }
 
+    fun unloadModel() {
+        idleJob?.cancel()
+        idleJob = null
+        scope.launch {
+            mutex.withLock {
+                closeEngine()
+                Log.d(TAG, "Unloaded on-device LLM immediately for standby battery saving")
+            }
+        }
+    }
+
     private fun scheduleRelease() {
         idleJob?.cancel()
         idleJob = scope.launch {

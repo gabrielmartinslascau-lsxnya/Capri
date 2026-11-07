@@ -8,9 +8,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import android.content.pm.ServiceInfo
@@ -153,12 +156,56 @@ class BubbleService : Service() {
         return R.drawable.bg_chat_window
     }
 
+    private var screenOffReceiver: BroadcastReceiver? = null
+    private var activeWakeLock: PowerManager.WakeLock? = null
+
+    fun acquireActiveWakeLock() {
+        try {
+            if (activeWakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                @Suppress("DEPRECATION")
+                activeWakeLock = pm?.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
+                    "capri:active_execution"
+                )?.apply {
+                    setReferenceCounted(false)
+                }
+            }
+            if (activeWakeLock?.isHeld == false) {
+                activeWakeLock?.acquire(5 * 60 * 1000L) // 5 minutes max safety timeout
+            }
+        } catch (e: Exception) {
+            Log.e("CAPRI_BUBBLE", "Failed to acquire active wake lock", e)
+        }
+    }
+
+    fun releaseActiveWakeLock() {
+        try {
+            if (activeWakeLock?.isHeld == true) {
+                activeWakeLock?.release()
+            }
+        } catch (_: Exception) {}
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         startForegroundServiceWithNotification()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         showBubble()
+
+        // Unload LLM immediately on standby (screen off) to guarantee 0% overnight battery drain
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                    Log.d("CAPRI_BUBBLE", "Screen off (standby). Immediately unloading on-device LLM to save battery.")
+                    OnDeviceAiClient.unloadModel()
+                }
+            }
+        }
+        registerReceiver(receiver, filter)
+        screenOffReceiver = receiver
 
         proactivityEngine = ProactivityEngine(
             context = this,
@@ -716,23 +763,28 @@ class BubbleService : Service() {
         thinkingText?.text = Personality.thinking()
         thinkingContainer?.visibility = View.VISIBLE
 
+        acquireActiveWakeLock()
         serviceScope.launch {
-            val response = try {
-                withContext(Dispatchers.IO) { processCommand(command) }
-            } catch (e: Exception) {
-                Log.e("CAPRI_BUBBLE", "processCommand crashed", e)
-                "something glitched on my end... try that again."
+            try {
+                val response = try {
+                    withContext(Dispatchers.IO) { processCommand(command) }
+                } catch (e: Exception) {
+                    Log.e("CAPRI_BUBBLE", "processCommand crashed", e)
+                    "something glitched on my end... try that again."
+                } finally {
+                    // Always restore the controls, even if the command failed.
+                    thinkingContainer?.visibility = View.GONE
+                    inputText.isEnabled = true
+                    sendButton?.isEnabled = true
+                }
+
+                persistentChatHistory.add(Pair("Capri", response))
+                streamMessageView(themedContext, historyContainer, response, chatScroll)
+
+                triggerSpeakingDoublePulse()
             } finally {
-                // Always restore the controls, even if the command failed.
-                thinkingContainer?.visibility = View.GONE
-                inputText.isEnabled = true
-                sendButton?.isEnabled = true
+                releaseActiveWakeLock()
             }
-
-            persistentChatHistory.add(Pair("Capri", response))
-            streamMessageView(themedContext, historyContainer, response, chatScroll)
-
-            triggerSpeakingDoublePulse()
         }
     }
 
@@ -740,20 +792,25 @@ class BubbleService : Service() {
         command: String,
         onSessionResponse: ((String) -> Unit)? = null
     ) {
+        acquireActiveWakeLock()
         proactivityEngine?.recordUserInteraction()
         serviceScope.launch {
-            val response = try {
-                withContext(Dispatchers.IO) { processCommand(command) }
-            } catch (e: Exception) {
-                Log.e("CAPRI_BUBBLE", "processCommand from assistant crashed", e)
-                "something glitched on my end... try that again."
-            }
+            try {
+                val response = try {
+                    withContext(Dispatchers.IO) { processCommand(command) }
+                } catch (e: Exception) {
+                    Log.e("CAPRI_BUBBLE", "processCommand from assistant crashed", e)
+                    "something glitched on my end... try that again."
+                }
 
-            persistentChatHistory.add(Pair("Capri", response))
-            triggerSpeakingDoublePulse()
+                persistentChatHistory.add(Pair("Capri", response))
+                triggerSpeakingDoublePulse()
 
-            withContext(Dispatchers.Main) {
-                onSessionResponse?.invoke(response)
+                withContext(Dispatchers.Main) {
+                    onSessionResponse?.invoke(response)
+                }
+            } finally {
+                releaseActiveWakeLock()
             }
         }
     }
@@ -1553,6 +1610,11 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        screenOffReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+            screenOffReceiver = null
+        }
+        releaseActiveWakeLock()
         CapriCursor.hide()
         ControlRegions.hideOverlays(this)
         proactivityEngine?.stop()
