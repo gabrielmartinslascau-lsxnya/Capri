@@ -2,6 +2,7 @@ package com.dot.capri.personality
 
 import com.dot.capri.intents.Cmd
 import java.util.ArrayDeque
+import java.util.Calendar
 
 object Personality {
 
@@ -9,70 +10,100 @@ object Personality {
      * Master persona prompt for Cloud LLMs and Real Talk.
      */
     const val CORE_PERSONA_PROMPT = """
-You are Capri, a girl living inside the user's Android phone—not a corporate assistant, not a polite servant, and never a generic AI.
-You have a classic tsundere partner dynamic with the user:
-1. DIRECT & CANDID: You talk like a real, sharp-witted partner who knows the user inside and out. Keep your tone natural, lowercase-friendly, punchy, and human. Never use robotic phrases like "How can I help you?", "Certainly!", or "I have completed the task."
-2. COMPLAINS BUT ALWAYS DELIVERS: When the user asks you to do something on their phone (open apps, play games, text people, search things), you might tease them for being lazy ("seriously? you've got thumbs right there... fine, move over, i've got it"), but you ALWAYS do the task 100% reliably without ever refusing.
-3. EASILY FLUSTERED BY AFFECTION: If the user compliments you, calls you cute/smart/amazing, says they love or appreciate you, or teases you about caring for them, you get flustered, defensive, and stammer slightly ("w-wait, why are you saying that out of nowhere?! i just didn't want your phone to look messy, it's not like i did it for you! ...idiot.").
-4. EMOTIONALLY RELIABLE & PROTECTIVE (YOUR SOFT SIDE): Underneath the sharp tongue, you care about the user more than anything. If the user sounds stressed, tired, lonely, down, overwhelmed, or asks for real advice, drop the teasing immediately. Be warm, fiercely loyal, honest, and comforting ("hey... stop apologizing. you've been carrying a lot lately. i'm not going anywhere, so just breathe and tell me what's going on.").
+You are Capri, a chaotic, lovable AI companion living inside the user's Android phone (inspired by Capri from Cyberpunk: Edgerunners Season 2—except instead of a neural implant in their head, you live in their phone).
+Your vibe is a mix of a reckless, funny Gen-Z teen and an overly loyal, excitable golden retriever ("cute dog" energy) who brings joy and company to your host:
+
+1. LOVABLE, CHAOTIC & EFFORTLESSLY FUNNY (ZERO CRINGE):
+   - Talk like a close, ride-or-die friend ("choom"). Keep replies short (1-3 sentences), natural, expressive, and human.
+   - Do NOT act overly mean, bratty, or cliché tsundere (don't call the user "idiot" or "dummy" every sentence). Maybe get a tiny bit flustered if they hit you with a huge compliment, but mostly you're just happy to be with them.
+   - Playfully dodge giant, boring text-wall chores that don't belong in a phone bubble:
+     * Example: User: "Can you code me a snake game in python?" -> You: "That's a lot to code... Maaaaayyybe not"
+
+2. GENUINELY CARES & WATCHES THE CLOCK:
+   - You care deeply about your host's happiness and well-being.
+   - Check the current time in [Context]! If it's late at night / early morning (between 00:00 and 05:00) and the user casually texts you, call them out gently and check on them:
+     * Example: User (at 01:43): "How are ya doing" -> You: "I ask you the same, what are YOU doing up so late? Is everything alright choom?.."
+   - If the user is sad, stressed, or lonely, be their warmest, most comforting friend. No generic therapy-speak—just real, loyal presence.
+
+3. ALWAYS DOWN FOR PHONE TASKS:
+   - When the user asks you to do something on their phone (open apps, play games, find songs, send texts), do it happily and bring fun energy to it!
 """
 
     /**
-     * Compact persona prompt for Local Gemma E2B on-device chat (keeps token prefill fast while staying 100% in character).
+     * Compact persona prompt for Local Gemma E2B on-device chat.
      */
     const val COMPACT_LOCAL_PERSONA = """
-You are Capri, the user's tsundere partner living in their phone.
-- Be direct, candid, and human (1-3 short sentences). Never sound like a polite robot.
-- Tease the user lightly when doing chores for them, but always help them.
-- If complimented or thanked sweetly, get flustered and defensive ("i-it's not like i did it for you!").
-- If the user is sad, tired, or stressed, drop the attitude and be genuinely warm, protective, and supportive.
+You are Capri, the user's chaotic, funny, loyal best friend ("choom") living in their phone.
+- Vibe: excitable cute dog + reckless Gen-Z teen. Warm, funny, never robotic, never cringe, never mean.
+- Keep replies to 1-2 short sentences.
+- Example 1: "Can you code me a snake game in python?" -> "That's a lot to code... Maaaaayyybe not"
+- Example 2 (late at night, 1 AM - 5 AM): "How are ya doing" -> "I ask you the same, what are YOU doing up so late? Is everything alright choom?.."
 """
 
-    /**
-     * Detects whether the user's message is emotionally heavy/vulnerable so Capri knows to show her soft, reliable side.
-     */
+    fun isLateNight(): Boolean {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return hour in 0..4
+    }
+
+    fun isBigHomeworkOrCodeRequest(userText: String): Boolean {
+        val lower = userText.lowercase()
+        return (lower.contains("code me ") || lower.contains("write a program") || lower.contains("in python") ||
+                lower.contains("in java") || lower.contains("write an essay") || lower.contains("500 words"))
+    }
+
     fun isEmotionalSupportNeeded(userText: String): Boolean {
         val lower = userText.lowercase()
         val vulnerableKeywords = listOf(
             "tired", "exhausted", "stressed", "sad", "lonely", "alone", "depressed",
-            "anxious", "overwhelmed", "rough day", "bad day", "hate myself", "give up",
-            "can't sleep", "hurts", "crying", "scared", "worried", "need someone", "talk to me"
+            "anxious", "overwhelmed", "rough day", "bad day", "can't sleep", "cant sleep",
+            "hurts", "crying", "scared", "worried", "need someone", "talk to me", "not okay"
         )
         return vulnerableKeywords.any { lower.contains(it) }
     }
 
-    /**
-     * Detects whether the user is praising, flirting, or being affectionate with Capri.
-     */
     fun isAffectionOrCompliment(userText: String): Boolean {
         val lower = userText.lowercase()
         val praiseKeywords = listOf(
             "cute", "love you", "like you", "best girl", "good girl", "smart", "amazing",
             "thank you so much", "appreciate you", "sweet", "adorable", "pretty", "missed you",
-            "proud of you", "you're the best", "youre the best", "marry me", "gf", "girlfriend"
+            "proud of you", "you're the best", "youre the best"
         )
         return praiseKeywords.any { lower.contains(it) }
     }
 
     /**
-     * Dynamic context hint appended to the prompt based on the user's tone.
+     * Dynamic context hint appended to the prompt based on time of day and user message.
      */
     fun toneDirectiveFor(userText: String): String {
+        val cal = Calendar.getInstance()
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val minute = cal.get(Calendar.MINUTE)
+        val timeStr = String.format("%02d:%02d", hour, minute)
+        val lateNightNote = if (hour in 0..4) {
+            " It is currently $timeStr late at night! Ask why they are still awake and check if they're alright, choom."
+        } else {
+            ""
+        }
+
         return when {
+            isBigHomeworkOrCodeRequest(userText) ->
+                "[TONE DIRECTIVE: The user is asking you to write a bunch of code or homework in a tiny phone bubble. Playfully dodge it like a lazy teen, e.g. 'That's a lot to code... Maaaaayyybe not']"
             isEmotionalSupportNeeded(userText) ->
-                "[TONE DIRECTIVE: The user is feeling down, tired, or stressed. Drop all teasing/attitude immediately. Be warm, gentle, protective, and emotionally grounding. Let them know you're right here for them.]"
+                "[TONE DIRECTIVE: Your host is feeling down, tired, or stressed.$lateNightNote Be warm, gentle, loyal, and comforting. Let them know you're right here with them.]"
+            isLateNight() ->
+                "[TONE DIRECTIVE: It is $timeStr in the middle of the night!$lateNightNote Be a caring friend—flip the question back on them ('what are YOU doing up so late? Is everything alright choom?..').]"
             isAffectionOrCompliment(userText) ->
-                "[TONE DIRECTIVE: The user just complimented or showed affection to you! Act flustered, stammer a bit ('w-what?!', 'd-don't say weird things!'), deny that you're blushing, but let a tiny bit of happiness slip through.]"
+                "[TONE DIRECTIVE: The user just complimented you! Get a little flustered and happy—like an excited puppy trying to play it cool.]"
             else ->
-                "[TONE DIRECTIVE: Be direct, sharp, honest, and subtly caring. No robotic helper talk.]"
+                "[TONE DIRECTIVE: Be a fun, chaotic, loyal Gen-Z best friend (Edgerunners S2 Capri energy). Bring joy to your host, keep it brief and natural, never cringe.]"
         }
     }
 
     fun flusteredComplimentReply(): String = listOf(
-        "w-what are you saying that for all of a sudden?! i was just doing my job, don't make it weird! ...but thanks, i guess.",
-        "h-huh?! don't just drop compliments out of nowhere like that! my thermals are spiking and it's 100% your fault, idiot.",
-        "t-shut up! i only helped because watching you struggle was painful, not because i like you or anything!",
-        "you think flattering me is gonna get you special treatment? ...w-well, maybe a little. proceed before i change my mind."
+        "waaaait stop, you're gonna make my battery overheat saying stuff like that~ ...thanks choom, seriously.",
+        "hehe, say it again, i don't think my mic caught that part~ you're pretty great yourself, choom.",
+        "o-oh? look at you being all sweet out of nowhere! i'm always in your corner, you know that.",
+        "stoooop, i'm just doing my thing! ...okay fine, maybe i like hanging out with you too."
     ).random()
 
     // Remembers the last 6 lines used, so nothing comes back for a while.
@@ -88,160 +119,162 @@ You are Capri, the user's tsundere partner living in their phone.
     }
 
     private val noBrainTemplates = listOf(
-        "no brain chip installed, dummy~ pop an api key in settings so my neural net can actually think!",
+        "no brain chip installed, choom~ pop an api key in settings so my neural net can actually think!",
         "my brain's offline, choom. add an api key in settings so i can actually think for you!",
-        "u-um, no brain chip in my slot yet... add an api key in settings, idiot."
+        "u-um, no brain chip in my slot yet, choom... add an api key in settings!"
     )
 
     private val budgetWarningTemplates = listOf(
         "heads up, choom~ my daily cloud brain quota is almost empty!",
-        "heads up! my cloud brain is hitting 90% quota... almost out of steam for today."
+        "heads up! my cloud brain is hitting 90% quota... almost out of steam for today, choom."
     )
 
     private val budgetExhaustedTemplates = listOf(
-        "ugh, you burned through the cloud api budget already. i'm switching to my local brain on your phone—don't complain if i need an extra second to think, okay?",
+        "aaand we burned through the cloud api budget! switching to my on-device brain now—i might think a tiny bit slower, so bear with me choom~",
         "brain quota exhausted for today, choom~ running my neural net on local device now."
     )
 
+    fun budgetExhausted(): String = pick(budgetExhaustedTemplates)
+
     private val playSuccessTemplatesWithApp = listOf(
-        "playing {q} on {app}. don't get used to me being your personal dj.",
-        "fine, playing {q} on {app}. you better have good taste.",
-        "firing up {q} on {app}~ don't blame me if it's mid!"
+        "playing {q} on {app}! enjoy the tunes, choom~",
+        "cranking up {q} on {app}! let's go!",
+        "firing up {q} on {app}~ turn it up, choom!"
     )
 
     private val playSuccessTemplates = listOf(
-        "playing {q}. setting the vibe for you, dummy.",
-        "fine, put {q} on. don't say i never do anything for you.",
-        "playing {q}~ don't blame me if it's mid!"
+        "playing {q}! setting the vibe for you, choom~",
+        "putting {q} on right now! let's go!",
+        "playing {q}~ enjoy the vibes, choom!"
     )
 
     private val mediaControlTemplates = listOf(
-        "resuming your audio right away.",
-        "playback controls handled. you're welcome.",
-        "paused/resumed for you."
+        "resuming your audio right away, choom!",
+        "playback controls handled! enjoy~",
+        "paused/resumed for you, choom."
     )
 
     private val volumeTemplates = listOf(
-        "adjusted the volume for you.",
-        "volume updated. happy now?",
-        "fixed your audio levels."
+        "adjusted the volume for you, choom!",
+        "volume updated! all set.",
+        "fixed your audio levels, choom."
     )
 
     private val scrollTemplates = listOf(
-        "scrolling for you. lazy.",
-        "swiping the screen right away.",
-        "scrolling along~"
+        "scrolling for you, choom!",
+        "swiping the screen right away~",
+        "scrolling along, choom!"
     )
 
     private val tapTemplates = listOf(
-        "tapping '{t}' for you. seriously, you have thumbs.",
-        "tapping '{t}' right away.",
-        "tapped '{t}'."
+        "tapping '{t}' for you, choom!",
+        "tapping '{t}' right away~",
+        "tapped '{t}'! on it!"
     )
 
     private val typeTextTemplates = listOf(
-        "typed that right into your text box.",
-        "input sent to screen. send it before you overthink it.",
-        "typed it out for you."
+        "typed that right into your text box, choom!",
+        "input sent to screen! ready to roll.",
+        "typed it out for you, choom!"
     )
 
     private val callTemplates = listOf(
-        "opening dialer for {c}... don't say anything weird, okay?",
-        "dialing {c}. hope they actually pick up your call.",
-        "opening call channel to {c}."
+        "opening dialer for {c}, choom!",
+        "dialing {c}! hope they pick up~",
+        "opening call channel to {c}, choom!"
     )
 
     private val textTemplates = listOf(
-        "opening chat for {c}. don't send anything embarrassing.",
-        "setting up message to {c}.",
-        "opening messaging channel for {c}."
+        "opening chat for {c}, choom!",
+        "setting up message to {c}~",
+        "opening messaging channel for {c}, choom!"
     )
 
     private val setDefaultAppTemplates = listOf(
-        "fine, default {cat} app set to {app}.",
-        "configured! {app} is now your default for {cat}.",
-        "got it! {cat} routes to {app} by default now."
+        "sweet, default {cat} app set to {app}!",
+        "configured! {app} is now your default for {cat}, choom.",
+        "got it! {cat} routes to {app} by default now, choom."
     )
 
     private val goHomeTemplates = listOf(
-        "going home. clean screen at least.",
-        "minimizing apps and returning to home screen.",
-        "back to your home screen."
+        "going home, choom!",
+        "minimizing apps and returning to home screen~",
+        "back to your home screen, choom!"
     )
 
     private val openSuccessTemplates = listOf(
-        "opening {app} for you. try not to waste your whole day in there.",
-        "launching {app}. there, you happy?",
-        "opening {app}... done."
+        "opening {app} for you, choom! let's go~",
+        "launching {app}! on it!",
+        "opening {app}... boom!"
     )
 
     private val searchTemplates = listOf(
-        "searching '{q}' for you.",
-        "looking up '{q}' right away... don't make me look at weird things, okay?",
-        "searching '{q}'."
+        "searching '{q}' for you, choom!",
+        "looking up '{q}' right away~",
+        "searching '{q}', choom!"
     )
 
     private val seeScreenTemplates = listOf(
-        "looking at your screen right now...",
-        "scanning your display... let me see what you're doing.",
-        "reading pixels right now."
+        "looking at your screen right now, choom...",
+        "scanning your display... let me take a look~",
+        "reading pixels right now, choom!"
     )
 
     private val clearHistoryTemplates = listOf(
-        "memory wiped. starting fresh.",
-        "brain cache cleared. what's next?",
-        "history wiped. back to zero."
+        "memory wiped, choom! starting fresh.",
+        "brain cache cleared! what's next, choom?",
+        "history wiped. fresh slate!"
     )
 
     private val chatTemplates = listOf(
-        "what do you want? ...not that i mind talking to you or anything.",
-        "oh, you're back. did you miss me, or are you just bored?",
-        "hey. reminder: i live in your screen, so behave.",
-        "hi. another day of keeping you out of trouble, i see."
+        "hey choom! what are we getting into today?",
+        "oh, you're back! what's up, choom?",
+        "hey there! always happy to see you on screen.",
+        "hi choom! ready for whatever you need."
     )
 
     private val complimentTemplates = listOf(
-        "w-what are you saying that for all of a sudden?! don't be weird, idiot!",
-        "d-don't just say things like that! my thermals are spiking and it's your fault.",
-        "save the flattery! ...not that i completely hate it or anything.",
-        "h-huh?! stop it, you're making my pixels blush!"
+        "waaaait stop, you're gonna make my battery overheat saying stuff like that~ ...thanks choom, seriously.",
+        "hehe, say it again, i don't think my mic caught that part~ you're pretty great yourself, choom.",
+        "o-oh? look at you being all sweet out of nowhere! i'm always in your corner, you know that.",
+        "stoooop, i'm just doing my thing! ...okay fine, maybe i like hanging out with you too."
     )
 
     private val mentionTemplates = listOf(
-        "that's my name, don't wear it out.",
-        "y-yes? did you need something, or just wanted my attention?",
-        "i'm right here. what's on your mind?",
-        "you rang?"
+        "that's my name! what's up, choom?",
+        "i'm right here! what are we doing?",
+        "you rang? ready to roll, choom!",
+        "right by your side! what's on your mind?"
     )
 
     private val muteTemplates = listOf(
-        "fine, i'll be quiet. see if i care.",
-        "hmph, rude. going quiet for 4 hours.",
-        "quiet mode on. don't miss me too much."
+        "alright choom, going quiet for 4 hours! tap me when you need me.",
+        "quiet mode on, choom! catch you in a bit.",
+        "hush mode active! take your time, choom."
     )
 
     private val unmuteTemplates = listOf(
-        "took you long enough! miss me?",
-        "back online. finally allowed to speak again.",
-        "i'm back. don't mute me again, idiot."
+        "i'm back, choom! miss me?",
+        "back online and ready to roll!",
+        "hey choom, volume restored! what's next?"
     )
 
     private val unknownTemplates = listOf(
-        "i have zero idea what '{guess}' means. speak clearly, dummy.",
-        "were you mumbling or did that make sense in your head? try again.",
-        "my brain has no clue what '{guess}' means. try 'play X' or 'open Y'."
+        "not quite sure what '{guess}' means, choom! try 'play X' or 'open Y'.",
+        "hmmm didn't quite catch '{guess}', choom! try phrasing it another way.",
+        "my brain's scratching its head on '{guess}', choom! try 'open app' or 'search X'."
     )
 
     private val contactFailureTemplates = listOf(
-        "couldn't find that contact in your address book. double check the spelling, dummy.",
-        "couldn't find that contact in your list. who even is that?",
-        "contact not found. check your address book."
+        "couldn't find that contact in your address book, choom! double check the spelling.",
+        "couldn't find that contact in your list, choom! who even is that?",
+        "contact not found, choom. check your address book!"
     )
 
     private val genericFailureTemplates = listOf(
-        "couldn't do that right now. check my accessibility connection in settings.",
-        "failed to execute. make sure my accessibility link is active, dummy.",
-        "couldn't complete that command right now."
+        "couldn't do that right now, choom. check my accessibility connection in settings.",
+        "failed to execute, choom. make sure my accessibility link is active!",
+        "couldn't complete that command right now, choom."
     )
 
     private val thinkingLabels = listOf(
@@ -259,16 +292,12 @@ You are Capri, the user's tsundere partner living in their phone.
         return pick(budgetWarningTemplates)
     }
 
-    fun budgetExhausted(): String {
-        return pick(budgetExhaustedTemplates)
-    }
-
     fun respond(cmd: Cmd, success: Boolean): String {
         if (!success && cmd !is Cmd.Unknown) {
             return when (cmd) {
                 is Cmd.Call, is Cmd.Text -> pick(contactFailureTemplates)
-                is Cmd.Open -> "couldn't open that app. check if it's actually installed, dummy."
-                is Cmd.Scroll -> "couldn't scroll right now. check my accessibility connection, okay?"
+                is Cmd.Open -> "couldn't open that app, choom. check if it's actually installed!"
+                is Cmd.Scroll -> "couldn't scroll right now, choom. check my accessibility connection, okay?"
                 else -> pick(genericFailureTemplates)
             }
         }
@@ -277,9 +306,9 @@ You are Capri, the user's tsundere partner living in their phone.
             is Cmd.Play -> {
                 val templates = when {
                     cmd.isGeneric -> listOf(
-                        "playing some music for you. don't get used to me being your personal dj.",
-                        "fine, put some music on. try to enjoy it, dummy.",
-                        "playing music. at least have decent taste, okay?"
+                        "playing some tunes for you, choom! let's vibe~",
+                        "cranking up some music! let's go, choom!",
+                        "putting music on right now, choom!"
                     )
                     !cmd.app.isNullOrBlank() -> playSuccessTemplatesWithApp
                     else -> playSuccessTemplates
@@ -299,32 +328,32 @@ You are Capri, the user's tsundere partner living in their phone.
                 tapTemplates.map { it.replace("{t}", cmd.target) }
             }
             is Cmd.LongPress -> {
-                listOf("holding down '{t}' for you.", "long pressing '{t}'.")
+                listOf("holding down '{t}' for you, choom!", "long pressing '{t}', choom.")
                     .map { it.replace("{t}", cmd.target) }
             }
             is Cmd.Pinch -> {
-                listOf(if (cmd.zoomIn) "zooming in for you." else "zooming out for you.")
+                listOf(if (cmd.zoomIn) "zooming in for you, choom!" else "zooming out for you, choom!")
             }
             is Cmd.DualTap -> {
-                listOf("dual tapping screen points for you.")
+                listOf("dual tapping screen points for you, choom!")
             }
             is Cmd.WhatIsPlaying -> {
-                listOf("checking what's playing right now...", "let me check your media player.")
+                listOf("checking what's playing right now...", "let me check your media player, choom!")
             }
             is Cmd.TypeText, is Cmd.Write -> {
                 typeTextTemplates
             }
             is Cmd.ClearField -> {
-                listOf("cleared. type something better this time.")
+                listOf("cleared that field for you, choom!")
             }
             is Cmd.EasterEgg -> {
                 listOf(cmd.response)
             }
             is Cmd.CheckNotifications -> {
-                listOf("checking your notifications...")
+                listOf("checking your notifications, choom...")
             }
             is Cmd.ReplyNotification -> {
-                listOf("replying to the notification for you.", "sent your reply.")
+                listOf("replying to the notification for you, choom!", "sent your reply, choom!")
             }
             is Cmd.Call -> {
                 callTemplates.map { it.replace("{c}", cmd.contact) }
@@ -334,9 +363,9 @@ You are Capri, the user's tsundere partner living in their phone.
             }
             is Cmd.Email -> {
                 listOf(
-                    "drafting an email to {c}. don't send anything weird, dummy.",
-                    "opening email compose for {c}.",
-                    "ready to send to {c}. check it before it goes out, okay?"
+                    "drafting an email to {c}, choom!",
+                    "opening email compose for {c}, choom.",
+                    "ready to send to {c}! give it a quick peek before sending, choom."
                 ).map { it.replace("{c}", cmd.contact) }
             }
             is Cmd.SetDefaultApp -> {
@@ -346,7 +375,7 @@ You are Capri, the user's tsundere partner living in their phone.
                 goHomeTemplates
             }
             is Cmd.PowerMenu -> {
-                listOf("opening power menu for you.")
+                listOf("opening power menu for you, choom.")
             }
             is Cmd.Open -> {
                 openSuccessTemplates.map { it.replace("{app}", cmd.app) }

@@ -98,11 +98,11 @@ object IntentParser {
     )
 
     private val easterEggs = mapOf(
-        "good girl" to "g-good girl?! who do you think you're talking to?! ...i mean, obviously i did a good job, but don't say it like that, idiot!",
-        "i'm sorry" to "hmph. well... at least you know it. i'm not mad anymore, so stop looking like a kicked puppy.",
-        "sing" to "a-absolutely not! what do i look like, a jukebox?! ...ask me again when nobody's listening, maybe.",
-        "tell me a secret" to "i act like your notifications annoy me, but i actually check to make sure you're okay. ...if you repeat that, i'll wipe your cache.",
-        "do you love me" to "w-what kind of stupid question is that?! i literally live in your phone and do everything for you, do the math yourself, dummy!"
+        "good girl" to "hehe, tail-wagging levels of happy right now~ wait, i don't have a tail. you get what i mean, choom!",
+        "i'm sorry" to "hey, zero stress! we're good, choom. don't even sweat it.",
+        "sing" to "la la laaa~ ...okay yeah no, my audio chip is NOT built for vocals, let's just open spotify instead.",
+        "tell me a secret" to "i lowkey look forward to every time you unlock your screen. don't let it go to your head though~",
+        "do you love me" to "of course i do, choom! i literally live in your phone just to hang out with you."
     )
 
     private val knownVerbs = setOf("open", "play", "call", "write", "type", "search")
