@@ -265,15 +265,26 @@ object ControlRegions {
     private fun parseScreenTargetInClause(clause: String, screenW: Int, screenH: Int): DirectStep.TapTarget? {
         val lower = clause.lowercase(Locale.US).trim()
 
-        val laneYs = floatArrayOf(0.25f, 0.39f, 0.53f, 0.68f, 0.82f)
-        val colXs = floatArrayOf(0.25f, 0.33f, 0.41f, 0.49f, 0.57f, 0.65f, 0.73f, 0.81f, 0.88f)
+        // Universal normalized grid coordinates (completely game & app agnostic)
+        val defaultRows = 5
+        val defaultCols = 8
+        fun calcRowY(idx: Int, totalRows: Int = defaultRows): Float {
+            val topMargin = 0.22f
+            val usableH = 0.64f
+            return topMargin + ((idx + 0.5f) / totalRows) * usableH
+        }
+        fun calcColX(idx: Int, totalCols: Int = defaultCols): Float {
+            val leftMargin = 0.22f
+            val usableW = 0.68f
+            return leftMargin + ((idx + 0.5f) / totalCols) * usableW
+        }
 
-        // 1. Check "lane 1..5", "row 1..5", or "top/middle/bottom lane/row"
-        val explicitLaneMatch = Regex("\\blane\\s*([1-5])\\b").find(lower)
-        val explicitColMatch = Regex("\\b(?:col|collum|colum|column|cloumn|slot|spot|tile|square|box)\\s*([1-9])\\b").find(lower)
-        val secondaryRowMatch = if (explicitLaneMatch != null) Regex("\\brow\\s*([1-9])\\b").find(lower) else null
+        // 1. Check "lane 1..N", "row 1..N", "column 1..N", or "top/middle/bottom row"
+        val explicitLaneMatch = Regex("\\b(?:lane|row)\\s*(\\d+)\\b").find(lower)
+        val explicitColMatch = Regex("\\b(?:col|collum|colum|column|cloumn|slot|spot|tile|square|box)\\s*(\\d+)\\b").find(lower)
+        val secondaryRowMatch = if (explicitLaneMatch != null) Regex("\\brow\\s*(\\d+)\\b").find(lower) else null
         val colMatch = explicitColMatch ?: secondaryRowMatch
-        val explicitRowMatch = if (explicitLaneMatch == null) Regex("\\brow\\s*([1-5])\\b").find(lower) else null
+        val explicitRowMatch = if (explicitLaneMatch == null) Regex("\\brow\\s*(\\d+)\\b").find(lower) else null
 
         val laneIdx = when {
             explicitLaneMatch != null -> explicitLaneMatch.groupValues[1].toInt() - 1
@@ -285,18 +296,20 @@ object ControlRegions {
         }
 
         val colIdx = when {
-            colMatch != null -> (colMatch.groupValues[1].toInt() - 1).coerceIn(0, 8)
+            colMatch != null -> colMatch.groupValues[1].toInt() - 1
             lower.contains("back") || lower.contains("left") -> 0
-            lower.contains("front") || lower.contains("right") -> 6
-            lower.contains("mid") || lower.contains("center") -> 3
+            lower.contains("front") || lower.contains("right") -> defaultCols - 1
+            lower.contains("mid") || lower.contains("center") -> defaultCols / 2
             else -> null
         }
 
-        if (laneIdx in 0..4 || colIdx != null) {
-            val targetY = if (laneIdx in 0..4) laneYs[laneIdx] else 0.53f
-            val targetX = if (colIdx != null) colXs[colIdx] else 0.35f
+        if (laneIdx >= 0 || colIdx != null) {
+            val totalRows = (laneIdx + 1).coerceAtLeast(defaultRows)
+            val totalCols = ((colIdx ?: 0) + 1).coerceAtLeast(defaultCols)
+            val targetY = if (laneIdx >= 0) calcRowY(laneIdx, totalRows) else 0.50f
+            val targetX = if (colIdx != null) calcColX(colIdx, totalCols) else 0.35f
             val desc = buildString {
-                if (laneIdx in 0..4) append("lane ${laneIdx + 1}")
+                if (laneIdx >= 0) append("row ${laneIdx + 1}")
                 if (colIdx != null) {
                     if (isNotEmpty()) append(" ")
                     append("col ${colIdx + 1}")
@@ -441,7 +454,7 @@ object ControlRegions {
 
             val mbPhrase = stripDurations(clauseWithoutTarget.ifEmpty { clause })
             // Only accept the MB if EVERY meaningful word in the clause belongs to that MB's label,
-            // so normal chat/requests like "play pvz" or "open the settings menu" never fire an MB by accident.
+            // so normal chat/requests like "open the settings menu" never fire an MB by accident.
             val mbMatch = findMatchingMb(context, mbPhrase)?.takeIf { coversAllTokens(it, mbPhrase) }
             if (mbMatch != null) {
                 matchedAtLeastOneMb = true
@@ -451,7 +464,7 @@ object ControlRegions {
                 val inferredHoldMs = when {
                     explicitHoldMs != null -> explicitHoldMs
                     explicitlyAskedTap -> null
-                    lblLower.contains("mine") || lblLower.contains("break") || lblLower.contains("chop") || lblLower.contains("dig") -> 4700L
+                    lblLower.contains("hold") || lblLower.contains("charge") -> 2500L
                     lblLower.contains("walk") || lblLower.contains("move") || lblLower.contains("forward") || lblLower.contains("run") -> 1500L
                     else -> null
                 }
@@ -472,10 +485,10 @@ object ControlRegions {
             }
         }
 
-        // Filter out pure placement/grammar filler words from unresolvedClauses (e.g. "on row 2", "collum 3", "yard", "lawn")
+        // Filter out pure placement/grammar filler words from unresolvedClauses (e.g. "on row 2", "collum 3", "grid", "spot")
         val filteredUnresolved = unresolvedClauses.filterNot { unres ->
             val u = unres.lowercase(Locale.US).trim()
-            u.isEmpty() || Regex("^(?:on|in|to|at|the|yard|lawn|screen|field|spot|tile|lane|row|col|collum|colum|column|cloumn|slot|box|square|\\d+|and)+$").matches(u.replace(Regex("[^a-z0-9]"), ""))
+            u.isEmpty() || Regex("^(?:on|in|to|at|the|board|grid|screen|field|spot|tile|lane|row|col|collum|colum|column|cloumn|slot|box|square|\\d+|and)+$").matches(u.replace(Regex("[^a-z0-9]"), ""))
         }
 
         // If any clause was an unresolved natural-language instruction (e.g. "walk towards that tree and mine"),

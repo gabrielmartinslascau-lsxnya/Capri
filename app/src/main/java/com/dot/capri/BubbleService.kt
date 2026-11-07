@@ -1407,6 +1407,21 @@ class BubbleService : Service() {
                     null
                 ) { setChatVisible(it) }
             }
+            is com.dot.capri.intents.Cmd.Email -> {
+                val opened = IntentExecutor.execute(this, parsedCmd)
+                delay(1200)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(
+                    this,
+                    if (opened && !parsedCmd.message.isNullOrBlank())
+                        "User wants to: $trimmedInput. Email compose screen is open for '${parsedCmd.contact}' with message pre-filled. Look at the screen and tap Send if ready."
+                    else if (opened)
+                        "User wants to: $trimmedInput. Email compose screen is open. Type the message or recipient and tap Send."
+                    else
+                        "User wants to: $trimmedInput. Open Gmail or Email, tap Compose, and send an email to '${parsedCmd.contact}'.",
+                    null
+                ) { setChatVisible(it) }
+            }
             is com.dot.capri.intents.Cmd.Search -> {
                 IntentExecutor.execute(this, parsedCmd)
                 delay(1500)

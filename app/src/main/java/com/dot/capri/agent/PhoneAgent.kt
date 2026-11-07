@@ -88,6 +88,19 @@ object PhoneAgent {
         val placedNormY: Float? = null
     )
 
+    private val TERMINAL_DEFEAT_REGEX = Regex(
+        "\\b(game\\s*over|you\\s+died|defeat|stage\\s+failed|mission\\s+failed|try\\s+again|restart\\s+level|wasted|level\\s+failed|you\\s+lose)\\b",
+        RegexOption.IGNORE_CASE
+    )
+    private val TERMINAL_VICTORY_REGEX = Regex(
+        "\\b(victory|winner|stage\\s+clear|level\\s+complete|you\\s+win|mission\\s+complete|level\\s+cleared)\\b",
+        RegexOption.IGNORE_CASE
+    )
+    private val STATE_TRANSITION_REGEX = Regex(
+        "\\b(resume(?:\\s+game)?|continue(?:\\s+game)?|unpause|tap\\s+to\\s+continue|tap\\s+to\\s+start|start\\s+game|play\\s+game|ready)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
     private val SYSTEM_WITH_MBS = """
 You are Capri, an autonomous AI agent controlling an Android device.
 The user has placed MACRO BUTTONS (MB1, MB2, ...) on screen for fixed controls (e.g. walk, mine, jump, inventory, finish crafting, confirm).
@@ -96,12 +109,12 @@ You work in ADAPTIVE HYBRID MODE:
 - Use VISUAL SCREEN COORDINATES (`tap`, `seq`, `drag`, or `x,y -> MB`) whenever you need to click something inside the screenshot that does NOT have its own MB — such as item icons in an inventory or shop, crafting recipe icons, grid slots, chests, cards, or dialog buttons!
 
 Actions (reply with ONLY a single JSON object, always including your updated "plan"):
-{"do":"press_region","region":"mb1","plan":"Tap MB1 (e.g. open inventory or jump)"}
+{"do":"press_region","region":"mb1","plan":"Tap MB1 (e.g. open menu or jump)"}
   -> Taps Macro Button MB1 immediately.
-{"do":"press_region","region":"mb1","duration_ms":4700,"plan":"Hold MB1 for 4700ms to break target block"}
-  -> Holds Macro Button MB1 for duration_ms milliseconds (e.g. ~4500ms for breaking/mining, ~1000ms for soft blocks, ~2000ms for walking).
+{"do":"press_region","region":"mb1","duration_ms":2500,"plan":"Hold MB1 for 2500ms"}
+  -> Holds Macro Button MB1 for duration_ms milliseconds (e.g. ~2000ms for holding/charging, ~1500ms for walking).
 {"do":"press_region","x":0.28,"y":0.45,"region":"mb5","plan":"Tap target item icon at (0.28,0.45) then tap MB5"}
-  -> Taps visual item at (x, y) on screen FIRST, then taps Macro Button MB5 (e.g. select recipe/item icon, then tap confirm/craft MB).
+  -> Taps visual item at (x, y) on screen FIRST, then taps Macro Button MB5 (e.g. select item/option, then tap confirm MB).
 {"do":"press_region","region":"mb1","x2":0.45,"y2":0.55,"plan":"Select MB1 and place/use at (0.45, 0.55)"}
   -> Taps MB1 first, then immediately taps target coordinate (x2, y2) on screen.
 {"do":"tap","x":0.32,"y":0.48,"plan":"Visually identified target item / recipe icon in screenshot -> tap it"}
@@ -210,9 +223,9 @@ WAIT
 DONE
 
 Rules:
-- CHAIN OBVIOUS STEPS: When multiple sequential actions are obvious, chain them with '->' on one line to execute back-to-back as pure instant CMD with 0 delay (e.g. `JOYSTICK FORWARD 1500 -> MB1 4500 | PLAN: walk and mine`).
-- FIRST check the screenshot and STEPS SO FAR: (1) Have I ALREADY completed the task? -> Reply DONE immediately! (2) If crafting/buying/selecting an item: tap your menu/inventory MB first to open the screen. Once open, DO NOT tap movement/action MBs again — look at the image to locate the target item/recipe icon and use `TAP <x> <y> <confirm_MB>` or `SEQ <x1> <y1> <x2> <y2>` or `TAP <x> <y>`! (3) For multi-target 3D tasks: alternate action (4500ms) with LOOK UP / LOOK DOWN / LOOK AROUND. (4) For joystick games: use JOYSTICK FORWARD <ms>.
-- ALWAYS include <ms> when mining/breaking/walking (e.g. MB1 4500 for breaking, MB1 1000 for soft blocks, MB1 2000 for walking).
+- CHAIN OBVIOUS STEPS: When multiple sequential actions are obvious, chain them with '->' on one line to execute back-to-back as pure instant CMD with 0 delay (e.g. `JOYSTICK FORWARD 1500 -> MB1 2500 | PLAN: move and activate`).
+- FIRST check the screenshot and STEPS SO FAR: (1) Have I ALREADY completed the task? -> Reply DONE immediately! (2) If choosing/selecting an option or item: tap the menu/option MB first. Once open, DO NOT tap action MBs again — look at the image to locate the target option and use `TAP <x> <y> <confirm_MB>` or `SEQ <x1> <y1> <x2> <y2>` or `TAP <x> <y>`! (3) For joystick games: use JOYSTICK FORWARD <ms>.
+- ALWAYS include <ms> when holding an action MB (e.g. MB1 2500 for holding, MB1 1500 for walking).
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 - PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
 """.trimIndent()
@@ -224,7 +237,7 @@ TAP_ID <id> | PLAN: <strategy>               (taps UI element #id from SCREEN EL
 TAP_TEXT <words> | PLAN: <strategy>          (taps visible words from OCR TEXT)
 JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
 TAP <x> <y> | PLAN: <strategy>               (taps 0.00..1.00 coordinate)
-HOLD <x> <y> <ms> | PLAN: <strategy>         (holds x,y for <ms> milliseconds, e.g. 4500 for mining, 1000 for soft blocks)
+HOLD <x> <y> <ms> | PLAN: <strategy>         (holds x,y for <ms> milliseconds, e.g. 2500 for holding)
 SEQ <x1> <y1> <x2> <y2> | PLAN: <strategy>   (taps x1,y1 then taps x2,y2)
 LOOK <UP|DOWN|LEFT|RIGHT|AROUND> | PLAN: <strategy> (turns 3D camera, or LOOK <dx> <dy>)
 SWIPE <x1> <y1> <x2> <y2> | PLAN: <strategy> (swipes from x1,y1 to x2,y2)
@@ -1036,7 +1049,7 @@ Rules:
         }
 
         val reply = try {
-            withTimeoutOrNull(8_000L) {
+            withTimeoutOrNull(12_000L) {
                 if (useApi(context)) {
                     LlmRouter.complete(
                         context,
@@ -1625,17 +1638,14 @@ Rules:
     }
 
     private fun inferTargetHoldMs(goalLower: String, mbLabelLower: String): Long? {
-        // Explicit duration in goal (e.g. "for 5 seconds", "4700ms")
+        // Explicit duration in goal (e.g. "for 5 seconds", "2500ms")
         Regex("(\\d+)\\s*(?:ms|milliseconds?)").find(goalLower)?.groupValues?.get(1)?.toLongOrNull()?.let { return it }
         Regex("(\\d+(?:\\.\\d+)?)\\s*(?:s|sec|secs|seconds?)\\b").find(goalLower)?.groupValues?.get(1)?.toDoubleOrNull()?.let {
             return (it * 1000.0).toLong()
         }
         return when {
-            goalLower.contains("wood") || goalLower.contains("tree") || goalLower.contains("log") || goalLower.contains("oak") ||
-                    mbLabelLower.contains("wood") || mbLabelLower.contains("tree") -> 4700L
-            goalLower.contains("stone") || goalLower.contains("cobble") || goalLower.contains("ore") -> 4000L
-            goalLower.contains("dirt") || goalLower.contains("grass") || goalLower.contains("sand") || goalLower.contains("gravel") -> 1000L
-            goalLower.contains("mine") || goalLower.contains("break") || goalLower.contains("chop") || goalLower.contains("dig") -> 4500L
+            goalLower.contains("hold") || goalLower.contains("charge") ||
+                    mbLabelLower.contains("hold") || mbLabelLower.contains("charge") -> 2500L
             else -> null
         }
     }
@@ -1643,7 +1653,7 @@ Rules:
     private fun isFiniteActionGoal(goal: String): Boolean {
         val g = goal.lowercase(Locale.US).trim()
         // Open-ended gameplay requests should keep playing until stopped
-        if (Regex("\\b(play\\s+(?:and\\s+win|the\\s+game|for\\s+me)|win\\s+the\\s+game|beat\\s+the\\s+level|keep\\s+playing|survive|defend\\s+the\\s+lawn)\\b").containsMatchIn(g)) {
+        if (Regex("\\b(play\\s+(?:and\\s+win|the\\s+game|for\\s+me)|win\\s+the\\s+game|beat\\s+the\\s+level|keep\\s+playing|survive|take\\s+over\\s+and\\s+win)\\b").containsMatchIn(g)) {
             return false
         }
         return true
@@ -2661,6 +2671,8 @@ Rules:
         var carriedBytes: ByteArray? = null
         var carriedRoot: AccessibilityNodeInfo? = null
         var consecutiveNoOpTurns = 0
+        var lastProgressTime = System.currentTimeMillis()
+        var lastSeenFrameHash: Long? = null
 
         chatVisible(false)
         CapriCursor.show(context)
@@ -2777,6 +2789,31 @@ Rules:
                 val ocrLines = ocrHits.map { it.text }
                 val ocrSummary = ocrLines.take(6).joinToString(", ")
 
+                // 1. Terminal Game Sentinel: If defeat or victory is displayed on screen, exit cleanly and immediately!
+                if (isGameMode && ocrHits.any { hit -> TERMINAL_DEFEAT_REGEX.containsMatchIn(hit.text) }) {
+                    log.add("terminal defeat detected on screen: stopping screen control")
+                    CapriCursor.setStatus("Game Over detected...")
+                    delay(350)
+                    return "game's over, choom—looks like we got wiped out. shutting down screen control. ${summary(log)}"
+                }
+                if (isGameMode && ocrHits.any { hit -> TERMINAL_VICTORY_REGEX.containsMatchIn(hit.text) }) {
+                    log.add("victory screen detected on screen: stopping screen control")
+                    CapriCursor.setStatus("Victory!")
+                    delay(350)
+                    return "we won! level cleared, choom. ${summary(log)}"
+                }
+
+                // 2. Screen Freeze Sentinel: If screen fingerprint produced 0 change for >= 8s, stop immediately!
+                if (lastSeenFrameHash == frameHash && steps > 0) {
+                    if (System.currentTimeMillis() - lastProgressTime >= 8_000L) {
+                        log.add("screen frozen with zero progress for >= 8s; cleanly deactivating")
+                        return "no screen progress after 8 seconds, choom. shutting down screen control. ${summary(log)}"
+                    }
+                } else {
+                    lastSeenFrameHash = frameHash
+                    lastProgressTime = System.currentTimeMillis()
+                }
+
                 if (isGameMode) {
                     // Phase 1 when MBs exist: On the first screenshot (or whenever unassigned MBs exist),
                     // automatically inspect and assign what each MB button is before choosing an action.
@@ -2803,6 +2840,76 @@ Rules:
                         chosen = Act(rp.kind, match.id, rp.arg, null, null, null, null, null, null, null)
                     } else {
                         log.add("screen changed, re-checking")
+                    }
+                }
+
+                // 3. Visual State Triage (<50ms): If screen is paused or prompting to Resume/Continue/Start, tap it first!
+                if (chosen == null) {
+                    val macroButtons = ControlRegions.allMacroButtons(context)
+                    val resumeMb = macroButtons.firstOrNull { mb ->
+                        STATE_TRANSITION_REGEX.containsMatchIn(mb.effectiveLabel())
+                    }
+                    if (resumeMb != null) {
+                        val p = ControlRegions.resolve(context, resumeMb.name)
+                        if (p != null) {
+                            log.add("state triage: tapping state-transition MB '${resumeMb.effectiveLabel()}' (${p.first}, ${p.second})")
+                            CapriCursor.setStatus("tapping ${resumeMb.effectiveLabel()}...")
+                            CapriCursor.pulse()
+                            PhoneControl.tapAt(p.first, p.second)
+                            steps++
+                            lastProgressTime = System.currentTimeMillis()
+                            delay(350)
+                            carriedBytes = null
+                            carriedRoot = null
+                            continue
+                        }
+                    }
+                    val resumeOcr = ocrHits.firstOrNull { hit ->
+                        STATE_TRANSITION_REGEX.containsMatchIn(hit.text)
+                    }
+                    if (resumeOcr != null) {
+                        log.add("state triage: tapping on-screen prompt '${resumeOcr.text}' at (${resumeOcr.x}, ${resumeOcr.y})")
+                        CapriCursor.setStatus("tapping ${resumeOcr.text}...")
+                        CapriCursor.pulse()
+                        PhoneControl.tapAt(resumeOcr.x, resumeOcr.y)
+                        steps++
+                        lastProgressTime = System.currentTimeMillis()
+                        delay(350)
+                        carriedBytes = null
+                        carriedRoot = null
+                        continue
+                    }
+                }
+
+                // 4. App Mode Compose Triage: If user wants to compose/write an email or message, click Compose button if visible
+                if (!isGameMode && chosen == null) {
+                    val isEmailOrComposeGoal = Regex("\\b(email|compose|write\\s+email|send\\s+email)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goal)
+                    if (isEmailOrComposeGoal) {
+                        val composeItem = items.firstOrNull { it.label.contains("compose", ignoreCase = true) || it.label.contains("new message", ignoreCase = true) }
+                        val composeOcr = if (composeItem == null) ocrHits.firstOrNull { it.text.contains("compose", ignoreCase = true) } else null
+                        if (composeItem != null) {
+                            log.add("app triage: tapping Compose button '${composeItem.label}'")
+                            CapriCursor.moveTo(composeItem.cx, composeItem.cy)
+                            CapriCursor.pulse()
+                            PhoneControl.tap(composeItem)
+                            steps++
+                            lastProgressTime = System.currentTimeMillis()
+                            delay(400)
+                            carriedBytes = null
+                            carriedRoot = null
+                            continue
+                        } else if (composeOcr != null) {
+                            log.add("app triage: tapping Compose OCR at (${composeOcr.x}, ${composeOcr.y})")
+                            CapriCursor.moveTo(composeOcr.x, composeOcr.y)
+                            CapriCursor.pulse()
+                            PhoneControl.tapAt(composeOcr.x, composeOcr.y)
+                            steps++
+                            lastProgressTime = System.currentTimeMillis()
+                            delay(400)
+                            carriedBytes = null
+                            carriedRoot = null
+                            continue
+                        }
                     }
                 }
 
@@ -2865,13 +2972,13 @@ Rules:
 
                     if (rawReplyWithTrace == null) {
                         consecutiveNoOpTurns++
-                        if (consecutiveNoOpTurns >= 3) {
-                            return "brain didn't respond after 3 tries, choom. ${summary(log)}"
+                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 8_000L)) {
+                            return "brain timed out with zero progress, choom. shutting down screen control. ${summary(log)}"
                         }
-                        log.add("brain unresponsive, retrying")
+                        log.add("brain unresponsive, retrying once")
                         carriedBytes = rawBytes
                         carriedRoot = root
-                        delay(600)
+                        delay(400)
                         continue
                     }
 
@@ -2888,16 +2995,8 @@ Rules:
                         steps++
                         consecutiveNoOpTurns++
                         if (lastTraceId != -1) BrainTraceStore.updateTurnOutcome(lastTraceId, "Unreadable/Failed Parse", "FAILED")
-                        if (consecutiveNoOpTurns >= 2) {
-                            if (isGameMode) {
-                                log.add("anti-abandonment guard: model unreadable 2 turns; performing camera look recovery")
-                                val (swO, shO) = PhoneControl.orientedScreenSize(lastShotWidth, lastShotHeight)
-                                val (origX, origY) = ControlRegions.resolve(context, "look") ?: Pair(swO * 3 / 4, shO / 2)
-                                PhoneControl.look(origX, origY, 280, 0, 300L)
-                            }
-                            consecutiveNoOpTurns = 0
-                            delay(400)
-                            continue
+                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 8_000L)) {
+                            return "brain could not decide next move with screen frozen, choom. shutting down. ${summary(log)}"
                         }
                         carriedBytes = rawBytes
                         carriedRoot = root

@@ -48,14 +48,14 @@ object AgentMemory {
     private var memoryCache: JSONObject? = null
     private var initialized = false
 
-    // Standard 5-lane Y centers for landscape grid/lawn games (e.g., PvZ lawn rows 1..5; Row 3 center = 0.53f)
-    private val LANE_Y_CENTERS = floatArrayOf(0.25f, 0.39f, 0.53f, 0.68f, 0.82f)
-    // Center-out lane priority: Row 3 (middle) first, then Rows 2 & 4, then Rows 1 & 5
-    private val CENTER_OUT_LANES = intArrayOf(2, 1, 3, 0, 4)
-    // Standard X columns for planting (left-to-right defense columns)
+    // Generic normalized row centers for 2D landscape board/grid screens (0.25f .. 0.82f)
+    private val ROW_Y_CENTERS = floatArrayOf(0.25f, 0.39f, 0.53f, 0.68f, 0.82f)
+    // Center-out row priority: Row 2 (middle) first, then Rows 1 & 3, then Rows 0 & 4
+    private val CENTER_OUT_ROWS = intArrayOf(2, 1, 3, 0, 4)
+    // Generic normalized column centers for left-to-right grid placements
     private val COL_X_CENTERS = floatArrayOf(0.26f, 0.34f, 0.42f, 0.50f, 0.58f, 0.66f, 0.74f, 0.82f, 0.89f)
-    // Tracks outer lanes that failed to accept a plant (e.g., unsodded dirt in PvZ 1-1 / 1-2)
-    private val unsoddedLanesByPkg = mutableMapOf<String, MutableSet<Int>>()
+    // Tracks outer rows that rejected placements or are locked
+    private val unavailableRowsByPkg = mutableMapOf<String, MutableSet<Int>>()
 
     @Synchronized
     fun init(context: Context) {
@@ -278,24 +278,24 @@ object AgentMemory {
     @Synchronized
     fun clearSessionSpatialMemory(pkg: String) {
         spatialLedger.remove(pkg)
-        unsoddedLanesByPkg.remove(pkg)
+        unavailableRowsByPkg.remove(pkg)
         lastSelectedCardCoord = null
     }
 
     @Synchronized
-    fun applyLawnAnchor(anchorX: Float, anchorY: Float) {
+    fun applyBoardAnchor(anchorX: Float, anchorY: Float) {
         val dy = anchorY.coerceIn(0.35f, 0.70f) - 0.53f
         val base = floatArrayOf(0.25f, 0.39f, 0.53f, 0.68f, 0.82f)
-        for (i in LANE_Y_CENTERS.indices) {
-            LANE_Y_CENTERS[i] = (base[i] + dy).coerceIn(0.18f, 0.92f)
+        for (i in ROW_Y_CENTERS.indices) {
+            ROW_Y_CENTERS[i] = (base[i] + dy).coerceIn(0.18f, 0.92f)
         }
     }
 
-    private fun yToLaneIndex(normY: Float): Int {
+    private fun yToRowIndex(normY: Float): Int {
         var bestIdx = 0
         var bestDist = Float.MAX_VALUE
-        for (i in LANE_Y_CENTERS.indices) {
-            val d = abs(normY - LANE_Y_CENTERS[i])
+        for (i in ROW_Y_CENTERS.indices) {
+            val d = abs(normY - ROW_Y_CENTERS[i])
             if (d < bestDist) {
                 bestDist = d
                 bestIdx = i
@@ -321,15 +321,14 @@ object AgentMemory {
     fun recordPlacement(pkg: String, normX: Float, normY: Float, label: String = "placed") {
         if (normY < 0.19f || normX < 0.16f) return
         val list = spatialLedger.getOrPut(pkg) { mutableListOf() }
-        val lane = yToLaneIndex(normY)
+        val row = yToRowIndex(normY)
         val col = xToColIndex(normX)
-        // If a placement succeeded on this lane, it is definitely sodded
-        unsoddedLanesByPkg[pkg]?.remove(lane)
+        unavailableRowsByPkg[pkg]?.remove(row)
         list.add(
             PlacementPoint(
                 normX = normX,
                 normY = normY,
-                laneIndex = lane,
+                laneIndex = row,
                 colIndex = col,
                 label = label,
                 timestamp = System.currentTimeMillis()
@@ -344,10 +343,9 @@ object AgentMemory {
         val idx = list.indexOfLast { hypot((it.normX - normX).toDouble(), (it.normY - normY).toDouble()) < 0.08 }
         if (idx >= 0) {
             val removed = list.removeAt(idx)
-            // If an outer lane (not Row 3 center) had 0 prior successful plants and just rejected a placement,
-            // mark it as unsodded/unavailable so we don't keep missing Row 3 on 1-lane or 3-lane levels!
+            // If an outer row (not middle) had 0 prior successful actions and just failed, mark as unavailable
             if (removed.laneIndex != 2 && list.none { it.laneIndex == removed.laneIndex }) {
-                unsoddedLanesByPkg.getOrPut(pkg) { mutableSetOf() }.add(removed.laneIndex)
+                unavailableRowsByPkg.getOrPut(pkg) { mutableSetOf() }.add(removed.laneIndex)
             }
         }
     }
@@ -370,38 +368,37 @@ object AgentMemory {
         val list = spatialLedger[pkg].orEmpty()
         if (rawNormY < 0.19f) return Pair(rawNormX, rawNormY)
 
-        val unsodded = unsoddedLanesByPkg[pkg].orEmpty()
-        val validLanes = CENTER_OUT_LANES.filter { it !in unsodded }.ifEmpty { listOf(2) }
+        val unavailable = unavailableRowsByPkg[pkg].orEmpty()
+        val validRows = CENTER_OUT_ROWS.filter { it !in unavailable }.ifEmpty { listOf(2) }
 
-        val targetLane = yToLaneIndex(rawNormY)
-        val laneCounts = IntArray(5)
+        val targetRow = yToRowIndex(rawNormY)
+        val rowCounts = IntArray(5)
         for (p in list) {
-            if (p.laneIndex in 0..4) laneCounts[p.laneIndex]++
+            if (p.laneIndex in 0..4) rowCounts[p.laneIndex]++
         }
 
-        // Always allow at least 2 plants on Row 3 (center lane) before forcing overflow to outer lanes,
-        // so early 1-lane PvZ levels never deflect Row 3 shots onto unsodded Row 1/Row 2 dirt!
-        val minCount = validLanes.minOfOrNull { laneCounts[it] } ?: 0
+        // Allow at least 2 items on the middle row before forcing overflow
+        val minCount = validRows.minOfOrNull { rowCounts[it] } ?: 0
         val hitExistingSpot = list.any { hypot((it.normX - rawNormX).toDouble(), (it.normY - rawNormY).toDouble()) < 0.065 }
 
-        val chosenLane = when {
-            targetLane !in validLanes -> validLanes.minByOrNull { laneCounts[it] } ?: 2
-            targetLane == 2 && laneCounts[2] < 2 && !hitExistingSpot -> 2
-            (laneCounts[targetLane] > minCount && minCount == 0 && laneCounts[2] >= 2) ||
-                    (laneCounts[targetLane] >= minCount + 2) || hitExistingSpot -> {
-                validLanes.minByOrNull { laneCounts[it] } ?: targetLane
+        val chosenRow = when {
+            targetRow !in validRows -> validRows.minByOrNull { rowCounts[it] } ?: 2
+            targetRow == 2 && rowCounts[2] < 2 && !hitExistingSpot -> 2
+            (rowCounts[targetRow] > minCount && minCount == 0 && rowCounts[2] >= 2) ||
+                    (rowCounts[targetRow] >= minCount + 2) || hitExistingSpot -> {
+                validRows.minByOrNull { rowCounts[it] } ?: targetRow
             }
-            else -> targetLane
+            else -> targetRow
         }
 
-        val finalY = LANE_Y_CENTERS[chosenLane]
+        val finalY = ROW_Y_CENTERS[chosenRow]
 
-        val usedColsInLane = list.filter { it.laneIndex == chosenLane }.map { it.colIndex }.toSet()
+        val usedColsInRow = list.filter { it.laneIndex == chosenRow }.map { it.colIndex }.toSet()
         val requestedCol = xToColIndex(rawNormX).coerceIn(0, 6)
-        val chosenCol = if (requestedCol !in usedColsInLane) {
+        val chosenCol = if (requestedCol !in usedColsInRow) {
             requestedCol
         } else {
-            (0..6).firstOrNull { it !in usedColsInLane } ?: ((requestedCol + 1) % 6)
+            (0..6).firstOrNull { it !in usedColsInRow } ?: ((requestedCol + 1) % 6)
         }
 
         val finalX = COL_X_CENTERS[chosenCol]
@@ -410,7 +407,7 @@ object AgentMemory {
 
     @Synchronized
     fun suggestNextBoardTarget(pkg: String): Pair<Float, Float> {
-        return deconflictBoardPlacement(pkg, 0.34f, LANE_Y_CENTERS[2])
+        return deconflictBoardPlacement(pkg, 0.34f, ROW_Y_CENTERS[2])
     }
 
     // ---- Outcome & Blacklist Memory (Tier 3) -------------------------

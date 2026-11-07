@@ -329,6 +329,13 @@ You are Capri, the user's tsundere partner living in their phone.
             is Cmd.Text -> {
                 textTemplates.map { it.replace("{c}", cmd.contact) }
             }
+            is Cmd.Email -> {
+                listOf(
+                    "drafting an email to {c}. don't send anything weird, dummy.",
+                    "opening email compose for {c}.",
+                    "ready to send to {c}. check it before it goes out, okay?"
+                ).map { it.replace("{c}", cmd.contact) }
+            }
             is Cmd.SetDefaultApp -> {
                 setDefaultAppTemplates.map { it.replace("{cat}", cmd.category).replace("{app}", cmd.appName) }
             }

@@ -171,4 +171,13 @@ class IntentParserTest {
         val cmd2 = IntentParser.parse("swipe down 3 times")
         assert(cmd2 is Cmd.Scroll && cmd2.count == 3)
     }
+
+    @Test
+    fun testParseEmail() {
+        val cmd1 = IntentParser.parse("write an email to boss saying let's meet tomorrow")
+        assert(cmd1 is Cmd.Email && cmd1.contact == "boss" && cmd1.message == "let's meet tomorrow")
+
+        val cmd2 = IntentParser.parse("send email to john@example.com with subject Meeting saying hello")
+        assert(cmd2 is Cmd.Email && cmd2.contact == "john@example.com" && cmd2.subject == "Meeting" && cmd2.message == "hello")
+    }
 }

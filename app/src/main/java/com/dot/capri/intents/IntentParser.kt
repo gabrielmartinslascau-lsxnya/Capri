@@ -8,6 +8,10 @@ object IntentParser {
     private val videoPlayRegex = Regex("^play\\s+(?:a\\s+)?(?:video|vid|reels?|shorts?)$", RegexOption.IGNORE_CASE)
     private val playRegex = Regex("^play\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val callRegex = Regex("^(?:call|phone|dial)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val emailWithSubjAndBodyRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+?)\\s+(?:with\\s+subject|about)\\s+(.+?)\\s+(?:saying|that|to\\s+say|body)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val emailWithSubjRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+?)\\s+(?:with\\s+subject|about)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val emailWithBodyRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+?)\\s+(?:saying|that|to\\s+say|body)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    private val emailSimpleRegex = Regex("^(?:(?:send|write|compose)(?:\\s+an?)?\\s+email\\s+to|email)\\s+(.+)$", RegexOption.IGNORE_CASE)
     private val textRegex = Regex("^(?:text|message|whatsapp|send\\s+a\\s+text\\s+to|send\\s+message\\s+to)\\s+(.+?)(?:\\s+(?:saying|that|to\\s+say)\\s+(.+))?$", RegexOption.IGNORE_CASE)
     private val openRegex = Regex("^(?:open|launch|start|go to|run)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
     private val conversationalOpenRegex = Regex("^(?:can\\s+i\\s+|i\\s+want\\s+to\\s+|let's\\s+|let\\s+us\\s+)(?:watch|use|view|open|check|go\\s+to)\\s+(?:the\\s+)?(?:app\\s+)?(.+?)(?:\\s+app)?$", RegexOption.IGNORE_CASE)
@@ -233,6 +237,30 @@ object IntentParser {
 
         if (clearFieldRegex.matches(raw) || clearFieldRegex.matches(cleaned)) {
             return Cmd.ClearField
+        }
+
+        emailWithSubjAndBodyRegex.find(cleaned)?.let { match ->
+            val contact = cleanContactName(match.groups[1]?.value?.trim().orEmpty())
+            val subj = match.groups[2]?.value?.trim()
+            val msg = match.groups[3]?.value?.trim()
+            if (contact.isNotEmpty()) return Cmd.Email(contact, subj, msg)
+        }
+
+        emailWithSubjRegex.find(cleaned)?.let { match ->
+            val contact = cleanContactName(match.groups[1]?.value?.trim().orEmpty())
+            val subj = match.groups[2]?.value?.trim()
+            if (contact.isNotEmpty()) return Cmd.Email(contact, subj, null)
+        }
+
+        emailWithBodyRegex.find(cleaned)?.let { match ->
+            val contact = cleanContactName(match.groups[1]?.value?.trim().orEmpty())
+            val msg = match.groups[2]?.value?.trim()
+            if (contact.isNotEmpty()) return Cmd.Email(contact, null, msg)
+        }
+
+        emailSimpleRegex.find(cleaned)?.let { match ->
+            val contact = cleanContactName(match.groups[1]?.value?.trim().orEmpty())
+            if (contact.isNotEmpty()) return Cmd.Email(contact, null, null)
         }
 
         writeRegex.find(cleaned)?.let { match ->

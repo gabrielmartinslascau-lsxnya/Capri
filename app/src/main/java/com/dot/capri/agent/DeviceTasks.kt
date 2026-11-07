@@ -32,7 +32,7 @@ object DeviceTasks {
                 "gmail|youtube|whatsapp|spotify|mornye|library|song|songs|music|playlist|playlists|track|tracks|album|player|" +
                 "camera|calculator|maps|list|menu|icon|drawer|home|launcher|bottom|top|" +
                 "phone|wifi|bluetooth|notification|notifications|message|messages|contact|contacts|" +
-                "game|games|level|levels|match|round|world|pvz|plants|zombies|minecraft|chess|roblox|clash|brawl)\\b",
+                "game|games|level|levels|match|round|world|stage|board|quest)\\b",
         RegexOption.IGNORE_CASE
     )
 
@@ -41,20 +41,13 @@ object DeviceTasks {
                 "(?:play\\s+(?:this|the|a|my)?\\s*game|play\\s+for\\s+me|play\\s+it|take\\s+over(?:\\s+the\\s+screen)?|" +
                 "control\\s+the\\s+screen|play\\s+on\\s+screen|help\\s+me\\s+(?:win|play|beat)|" +
                 "win\\s+(?:this|the)\\s+(?:game|level|match)|beat\\s+(?:this|the)\\s+(?:game|level)|" +
-                "make\\s+a\\s+new\\s+world|mine\\s+wood|plant\\s+(?:sunflowers|peashooters|defenses)|" +
-                "play\\s+(?:pvz|plants\\s+vs\\.?\\s+zombies?|minecraft|chess|roblox|clash\\s+royale|brawl\\s+stars|subway\\s+surfers|candy\\s+crush))(?:\\b.*)?$",
+                "start\\s+(?:the\\s+)?game|resume\\s+(?:the\\s+)?game)(?:\\b.*)?$",
         RegexOption.IGNORE_CASE
     )
 
     private val explicitMusicRegex = Regex(
         "\\b(song|songs|music|track|tracks|album|artist|playlist|liked\\s+songs|library|mornye|spotify|youtube\\s+music|yt\\s+music|soundcloud|apple\\s+music|listen\\s+to)\\b",
         RegexOption.IGNORE_CASE
-    )
-
-    private val knownGameKeywords = setOf(
-        "pvz", "plants", "zombies", "minecraft", "mojang", "chess", "roblox",
-        "clash", "brawl", "supercell", "genshin", "pubg", "freefire", "terraria",
-        "balatro", "slay", "stardew", "amongus", "innersloth", "geometry", "subwaysurf"
     )
 
     /** True when the user is asking Capri to play a game (either the current screen or a named game). */
@@ -76,21 +69,17 @@ object DeviceTasks {
     }
 
     /**
-     * Resolves a user query (e.g. "pvz", "plants vs zombies", "minecraft", or full sentence)
+     * Resolves a user query (e.g. app or game title)
      * to an installed game Option if one is installed on the device.
      */
     fun resolveInstalledGame(context: Context, rawText: String): AppChooser.Option? {
         val cleaned = rawText.trim().replace(leadingCapri, "").lowercase(Locale.US)
         if (explicitMusicRegex.containsMatchIn(cleaned)) return null
 
-        val wantsPvz = cleaned.contains("pvz") || cleaned.contains("plants vs") || cleaned.contains("zombies")
         val pm = context.packageManager
-        val launchers = AppChooser.launchers(context)
 
         fun isGameOption(opt: AppChooser.Option): Boolean {
-            val lbl = opt.label.lowercase(Locale.US)
-            val pkg = opt.pkg.lowercase(Locale.US)
-            val isSystemCategorizedGame = try {
+            return try {
                 val appInfo = pm.getApplicationInfo(opt.pkg, 0)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     appInfo.category == ApplicationInfo.CATEGORY_GAME
@@ -101,16 +90,6 @@ object DeviceTasks {
             } catch (_: Exception) {
                 false
             }
-            val looksLikeGame = knownGameKeywords.any { kw -> lbl.contains(kw) || pkg.contains(kw) }
-            return isSystemCategorizedGame || looksLikeGame
-        }
-
-        if (wantsPvz) {
-            launchers.firstOrNull { opt ->
-                val lbl = opt.label.lowercase(Locale.US)
-                val pkg = opt.pkg.lowercase(Locale.US)
-                lbl.contains("pvz") || lbl.contains("plants") || lbl.contains("zombie") || pkg.contains("pvz") || pkg.contains("zombies")
-            }?.let { return it }
         }
 
         val explicitName = AppChooser.extractExplicitAppName(cleaned) ?: cleaned

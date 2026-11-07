@@ -47,6 +47,7 @@ object IntentExecutor {
                 is Cmd.ClearField -> com.dot.capri.accessibility.ScreenWriter.clearFocusedField() is com.dot.capri.accessibility.WriteResult.Success
                 is Cmd.Call -> executeCall(context, cmd)
                 is Cmd.Text -> executeText(context, cmd)
+                is Cmd.Email -> executeEmail(context, cmd)
                 is Cmd.Open -> executeOpen(context, cmd)
                 is Cmd.SetDefaultApp -> executeSetDefaultApp(context, cmd)
                 is Cmd.GoHome -> executeGoHome(context)
@@ -436,6 +437,43 @@ object IntentExecutor {
                 false
             }
             else -> false
+        }
+    }
+
+    private fun executeEmail(context: Context, cmd: Cmd.Email): Boolean {
+        val target = cmd.contact.trim()
+        val mailUri = if (target.contains("@")) {
+            Uri.parse("mailto:${Uri.encode(target)}")
+        } else {
+            Uri.parse("mailto:")
+        }
+        val intent = Intent(Intent.ACTION_SENDTO, mailUri).apply {
+            if (!cmd.subject.isNullOrBlank()) {
+                putExtra(Intent.EXTRA_SUBJECT, cmd.subject)
+            }
+            if (!cmd.message.isNullOrBlank()) {
+                putExtra(Intent.EXTRA_TEXT, cmd.message)
+            }
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: Exception) {
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "message/rfc822"
+                if (target.contains("@")) putExtra(Intent.EXTRA_EMAIL, arrayOf(target))
+                if (!cmd.subject.isNullOrBlank()) putExtra(Intent.EXTRA_SUBJECT, cmd.subject)
+                if (!cmd.message.isNullOrBlank()) putExtra(Intent.EXTRA_TEXT, cmd.message)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(sendIntent)
+                true
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+                false
+            }
         }
     }
 }

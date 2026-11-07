@@ -21,6 +21,7 @@ sealed interface Cmd {
     object ClearField : Cmd
     data class Call(val contact: String) : Cmd
     data class Text(val contact: String, val message: String?) : Cmd
+    data class Email(val contact: String, val subject: String?, val message: String?) : Cmd
     data class Open(val app: String) : Cmd
     data class Search(val query: String) : Cmd
     data class SeeScreen(val prompt: String) : Cmd
