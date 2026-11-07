@@ -13,6 +13,7 @@ import com.dot.capri.llm.LlmRouter
 import com.dot.capri.util.NetworkUtils
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -122,6 +123,7 @@ Actions (reply with ONLY a single JSON object, always including your updated "pl
 {"do":"media","dir":"play|pause|next|previous","plan":"Control active media playback"}
 {"do":"power_menu","plan":"Open system power menu on screen"}
 {"do":"back","undo":"opened wrong menu","plan":"Close unintended popup and blacklist last move"}
+{"do":"ask_user","say":"Show me what to tap or scroll, dummy. Just once.","plan":"Ask user to demonstrate next touch on screen"}
 {"do":"wait","plan":"Wait for loading"}
 {"do":"done","say":"short in-character tsundere remark confirming what you did (e.g. 'there, i started your liked songs. don't get used to me spoiling you.' or 'done. next time tap it yourself, dummy.')"}
 {"do":"fail","say":"short in-character explanation of why the screen blocked you"}
@@ -166,6 +168,7 @@ Actions (reply with ONLY a single JSON object, always including your updated "pl
 {"do":"power_menu","plan":"Open system power menu on screen"}
 {"do":"back","undo":"opened wrong screen","plan":"Undo unintended navigation and blacklist last move"}
 {"do":"home","plan":"Go home"}
+{"do":"ask_user","say":"Show me what to tap or scroll, dummy. Just once.","plan":"Ask user to demonstrate next touch on screen"}
 {"do":"wait","plan":"Wait for loading screen"}
 {"do":"done","say":"short in-character tsundere remark confirming what you did (e.g. 'there, i opened your playlist. don't get used to me spoiling you.' or 'done. next time tap it yourself, dummy.')"}
 {"do":"fail","say":"short in-character explanation of why the screen blocked you"}
@@ -201,6 +204,7 @@ VOLUME <up|down|mute|unmute> | PLAN: <strategy>
 MEDIA <play|pause|next|previous> | PLAN: <strategy>
 POWER_MENU | PLAN: <strategy>
 BACK | UNDO: <why last move was wrong>
+ASK_USER <message> | PLAN: <strategy>        (asks user to demonstrate 1 tap or scroll on screen)
 WAIT
 DONE
 
@@ -232,6 +236,7 @@ VOLUME <up|down|mute|unmute> | PLAN: <strategy>
 MEDIA <play|pause|next|previous> | PLAN: <strategy>
 POWER_MENU | PLAN: <strategy>
 BACK | UNDO: <why last move was wrong>
+ASK_USER <message> | PLAN: <strategy>        (asks user to demonstrate 1 tap or scroll on screen)
 WAIT
 DONE
 
@@ -336,6 +341,7 @@ Rules:
                 var doKind = o.optString("do").lowercase(Locale.US).trim()
                 if (doKind == "tap_id" || doKind == "click") doKind = "tap"
                 if (doKind == "tap_then_mb" || doKind == "coord_then_mb") doKind = "press_region"
+                if (doKind == "ask" || doKind == "show_me") doKind = "ask_user"
                 if (doKind == "look_around" || doKind.startsWith("look_")) {
                     val subDir = doKind.removePrefix("look_").ifBlank { "around" }
                     val (ldx, ldy) = dirToLookDelta(subDir, screenW, screenH)
@@ -431,6 +437,11 @@ Rules:
         if (firstLine.equals("FAIL", ignoreCase = true) || firstLine.startsWith("FAIL ", ignoreCase = true)) {
             val msg = firstLine.substringAfter("FAIL", "").trim().ifEmpty { "failed." }
             return Act("fail", null, null, null, null, msg, null, null, null, null, plan = extractedPlan)
+        }
+        val askUserMatch = Regex("^(?:ASK_USER|SHOW_ME|ASK)\\s+(.+)$", RegexOption.IGNORE_CASE).find(firstLine)
+        if (askUserMatch != null) {
+            val msg = askUserMatch.groupValues[1].trim()
+            return Act("ask_user", null, null, null, null, msg, null, null, null, null, plan = extractedPlan)
         }
 
         val openMatch = Regex("^(?:OPEN|LAUNCH|START)\\s+(.+)$", RegexOption.IGNORE_CASE).find(firstLine)
@@ -2476,6 +2487,82 @@ Rules:
         return ActionResult.Executed(candidateMove, actionCmd, recordedPlacementCoord)
     }
 
+    private fun matchGreenlightMoveToAct(
+        gm: MoveMemory.Move,
+        items: List<PhoneControl.UiItem>,
+        sw: Int,
+        sh: Int
+    ): Act? {
+        if (gm.kind == MoveMemory.Kind.SCROLL) {
+            return Act("scroll", dir = gm.text ?: "down", plan = "Executing verified greenlight scroll")
+        }
+        if (gm.kind == MoveMemory.Kind.PRESS_REGION && !gm.text.isNullOrBlank()) {
+            return Act("press_region", region = gm.text, label = gm.label, plan = "Executing verified greenlight macro button")
+        }
+        if (gm.isPath) {
+            val px1 = (gm.nx * sw).toInt()
+            val py1 = (gm.ny * sh).toInt()
+            val px2 = (gm.nx2 * sw).toInt()
+            val py2 = (gm.ny2 * sh).toInt()
+            return Act("swipe", x = px1, y = py1, x2 = px2, y2 = py2, plan = "Executing verified greenlight gesture")
+        }
+        val targetLabel = gm.label?.takeIf { it.isNotBlank() } ?: gm.text?.takeIf { it.isNotBlank() }
+        if (targetLabel != null) {
+            val matchedItem = items.firstOrNull {
+                it.label.equals(targetLabel, ignoreCase = true) ||
+                        (it.label.isNotBlank() && it.label.contains(targetLabel, ignoreCase = true))
+            }
+            if (matchedItem != null) {
+                return Act("tap", id = matchedItem.id, text = matchedItem.label, x = matchedItem.cx, y = matchedItem.cy, label = matchedItem.label, plan = "Executing verified greenlight move: ${matchedItem.label}")
+            }
+        }
+        if (gm.isPoint) {
+            val px = (gm.nx * sw).toInt().coerceIn(0, sw - 1)
+            val py = (gm.ny * sh).toInt().coerceIn(0, sh - 1)
+            return Act("tap", x = px, y = py, label = gm.label, plan = "Executing verified greenlight move at ($px, $py)")
+        }
+        return null
+    }
+
+    private suspend fun triggerHumanDemonstration(
+        context: Context,
+        pkg: String,
+        goal: String,
+        stateKey: String,
+        promptSay: String?,
+        chatVisible: suspend (Boolean) -> Unit,
+        log: MutableList<String>
+    ): Boolean {
+        val prompt = promptSay?.takeIf { it.isNotBlank() } ?: "Show me what to tap or scroll, dummy. Just once."
+        CapriCursor.setStatus(prompt)
+        chatVisible(false) // Option 2: Hide chat bubble so user has full screen touch freedom
+        log.add("asking user demonstration: \"$prompt\"")
+
+        val deferred = HumanDemonstrationListener.startListening(pkg, goal, stateKey)
+        val demoAction = try {
+            withTimeoutOrNull(25_000L) {
+                deferred.await()
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            HumanDemonstrationListener.stopListening()
+        }
+
+        return if (demoAction != null) {
+            log.add("user demonstrated ${demoAction.type} (label=${demoAction.label ?: "none"}, coords=(${demoAction.cx},${demoAction.cy})) -> engraved as GREENLIGHT move")
+            CapriCursor.setStatus("Got it! Taking over...")
+            CapriCursor.pulse()
+            delay(400)
+            true
+        } else {
+            log.add("user demonstration timed out")
+            CapriCursor.setStatus("Didn't show me anything, dummy.")
+            delay(400)
+            false
+        }
+    }
+
     suspend fun run(
         context: Context,
         goal: String,
@@ -2630,6 +2717,9 @@ Rules:
                     fingerprint = beforeFp
                 )
 
+                val (sw, sh) = PhoneControl.orientedScreenSize(lastShotWidth, lastShotHeight)
+                val aspect = if (sh > 0) sw.toFloat() / sh.toFloat() else 0.5f
+
                 var chosen: Act? = null
                 val rp = confirmedAction
                 if (rp != null) {
@@ -2639,6 +2729,46 @@ Rules:
                         chosen = Act(rp.kind, match.id, rp.arg, null, null, null, null, null, null, null)
                     } else {
                         log.add("screen changed, re-checking")
+                    }
+                }
+
+                // Greenlight Fast-Path Check (<50ms): Execute verified greenlight moves from human demo or past success
+                if (chosen == null) {
+                    val greenlightMoves = AgentMemory.getGreenlightMoves(stateKey)
+                    val gm = greenlightMoves.firstOrNull { move ->
+                        !AgentMemory.isBlacklisted(stateKey, move.describe(), move, goal, aspect)
+                    }
+                    if (gm != null) {
+                        val matchedAct = matchGreenlightMoveToAct(gm, items, sw, sh)
+                        if (matchedAct != null) {
+                            log.add("greenlight fast-path: executing verified move '${gm.describe()}' (<50ms)")
+                            CapriCursor.setStatus("greenlight move: ${gm.describe()}...")
+                            CapriCursor.pulse()
+                            chosen = matchedAct
+                        }
+                    }
+                }
+
+                // Autonomous Demonstration Request: If stuck or dead-clicking repeatedly in app mode, ask user to show once!
+                if (chosen == null && !isGameMode && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 })) {
+                    log.add("uncertain/stuck in app mode; requesting user demonstration")
+                    val demonstrated = triggerHumanDemonstration(
+                        context = context,
+                        pkg = pkg,
+                        goal = goal,
+                        stateKey = stateKey,
+                        promptSay = "Show me what to tap or scroll, dummy. Just once.",
+                        chatVisible = chatVisible,
+                        log = log
+                    )
+                    if (demonstrated) {
+                        consecutiveNoOpTurns = 0
+                        deadClickCounts.clear()
+                        steps++
+                        carriedRoot = null
+                        carriedBytes = null
+                        delay(350)
+                        continue
                     }
                 }
 
@@ -2707,8 +2837,26 @@ Rules:
                 }
 
                 var a: Act = chosen!!
-                val (sw, sh) = PhoneControl.orientedScreenSize(lastShotWidth, lastShotHeight)
-                val aspect = if (sh > 0) sw.toFloat() / sh.toFloat() else 0.5f
+
+                // Handle ask_user action from model
+                if (a.doWhat == "ask_user") {
+                    triggerHumanDemonstration(
+                        context = context,
+                        pkg = pkg,
+                        goal = goal,
+                        stateKey = stateKey,
+                        promptSay = a.say,
+                        chatVisible = chatVisible,
+                        log = log
+                    )
+                    consecutiveNoOpTurns = 0
+                    deadClickCounts.clear()
+                    steps++
+                    carriedRoot = null
+                    carriedBytes = null
+                    delay(350)
+                    continue
+                }
 
                 // Anti-Surrender Guard: Prevent giving up or claiming done before action phase executed
                 if (stateMachine.shouldRejectDoneOrFail(a)) {

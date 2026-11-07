@@ -720,6 +720,13 @@ object AgentMemory {
             }
         }.take(7)
 
+        val verified = buildList {
+            MoveMemory.topGood(stateKey, max = 4).forEach { add(it.describe()) }
+            verifiedActionsByState[stateKey]?.entries?.toList()?.takeLast(5)?.forEach { (k, _) ->
+                if (k !in this) add(k)
+            }
+        }.take(5)
+
         val recent = recentSessionLog.takeLast(5)
 
         return buildString {
@@ -727,6 +734,9 @@ object AgentMemory {
             appendLine("ACTIVE STRATEGIC PLAN: $plan")
             if (breadcrumbHints.isNotBlank()) {
                 appendLine(breadcrumbHints)
+            }
+            if (verified.isNotEmpty()) {
+                appendLine("VERIFIED GREENLIGHT MOVES (LEARNED FROM USER / PREVIOUSLY WORKED - PREFER THESE): ${verified.joinToString(", ")}")
             }
             if (deadMoves.isNotEmpty()) {
                 appendLine("BLACKLISTED NO-EFFECT MOVES (DO NOT REPEAT): ${deadMoves.joinToString(", ")}")
@@ -738,6 +748,11 @@ object AgentMemory {
                 appendLine("RECENT STEPS (DO NOT REPEAT TAPS ALREADY DONE): ${recent.joinToString(" > ")}")
             }
         }.trim()
+    }
+
+    @Synchronized
+    fun getGreenlightMoves(stateKey: String): List<MoveMemory.Move> {
+        return MoveMemory.topGood(stateKey, max = 3)
     }
 
     @Synchronized

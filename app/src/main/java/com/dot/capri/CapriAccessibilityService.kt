@@ -38,6 +38,7 @@ class CapriAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         com.dot.capri.macro.MacroRecorder.onEvent(this, event)
+        com.dot.capri.agent.HumanDemonstrationListener.onAccessibilityEvent(this, event)
     }
 
     override fun onInterrupt() {
