@@ -10,20 +10,24 @@
     <LinearLayout
         android:id="@+id/headerBar"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="wrap_content"
+        android:minHeight="64dp"
         android:background="#111827"
         android:elevation="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingEnd="12dp">
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
         <ImageButton
             android:id="@+id/btnBackRealTalk"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Back"
+            android:scaleType="centerInside"
             android:src="@drawable/ic_real_talk_back" />
 
         <LinearLayout
@@ -76,10 +80,11 @@
 
         <ImageButton
             android:id="@+id/btnClearRealTalk"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Clear conversation"
+            android:scaleType="centerInside"
             android:src="@drawable/ic_real_talk_clear" />
     </LinearLayout>
 

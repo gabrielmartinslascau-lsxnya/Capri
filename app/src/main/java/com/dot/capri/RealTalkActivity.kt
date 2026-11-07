@@ -17,6 +17,9 @@ import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -29,6 +32,8 @@ import java.util.UUID
 
 class RealTalkActivity : AppCompatActivity() {
 
+    private lateinit var headerBar: View
+    private lateinit var composerContainer: View
     private lateinit var listMessages: ListView
     private lateinit var emptyStateContainer: LinearLayout
     private lateinit var typingIndicatorContainer: LinearLayout
@@ -54,6 +59,7 @@ class RealTalkActivity : AppCompatActivity() {
         setContentView(R.layout.activity_real_talk)
 
         bindViews()
+        setupWindowInsets()
         setupAdapter()
         loadConversationHistory()
         refreshHeaderModelBadge()
@@ -73,6 +79,8 @@ class RealTalkActivity : AppCompatActivity() {
     }
 
     private fun bindViews() {
+        headerBar = findViewById(R.id.headerBar)
+        composerContainer = findViewById(R.id.composerContainer)
         listMessages = findViewById(R.id.listRealTalkMessages)
         emptyStateContainer = findViewById(R.id.emptyStateContainer)
         typingIndicatorContainer = findViewById(R.id.typingIndicatorContainer)
@@ -82,6 +90,53 @@ class RealTalkActivity : AppCompatActivity() {
         btnSend = findViewById(R.id.btnSendRealTalk)
         btnBack = findViewById(R.id.btnBackRealTalk)
         btnClear = findViewById(R.id.btnClearRealTalk)
+    }
+
+    private fun setupWindowInsets() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val root = findViewById<View>(R.id.realTalkRoot)
+        val initialHeaderPaddingTop = headerBar.paddingTop
+        val initialHeaderPaddingBottom = headerBar.paddingBottom
+        val initialComposerPaddingBottom = composerContainer.paddingBottom
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBarInsets = insets.getInsets(
+                WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+
+            // Push headerBar and corner buttons below the status bar (battery, notifications, clock)
+            headerBar.setPadding(
+                headerBar.paddingLeft,
+                initialHeaderPaddingTop + statusBarInsets.top,
+                headerBar.paddingRight,
+                initialHeaderPaddingBottom
+            )
+
+            // Lift composerContainer above the soft keyboard or system navigation bar
+            val bottomInset = if (imeInsets.bottom > 0) {
+                imeInsets.bottom
+            } else {
+                navBarInsets.bottom
+            }
+            composerContainer.setPadding(
+                composerContainer.paddingLeft,
+                composerContainer.paddingTop,
+                composerContainer.paddingRight,
+                initialComposerPaddingBottom + bottomInset
+            )
+
+            // Keep list scrolled to latest message when keyboard pops up
+            if (imeInsets.bottom > 0 && messages.isNotEmpty()) {
+                listMessages.post {
+                    listMessages.setSelection(messages.size - 1)
+                }
+            }
+
+            insets
+        }
     }
 
     private fun setupAdapter() {

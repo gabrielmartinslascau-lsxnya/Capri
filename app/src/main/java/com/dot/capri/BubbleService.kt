@@ -15,6 +15,7 @@ import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.os.IBinder
 import android.os.VibrationEffect
@@ -26,6 +27,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -496,7 +498,7 @@ class BubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM
-            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
         }
 
         updateStatusIndicator()
@@ -596,6 +598,26 @@ class BubbleService : Service() {
 
         try {
             windowManager?.addView(chatView, params)
+
+            val layoutListener = object : ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    val cv = chatView ?: return
+                    val r = Rect()
+                    cv.getWindowVisibleDisplayFrame(r)
+                    val screenHeight = resources.displayMetrics.heightPixels
+                    val keypadHeight = screenHeight - r.bottom
+                    val targetY = if (keypadHeight > screenHeight * 0.15) keypadHeight else 0
+                    if (params.y != targetY) {
+                        params.y = targetY
+                        try {
+                            windowManager?.updateViewLayout(chatView, params)
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                }
+            }
+            chatView?.viewTreeObserver?.addOnGlobalLayoutListener(layoutListener)
         } catch (e: Exception) {
             Log.e("CAPRI_BUBBLE", "Failed to add chat view to WindowManager", e)
         }
