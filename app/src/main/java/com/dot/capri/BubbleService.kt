@@ -1807,6 +1807,11 @@ Output ONLY valid JSON.
                 IntentExecutor.execute(this, parsedCmd)
                 return "going home."
             }
+            is com.dot.capri.intents.Cmd.ClearHistory -> {
+                com.dot.capri.ai.CloudAiClient.clearHistory(this)
+                com.dot.capri.agent.UserMemory.clear(this)
+                return "cleared chat history and memory. fresh slate."
+            }
             else -> {
                 // Not a direct Cmd - proceed to general action request extraction or dev commands
             }

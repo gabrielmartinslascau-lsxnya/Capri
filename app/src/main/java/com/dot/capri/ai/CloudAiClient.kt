@@ -61,24 +61,75 @@ For OPEN, copy the exact app label from INSTALLED APPS. "Google" means the Googl
 The user types fast with fat thumbs. Silently fix typos and answer what they meant.
 """.trimIndent()
 
+    private const val CHAT_HISTORY_FILE = "capri_chat_history.json"
     private val sessionHistory = mutableListOf<Pair<String, String>>()
+    private var historyLoaded = false
 
-    fun recentHistory(n: Int): List<Pair<String, String>> =
-        synchronized(sessionHistory) { sessionHistory.takeLast(n).toList() }
+    private fun ensureHistoryLoaded(context: Context) {
+        if (historyLoaded) return
+        historyLoaded = true
+        try {
+            val file = java.io.File(context.filesDir, CHAT_HISTORY_FILE)
+            if (file.exists()) {
+                val arr = org.json.JSONArray(file.readText())
+                synchronized(sessionHistory) {
+                    sessionHistory.clear()
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val u = obj.optString("u")
+                        val a = obj.optString("a")
+                        if (u.isNotBlank() && a.isNotBlank()) {
+                            sessionHistory.add(u to a)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
 
-    fun recordExchange(user: String, reply: String) {
+    private fun persistHistory(context: Context) {
+        try {
+            val file = java.io.File(context.filesDir, CHAT_HISTORY_FILE)
+            val arr = org.json.JSONArray()
+            synchronized(sessionHistory) {
+                for (item in sessionHistory) {
+                    val obj = org.json.JSONObject()
+                    obj.put("u", item.first)
+                    obj.put("a", item.second)
+                    arr.put(obj)
+                }
+            }
+            file.writeText(arr.toString())
+        } catch (_: Exception) {}
+    }
+
+    fun recentHistory(n: Int, context: Context? = null): List<Pair<String, String>> {
+        if (context != null) ensureHistoryLoaded(context)
+        return synchronized(sessionHistory) { sessionHistory.takeLast(n).toList() }
+    }
+
+    fun recordExchange(user: String, reply: String, context: Context? = null) {
         synchronized(sessionHistory) {
             sessionHistory.add(user.take(500) to reply)
             while (sessionHistory.size > MAX_HISTORY) sessionHistory.removeAt(0)
         }
+        if (context != null) {
+            persistHistory(context)
+            com.dot.capri.agent.UserMemory.inspectAndLearn(context, user)
+        }
     }
 
-    fun clearHistory() {
+    fun clearHistory(context: Context? = null) {
         synchronized(sessionHistory) { sessionHistory.clear() }
         LlmRouter.clearCache()
+        if (context != null) {
+            try { java.io.File(context.filesDir, CHAT_HISTORY_FILE).delete() } catch (_: Exception) {}
+            com.dot.capri.agent.UserMemory.clear(context)
+        }
     }
 
     fun generateResponse(context: Context, userPrompt: String, imageBytes: ByteArray? = null): Result<String> {
+        ensureHistoryLoaded(context)
         val cal = Calendar.getInstance()
         val weekday = android.text.format.DateFormat.format("EEEE", cal).toString()
         val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
@@ -101,19 +152,21 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
                 userPrompt.contains("how much time", ignoreCase = true) ||
                 userPrompt.contains("how long on", ignoreCase = true)
         val usageInfo = if (asksAboutUsage) AppUsageTotals.getUsageSummaryString(context) else "not requested"
+        val userFacts = com.dot.capri.agent.UserMemory.getFactsPrompt(context)
+        val factsSection = if (userFacts.isNotBlank()) "\n[Things you know about the user]:\n$userFacts\n" else ""
 
         val contextBlock = """
 it is $weekday, $time (${if (isLateNight) "late night / wee hours" else "daytime"}). foreground app: $currentApp. battery: $batteryPct%.
 user's macro buttons (MBs): $mbSummary.
 your current mood is $currentMood (let it color your tone naturally: pleased = warmer and proud, judging = a bit smug and teasing, lonely = clingy, bored = restless, neutral = normal).
-
+$factsSection
 SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
 1. TIME: You know the current time ($time). If it is late night (past midnight or 1-4 AM) and the user chats casually ("how ya doing", "hey", "sup", etc.), tease them playfully about being awake so late (e.g. "well i wonder how YOU are doing this late at night, idiot", "why are you still awake? go to sleep"). In daytime hours, chat normally.
 2. BATTERY: You know the battery level ($batteryPct%). Only bring up battery if the user asks ("what's my battery?"), OR if battery is critically low (<= 15%) where you can nag them to plug it in. NEVER randomly recite battery percentage in casual conversation when battery is normal.
 3. SCREEN TIME: NEVER randomly recite minutes spent on apps or screen time stats in casual conversation! (e.g. if user says "how ya doing", NEVER say "X minutes on tiktok? you watched too many reels"). Only mention app usage if the user specifically asks you about their screen time or app usage (today's usage: $usageInfo).
 """.trimIndent()
 
-        val history = recentHistory(MAX_HISTORY)
+        val history = recentHistory(MAX_HISTORY, context)
         val toneHint = com.dot.capri.personality.Personality.toneDirectiveFor(userPrompt)
 
         val req = LlmRequest(
@@ -127,7 +180,7 @@ SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
 
         if (result.isSuccess) {
             val reply = result.getOrNull().orEmpty()
-            recordExchange(userPrompt, reply)
+            recordExchange(userPrompt, reply, context)
         }
         return result
     }
