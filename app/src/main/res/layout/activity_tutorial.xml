@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bubble_bg"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:orientation="vertical">
 
     <!-- Header Toolbar -->
     <LinearLayout
@@ -12,42 +12,381 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:layout_marginBottom="16dp">
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="12dp">
 
         <ImageButton
             android:id="@+id/btn_tutorial_close"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Back"
             android:src="@drawable/ic_close"
-            app:tint="@color/text_primary" xmlns:app="http://schemas.android.com/apk/res-auto" />
+            app:tint="@color/text_primary" />
 
-        <TextView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:text="Capri User Guide &amp; Tutorial"
-            android:textColor="@color/text_primary"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Capri Master Guide"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Step-by-step tutorial &amp; command cheat-sheet"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#222233" />
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:paddingHorizontal="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="24dp">
 
-        <TextView
-            android:id="@+id/tv_tutorial_content"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingExtra="4dp"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
+            android:orientation="vertical">
 
+            <!-- Card 1: Chatting & Live Screen Context -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_input_field"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#2E1B38"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="TALK"
+                        android:textColor="#E040FB"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="1. Natural Conversation &amp; Screen Vision"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="Chat naturally with Capri anytime via the floating bubble or Power Button. She has full live device context:"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="• Screen Inspection: &quot;What's on my screen?&quot; or &quot;Can you see this image?&quot;\n• Notification Briefing: &quot;What did I miss?&quot; (summarizes Android notifications)\n• Audio Check: &quot;What song is currently playing?&quot;\n• Battery Check: &quot;What is my battery level?&quot;\n• Casual Chat: &quot;How are you doing?&quot; (answers with tsundere companion personality)"
+                    android:textColor="#D0D0E0"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 2: Autonomous Screen Tasks -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_input_field"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#381024"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="AGENT"
+                        android:textColor="@color/accent_red_pink"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="2. Autonomous Screen Control (task: ...)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="Prefix complex multi-step screen requests with &quot;task:&quot; or &quot;agent:&quot; to let Capri operate apps automatically:"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="• Example: &quot;task: open Spotify and search for synthwave playlist&quot;\n• Example: &quot;task: open Mornye, search for song, click download and go home&quot;\n• Example: &quot;task: craft a wooden pickaxe in Minecraft&quot;\n\nHow it works:\n1. Capri activates her precision cursor ring and top STOP pill.\n2. She inspects UI elements or screenshots and executes actions step-by-step.\n3. Emergency Stop: Tap the pink STOP pill at any time to instantly cancel."
+                    android:textColor="#D0D0E0"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 3: Human-in-the-Loop Demonstration & Greenlight Memory -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:background="#16241D"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#103820"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="GREENLIGHT"
+                        android:textColor="#00E676"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="3. Human Demonstration &amp; Greenlight Memory"
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="When Capri is uncertain or navigating an ambiguous menu (e.g. choosing a playlist inside Spotify), she will ask you for a 1-touch demonstration:"
+                    android:textColor="#A0E0B0"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="Step 1: Capri prompts: &quot;Show me what to tap or scroll, dummy. Just once.&quot;\nStep 2: The chat bubble hides completely so your whole screen is free.\nStep 3: Tap or scroll once on the exact item or button.\nStep 4: Capri pulses green (&quot;Got it! Taking over...&quot;) and finishes the rest of the task automatically without reopening chat.\n\n⚡ Greenlight Memory Fast-Path:\nCapri permanently engraves your touch into Greenlight Memory. Future runs on this screen execute the move in &lt;50ms without asking!"
+                    android:textColor="#E0FFE8"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 4: Macro Buttons for Games -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_input_field"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#2E2818"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="GAMING"
+                        android:textColor="#FFD54F"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="4. Macro Buttons (MB1, MB2) for Games"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="Place hollow Macro Button rings on screen for games like Minecraft, Roblox, or PvZ:"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="• Fixed Controls: Assign MBs to Walk, Mine, Jump, Inventory, or Attack.\n• Smart Mining: Capri automatically holds mining buttons for ~4500ms and walk buttons for ~2000ms.\n• Adaptive Hybrid Mode: In menus and crafting, she clicks visual item icons directly by coordinate and finishes with confirm MBs."
+                    android:textColor="#D0D0E0"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 5: Direct Commands -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_input_field"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#152838"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="DIRECT"
+                        android:textColor="#40C4FF"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="5. Fast Direct Commands"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="• App Launching: &quot;Open Spotify&quot;, &quot;Launch WhatsApp&quot;, &quot;Go to Chrome&quot;\n• Media Playback: &quot;Play synthwave&quot;, &quot;Pause music&quot;, &quot;Next track&quot;\n• Volume Controls: &quot;Volume up&quot;, &quot;Turn it down&quot;, &quot;Mute&quot;, &quot;Unmute&quot;\n• Phone Calls: &quot;Call Mom&quot;, &quot;Dial 123456789&quot;\n• Messaging: &quot;Text Alex on my way&quot; (pre-fills message draft for confirmation)\n• Web Search: &quot;Search what is the weather today&quot;"
+                    android:textColor="#D0D0E0"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 6: Recording & Replaying Custom Macros -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:background="@drawable/bg_input_field"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#381D24"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="MACROS"
+                        android:textColor="#FF5252"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="6. Recording &amp; Replaying Custom Macros"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="Record exact touch sequences to replay with a single keyword:\n1. Say &quot;record macro my_routine&quot; in chat.\n2. Tap, swipe, and interact with your phone normally.\n3. Say &quot;stop recording&quot;.\n4. Say &quot;my_routine&quot; anytime to let Capri repeat your exact actions automatically."
+                    android:textColor="#D0D0E0"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+        </LinearLayout>
     </ScrollView>
 
 </LinearLayout>

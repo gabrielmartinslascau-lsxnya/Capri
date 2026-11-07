@@ -188,53 +188,17 @@
             android:textColor="@color/text_primary"
             android:textSize="13sp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_import_local_llm"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="4dp"
-                android:backgroundTint="@color/input_bg"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:text="Import (.litertlm)"
-                android:textColor="@color/text_primary"
-                android:textSize="11sp" />
-
-            <Button
-                android:id="@+id/btn_download_local_llm"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="4dp"
-                android:backgroundTint="@color/accent_red_pink"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:text="Auto-Download Model"
-                android:textColor="@color/white"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <EditText
-            android:id="@+id/input_hf_token"
+        <Button
+            android:id="@+id/btn_download_local_llm"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:background="@drawable/bg_input_field"
-            android:hint="Hugging Face Token (for gated models)"
-            android:inputType="textPassword"
-            android:minHeight="48dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_secondary"
-            android:textSize="13sp" />
+            android:backgroundTint="@color/accent_red_pink"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="Auto-Download Model"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/tv_local_llm_status"
@@ -268,26 +232,6 @@
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/btn_download_fast_model"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:backgroundTint="@color/input_bg"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:text="Download Fast Model (ShowUI-2B)"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/tv_fast_model_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:textColor="@color/text_secondary"
-            android:textSize="11sp" />
 
         <!-- Screen Vision Resolution (LLM Pixel Budget) -->
         <LinearLayout
@@ -509,86 +453,15 @@
             android:paddingStart="12dp"
             android:paddingEnd="12dp" />
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_proactivity"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:checked="true"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="@string/proactivity_label"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_allow_typing"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:checked="true"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="Allow Capri to type into other apps"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_hide_bubble"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:checked="false"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="Hide floating bubble dot (Power Button &amp; Top Banners)"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/btn_enable_usage_stats"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:backgroundTint="@color/input_bg"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:text="@string/enable_usage_stats"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/btn_enable_notif_access"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:backgroundTint="@color/input_bg"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:text="Enable Notification Gatekeeper"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/btn_set_default_assistant"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:backgroundTint="@color/input_bg"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:text="Set Capri as Default Assistant (Power Button)"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
-
         <Button
             android:id="@+id/btn_enable_bubble"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:layout_marginBottom="16dp"
             android:backgroundTint="@color/accent_red_pink"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
             android:text="@string/enable_bubble"
             android:textColor="@color/white"
             android:textSize="15sp" />
@@ -621,27 +494,6 @@
             android:paddingStart="12dp"
             android:paddingEnd="12dp" />
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_dev_quiet_hours"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="@string/dev_disable_quiet_hours"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_dev_reduce_thresholds"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="@string/dev_reduce_thresholds"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
-
         <Button
             android:id="@+id/btn_preview_cursor"
             android:layout_width="match_parent"
@@ -653,18 +505,6 @@
             android:text="Preview Capri Cursor &amp; STOP Pill"
             android:textColor="@color/text_primary"
             android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btn_toggle_grid"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:backgroundTint="@color/input_bg"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:text="Show coordinate grid"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
 
         <!-- Saved Macros Dev Override -->
         <TextView

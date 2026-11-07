@@ -1,6 +1,5 @@
 package com.dot.capri
 
-import com.dot.capri.agent.DevOverlay
 
 import android.Manifest
 import android.content.Context
@@ -104,14 +103,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
-    private val importLocalModelLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            importLocalModelUri(uri)
-        }
-    }
-
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -248,17 +239,6 @@ class MainActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
-        val hfTokenInput = findViewById<EditText>(R.id.input_hf_token)
-        hfTokenInput?.setText(prefs.getString("user_hf_token", ""))
-        hfTokenInput?.addTextChangedListener(object : android.text.TextWatcher {
-            override fun afterTextChanged(s: android.text.Editable?) {
-                val token = s?.toString()?.trim() ?: ""
-                prefs.edit().putString("user_hf_token", token).apply()
-            }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-        })
-
         // Local On-Device LLM Controls
         val switchLocalLlm = findViewById<SwitchCompat>(R.id.switch_local_llm)
         switchLocalLlm?.isChecked = prefs.getBoolean(com.dot.capri.ai.OnDeviceAiClient.KEY_LOCAL_LLM_ENABLED, true)
@@ -295,12 +275,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        findViewById<Button>(R.id.btn_import_local_llm)?.setOnClickListener {
-            importLocalModelLauncher.launch("*/*")
-        }
-
-
-
         val btnDownloadLocalLlm = findViewById<Button>(R.id.btn_download_local_llm)
         btnDownloadLocalLlm?.setOnClickListener {
             btnDownloadLocalLlm.isEnabled = false
@@ -318,25 +292,6 @@ class MainActivity : AppCompatActivity() {
                 }
             )
         }
-
-        val btnDownloadFastModel = findViewById<Button>(R.id.btn_download_fast_model)
-        btnDownloadFastModel?.setOnClickListener {
-            btnDownloadFastModel.isEnabled = false
-            btnDownloadFastModel.text = "Downloading 0%..."
-            com.dot.capri.ai.FastModelClient.downloadFastModel(
-                context = this,
-                onProgress = { _, statusMsg ->
-                    btnDownloadFastModel.text = statusMsg
-                },
-                onComplete = { success, message ->
-                    btnDownloadFastModel.isEnabled = true
-                    btnDownloadFastModel.text = "Download Fast Model (ShowUI-2B)"
-                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-                    updateFastModelStatus()
-                }
-            )
-        }
-        updateFastModelStatus()
 
         // Force Mood Spinner
         val forcedMoodSpinner = findViewById<Spinner>(R.id.spinner_forced_mood)
@@ -359,16 +314,12 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        val proactivitySwitch = findViewById<SwitchCompat>(R.id.switch_proactivity)
-        val quietHoursSwitch = findViewById<SwitchCompat>(R.id.switch_dev_quiet_hours)
-        val quickModeSwitch = findViewById<SwitchCompat>(R.id.switch_dev_reduce_thresholds)
         val musicSpinner = findViewById<Spinner>(R.id.spinner_default_music)
         val reelsSpinner = findViewById<Spinner>(R.id.spinner_default_reels)
         val resetMuteBtn = findViewById<Button>(R.id.btn_reset_cooldowns).apply {
             text = "Reset mute"
         }
         val resetFireCountsBtn = findViewById<Button>(R.id.btn_reset_fire_counts)
-        val usageStatsBtn = findViewById<Button>(R.id.btn_enable_usage_stats)
         val enableBtn = findViewById<Button>(R.id.btn_enable_bubble)
 
         val candidateMusicApps = listOf(
@@ -439,38 +390,6 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        val allowTypingSwitch = findViewById<SwitchCompat>(R.id.switch_allow_typing)
-        allowTypingSwitch.isChecked = prefs.getBoolean(KEY_ALLOW_TYPING, true)
-        allowTypingSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_ALLOW_TYPING, isChecked).apply()
-        }
-
-        val hideBubbleSwitch = findViewById<SwitchCompat>(R.id.switch_hide_bubble)
-        hideBubbleSwitch.isChecked = prefs.getBoolean(KEY_HIDE_BUBBLE_DOT, false)
-        hideBubbleSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_HIDE_BUBBLE_DOT, isChecked).apply()
-            BubbleService.instance?.refreshBubbleVisibility()
-        }
-
-        proactivitySwitch.isChecked = prefs.getBoolean(KEY_PROACTIVITY_ENABLED, true)
-        proactivitySwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_PROACTIVITY_ENABLED, isChecked).apply()
-            updateDebugTriggersInfo()
-        }
-
-        quietHoursSwitch.isChecked = prefs.getBoolean(KEY_DEV_DISABLE_QUIET_HOURS, false)
-        quietHoursSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_DEV_DISABLE_QUIET_HOURS, isChecked).apply()
-            updateDebugTriggersInfo()
-        }
-
-        quickModeSwitch.text = "Quick mode (frequent comments). Recommended."
-        quickModeSwitch.isChecked = prefs.getBoolean(KEY_QUICK_MODE, true)
-        quickModeSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(KEY_QUICK_MODE, isChecked).apply()
-            updateDebugTriggersInfo()
-        }
-
         resetMuteBtn.setOnClickListener {
             BubbleService.instance?.getProactivityEngine()?.resetMuteState()
             Toast.makeText(this, "Reset mute state", Toast.LENGTH_SHORT).show()
@@ -508,47 +427,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val gridButton = findViewById<Button>(R.id.btn_toggle_grid)
-        fun refreshGridButton() {
-            gridButton?.text = if (DevOverlay.isEnabled(this)) "Hide coordinate grid" else "Show coordinate grid"
-        }
-        refreshGridButton()
-        gridButton?.setOnClickListener {
-            val turningOn = !DevOverlay.isEnabled(this)
-            if (turningOn && !Settings.canDrawOverlays(this)) {
-                requestOverlayPermission()
-                return@setOnClickListener
-            }
-            DevOverlay.setEnabled(this, turningOn)
-            refreshGridButton()
-        }
-
-        updateUsageStatsButton(usageStatsBtn)
         updateDebugTriggersInfo()
-
-        usageStatsBtn.setOnClickListener {
-            if (!ForegroundAppDetector.hasUsageStatsPermission(this)) {
-                startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-            }
-        }
-
-        val notifAccessBtn = findViewById<Button>(R.id.btn_enable_notif_access)
-        notifAccessBtn.setOnClickListener {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        }
-
-        val defaultAssistantBtn = findViewById<Button>(R.id.btn_set_default_assistant)
-        defaultAssistantBtn.setOnClickListener {
-            try {
-                startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS))
-            } catch (e: Exception) {
-                try {
-                    startActivity(Intent("android.settings.VOICE_INPUT_SETTINGS"))
-                } catch (ex: Exception) {
-                    Toast.makeText(this, "Go to Settings > Apps > Default Apps > Digital Assistant App and select Capri", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
 
         enableBtn.setOnClickListener {
             val keyEntered = apiKeyInput.text.toString().trim()
@@ -571,17 +450,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        val usageStatsBtn = findViewById<Button>(R.id.btn_enable_usage_stats)
-        updateUsageStatsButton(usageStatsBtn)
         updateDebugTriggersInfo()
         updateLocalLlmStatus()
-        updateFastModelStatus()
         updateSavedMacrosList()
     }
 
-    private fun updateFastModelStatus() {
-        val tvStatus = findViewById<TextView>(R.id.tv_fast_model_status) ?: return
-        tvStatus.text = com.dot.capri.ai.FastModelClient.statusLine(this)
+
+
+    private fun updateLocalLlmStatus() {
+        val tvStatus = findViewById<TextView>(R.id.tv_local_llm_status) ?: return
+        tvStatus.text = com.dot.capri.ai.OnDeviceAiClient.statusLine(this)
     }
 
     private fun updateSavedMacrosList() {
@@ -617,48 +495,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             container.addView(btn)
-        }
-    }
-
-    private fun importLocalModelUri(uri: Uri) {
-        val progressToast = Toast.makeText(this, "Importing local model file...", Toast.LENGTH_LONG)
-        progressToast.show()
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            try {
-                contentResolver.openInputStream(uri)?.use { input ->
-                    val targetFile = com.dot.capri.ai.OnDeviceAiClient.modelFile(this@MainActivity)
-                    targetFile.parentFile?.mkdirs()
-                    targetFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Local model imported successfully!", Toast.LENGTH_SHORT).show()
-                    updateLocalLlmStatus()
-                }
-            } catch (e: Exception) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Failed to import model: ${e.message}", Toast.LENGTH_LONG).show()
-                    updateLocalLlmStatus()
-                }
-            }
-        }
-    }
-
-
-
-    private fun updateLocalLlmStatus() {
-        val tvStatus = findViewById<TextView>(R.id.tv_local_llm_status) ?: return
-        tvStatus.text = com.dot.capri.ai.OnDeviceAiClient.statusLine(this)
-    }
-
-    private fun updateUsageStatsButton(button: Button) {
-        if (ForegroundAppDetector.hasUsageStatsPermission(this)) {
-            button.text = getString(R.string.usage_stats_enabled)
-            button.isEnabled = false
-        } else {
-            button.text = getString(R.string.enable_usage_stats)
-            button.isEnabled = true
         }
     }
 

@@ -323,6 +323,88 @@
             android:layout_marginVertical="12dp"
             android:background="#333333" />
 
+        <!-- Behavior & Operational Toggles -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Behavior &amp; Operational Toggles"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="8dp"
+            android:text="Configure Capri's proactivity, typing permissions, and visibility"
+            android:textColor="#888888"
+            android:textSize="12sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_health_proactivity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:checked="true"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="Proactivity Engine"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_health_allow_typing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:checked="true"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="Allow Capri to type into other apps"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_health_hide_bubble"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:checked="false"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="Hide floating bubble dot (Power Button &amp; Banners only)"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_health_quiet_hours"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="Force disable quiet hours (Allow comments 23:00 - 08:00)"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_health_quick_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="Quick mode (frequent comments). Recommended."
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="#333333" />
+
         <!-- 8. Typing Self-Test Scratch Field -->
         <TextView
             android:layout_width="wrap_content"

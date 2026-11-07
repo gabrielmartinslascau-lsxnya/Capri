@@ -28,11 +28,57 @@ class HealthActivity : AppCompatActivity() {
         setContentView(R.layout.activity_health)
 
         setupButtons()
+        setupToggles()
     }
 
     override fun onResume() {
         super.onResume()
         updateHealthStatus()
+        refreshToggles()
+    }
+
+    private fun setupToggles() {
+        val prefs = getSharedPreferences("capri_prefs", Context.MODE_PRIVATE)
+
+        val switchProactivity = findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_proactivity)
+        switchProactivity?.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(MainActivity.KEY_PROACTIVITY_ENABLED, isChecked).apply()
+        }
+
+        val switchAllowTyping = findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_allow_typing)
+        switchAllowTyping?.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(MainActivity.KEY_ALLOW_TYPING, isChecked).apply()
+        }
+
+        val switchHideBubble = findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_hide_bubble)
+        switchHideBubble?.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(MainActivity.KEY_HIDE_BUBBLE_DOT, isChecked).apply()
+            BubbleService.instance?.refreshBubbleVisibility()
+        }
+
+        val switchQuietHours = findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_quiet_hours)
+        switchQuietHours?.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(MainActivity.KEY_DEV_DISABLE_QUIET_HOURS, isChecked).apply()
+        }
+
+        val switchQuickMode = findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_quick_mode)
+        switchQuickMode?.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(MainActivity.KEY_QUICK_MODE, isChecked).apply()
+        }
+    }
+
+    private fun refreshToggles() {
+        val prefs = getSharedPreferences("capri_prefs", Context.MODE_PRIVATE)
+        findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_proactivity)?.isChecked =
+            prefs.getBoolean(MainActivity.KEY_PROACTIVITY_ENABLED, true)
+        findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_allow_typing)?.isChecked =
+            prefs.getBoolean(MainActivity.KEY_ALLOW_TYPING, true)
+        findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_hide_bubble)?.isChecked =
+            prefs.getBoolean(MainActivity.KEY_HIDE_BUBBLE_DOT, false)
+        findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_quiet_hours)?.isChecked =
+            prefs.getBoolean(MainActivity.KEY_DEV_DISABLE_QUIET_HOURS, false)
+        findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switch_health_quick_mode)?.isChecked =
+            prefs.getBoolean(MainActivity.KEY_QUICK_MODE, true)
     }
 
     private fun setupButtons() {
