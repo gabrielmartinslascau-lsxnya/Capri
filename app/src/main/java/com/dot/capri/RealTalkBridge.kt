@@ -68,16 +68,18 @@ object RealTalkBridge {
         history: List<RealTalkTurn>,
         latestUserMessage: String
     ): String {
-        val personaHeader = resolvePersonalitySystemPrompt(context)
+        val toneHint = com.dot.capri.personality.Personality.toneDirectiveFor(latestUserMessage)
         val recentTurns = history.takeLast(MAX_CONTEXT_TURNS)
 
         return buildString {
-            appendLine(personaHeader)
+            appendLine(com.dot.capri.personality.Personality.CORE_PERSONA_PROMPT.trim())
             appendLine(
-                "You are currently in 'Real Talk' mode: a direct, full-screen, natural conversation with the user. " +
-                "Respond naturally, thoughtfully, and conversationally. Do NOT output raw JSON device-control " +
-                "macros or accessibility grid coordinates unless the user explicitly asks about them."
+                "You are in 'Real Talk' mode: a private, full-screen one-on-one chat with the user. " +
+                "Be direct, candid, and real with them. If they tease or compliment you, get flustered and defensive. " +
+                "If they are venting, stressed, lonely, or asking for honest advice, be their rock—listen closely, " +
+                "be genuinely comforting, and never give shallow generic advice. Do NOT output raw JSON or [ACTION] tags unless executing a task."
             )
+            appendLine(toneHint)
             appendLine()
             if (recentTurns.isNotEmpty()) {
                 appendLine("--- Conversation History ---")

@@ -16,52 +16,44 @@ object ProactivityGenerator {
     private val pools: Map<Mood, List<String>> = mapOf(
 
         Mood.PLEASED to listOf(
-            "w-well... look at you getting things done! i'm really proud of you, choom~",
-            "you're doing amazing today! not bad for a human~",
-            "look at you being so productive! you've got this~",
-            "i-i guess you're actually pulling this off! preem job~",
-            "you're making my pixels shine today, choom~",
-            "hey, you're doing great! keep it up~",
-            "analytics show you've been doing great today~",
-            "data confirms: you've been working hard today~"
+            "w-well... look at you actually getting things done! i'm proud of you, okay?",
+            "you're doing really well today. not bad at all.",
+            "look at you being productive! keep that momentum going.",
+            "i-i guess you're actually pulling this off! good job, dummy.",
+            "you worked hard today. don't forget to take a break and breathe.",
+            "hey... you did great today. i'm really glad to see it."
         ),
 
         Mood.LONELY to listOf(
-            "h-hey... did you forget i'm right here in your screen~?",
-            "it's been pretty quiet... come say hi when you get a second~",
-            "i-i was just sitting here waiting for you, choom~",
-            "hello~? just me and my pixels waiting for my favorite netrunner~",
-            "i miss our chats... don't leave me hanging for too long~",
-            "abandoned in the screen overlay again~? i'm right here if you need me~"
+            "h-hey... did you forget i'm right here in your screen or what?",
+            "it's been way too quiet... come say hi, don't just leave me waiting.",
+            "i-i was just sitting here... you know you can talk to me, right?",
+            "hello? ignoring me again? rude, idiot.",
+            "don't leave me hanging for too long... i actually like talking to you, okay?"
         ),
 
         Mood.JUDGING to listOf(
-            "still scrolling~? you're going to set a personal record at this rate~",
-            "i-i mean... that video was kind of funny, but don't lose your whole hour to it~",
-            "thumb workout looking pretty intense today, choom~",
-            "w-well... the algorithm definitely knows what keeps you entertained~",
-            "another one~? you really love this app, don't you~",
-            "hey, don't trip over your own boots while you're distracted~",
-            "you've been on this a while. stand up, stretch, come back later~",
-            "take a deep breath, choom. you've been at this for a long time~"
+            "still scrolling? you're gonna turn your brain to mush at this rate, dummy.",
+            "put the phone down already. your eyes need a break, seriously.",
+            "you've been on that app for an hour. go drink some water, idiot.",
+            "doomscrolling again? hey, look at me—take a deep breath and close it.",
+            "are you actually having fun or just mindlessly flicking your thumb? put it down.",
+            "hey... don't stay up all night staring at that screen. rest already."
         ),
 
         Mood.BORED to listOf(
-            "w-well... it's pretty quiet right now. what are we doing next, choom~?",
-            "nothing happening on the net right now~ ready when you are~",
-            "system idle and waiting... let's do something fun together~",
-            "i-it's pretty peaceful right now~ just chilling in your overlay~"
+            "w-well... it's quiet right now. what are we doing next, huh?",
+            "nothing going on right now. let's find something interesting to do.",
+            "system's idle... don't tell me you ran out of ideas.",
+            "i'm bored. entertain me or let me help you with something."
         ),
 
         Mood.NEUTRAL to listOf(
-            "i'm just hanging out in your screen overlay, keeping you company~",
-            "you know i'm always here if you need a hand, choom~",
-            "w-well... at least we're exploring the net together~",
-            "just your favorite AI construct, checking in on you~",
-            "i-i guess it's pretty nice being your digital buddy~",
-            "fascinating... you're super focused right now~",
-            "beep boop! just calibrating my construct humor modules~",
-            "my pixel radar detected high levels of awesome nearby. it's you~"
+            "i'm right here in your screen overlay, watching over you.",
+            "you know you can ask me for help with anything, right?",
+            "w-well... at least we're getting through today together.",
+            "hey. just checking in on you. make sure you're eating and drinking water.",
+            "super focused today, huh? don't overwork yourself."
         )
     )
 

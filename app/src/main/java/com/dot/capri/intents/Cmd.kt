@@ -37,6 +37,7 @@ sealed interface Cmd {
     object UnmuteProactivity : Cmd
     object ClearHistory : Cmd
     object GoHome : Cmd
+    object PowerMenu : Cmd
     object CheckNotifications : Cmd
     object WhatIsPlaying : Cmd
     data class EasterEgg(val response: String) : Cmd

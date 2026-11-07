@@ -558,7 +558,7 @@ class BubbleService : Service() {
 
         historyContainer?.removeAllViews()
         if (persistentChatHistory.isEmpty()) {
-            val greeting = "Sup, choom~ What digital chaos are we starting today?"
+            val greeting = "hey. what kind of trouble are you getting into today? ...try not to break anything."
             persistentChatHistory.add(Pair("Capri", greeting))
             addMessageView(themedContext, historyContainer, "Capri", greeting)
         } else {
@@ -690,7 +690,7 @@ class BubbleService : Service() {
                 withContext(Dispatchers.IO) { processCommand(command) }
             } catch (e: Exception) {
                 Log.e("CAPRI_BUBBLE", "processCommand crashed", e)
-                "something glitched on my end, choom~ try that again."
+                "something glitched on my end... try that again."
             } finally {
                 // Always restore the controls, even if the command failed.
                 thinkingContainer?.visibility = View.GONE
@@ -924,38 +924,80 @@ class BubbleService : Service() {
                     return PhoneAgent.run(this, goalFromTag, null) { setChatVisible(it) }
                 }
                 "OPEN" -> {
-                    return PhoneAgent.run(this, "open $target", null) { setChatVisible(it) }
+                    IntentExecutor.execute(this, Cmd.Open(target))
+                    delay(1200)
+                    val out = PhoneAgent.run(this, "open $target and verify it is on screen", null) { setChatVisible(it) }
+                    return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                 }
                 "PLAY" -> {
                     val gameOpt = com.dot.capri.agent.DeviceTasks.resolveInstalledGame(this, target)
                     if (gameOpt != null) {
                         com.dot.capri.intents.AppChooser.open(this, gameOpt.pkg)
                         delay(2000)
-                        return PhoneAgent.run(this, "play ${gameOpt.label} and win", null) { setChatVisible(it) }
+                        val out = PhoneAgent.run(this, "play ${gameOpt.label} and win", null) { setChatVisible(it) }
+                        return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                     }
                     val query = target.replace(':', ' ').trim()
-                    return PhoneAgent.run(this, "play $query", null) { setChatVisible(it) }
+                    IntentExecutor.execute(this, Cmd.Play(query, null))
+                    delay(1800)
+                    val out = PhoneAgent.run(this, "play $query", null) { setChatVisible(it) }
+                    return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                 }
                 "SEARCH" -> {
-                    return PhoneAgent.run(this, "search for $target", null) { setChatVisible(it) }
+                    IntentExecutor.execute(this, Cmd.Search(target))
+                    delay(1500)
+                    val out = PhoneAgent.run(this, "search for $target", null) { setChatVisible(it) }
+                    return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
+                }
+                "CALL" -> {
+                    val ok = IntentExecutor.execute(this, Cmd.Call(target))
+                    delay(1200)
+                    val out = PhoneAgent.run(
+                        this,
+                        if (ok) "Dialer is open for $target. Tap the call button on screen to place the call."
+                        else "Call $target by finding them in the Phone or WhatsApp app.",
+                        null
+                    ) { setChatVisible(it) }
+                    return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
+                }
+                "TEXT", "MESSAGE", "WHATSAPP" -> {
+                    val parts = target.split(":", limit = 2)
+                    val contact = parts.getOrNull(0)?.trim().orEmpty()
+                    val msg = parts.getOrNull(1)?.trim()
+                    val ok = IntentExecutor.execute(this, Cmd.Text(contact, msg))
+                    delay(1500)
+                    val out = PhoneAgent.run(
+                        this,
+                        if (ok) "Chat for $contact is open with draft '${msg.orEmpty()}'. Verify on screen and tap the Send button."
+                        else "Open WhatsApp or Messages, find $contact, and send '${msg.orEmpty()}'.",
+                        null
+                    ) { setChatVisible(it) }
+                    return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
+                }
+                "POWER_MENU", "SHUTDOWN" -> {
+                    IntentExecutor.execute(this, Cmd.PowerMenu)
+                    delay(800)
+                    val out = PhoneAgent.run(
+                        this,
+                        "The Android system Power Menu is now open on screen. Tap Power Off or Restart on screen if visible.",
+                        null
+                    ) { setChatVisible(it) }
+                    return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                 }
                 else -> {
                     val cmd = when (actionType.uppercase()) {
-                        "VOLUME" -> {
+                        "VOLUME", "VOLUME_UP", "VOLUME_DOWN", "MUTE" -> {
                             val dir = when (target.uppercase()) {
-                                "UP" -> VolumeDirection.UP
-                                "DOWN" -> VolumeDirection.DOWN
+                                "DOWN", "LOWER" -> VolumeDirection.DOWN
                                 "MUTE" -> VolumeDirection.MUTE
-                                else -> VolumeDirection.UNMUTE
+                                "UNMUTE" -> VolumeDirection.UNMUTE
+                                else -> if (actionType.equals("VOLUME_DOWN", ignoreCase = true)) VolumeDirection.DOWN
+                                        else if (actionType.equals("MUTE", ignoreCase = true)) VolumeDirection.MUTE
+                                        else VolumeDirection.UP
                             }
                             Cmd.Volume(dir)
                         }
                         "TYPE", "WRITE" -> Cmd.Write(target)
-                        "CALL" -> Cmd.Call(target)
-                        "TEXT" -> {
-                            val parts = target.split(":")
-                            if (parts.size >= 2) Cmd.Text(parts[0].trim(), parts[1].trim()) else Cmd.Text(target, null)
-                        }
                         else -> null
                     }
                     if (cmd != null) {
@@ -969,7 +1011,8 @@ class BubbleService : Service() {
                         // Any other unrecognized ACTION:<VERB>:<TARGET> tag -> run as PhoneAgent task
                         val fallbackGoal = "${actionType.lowercase(java.util.Locale.US)} $target".trim()
                         if (fallbackGoal.isNotBlank()) {
-                            return PhoneAgent.run(this, fallbackGoal, null) { setChatVisible(it) }
+                            val out = PhoneAgent.run(this, fallbackGoal, null) { setChatVisible(it) }
+                            return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                         }
                     }
                 }
@@ -992,17 +1035,21 @@ class BubbleService : Service() {
                 setChatVisible(true)
             }
             if (shotBytes != null) {
-                return askBrain(question, shotBytes) ?: "i looked at the screen, choom, but couldn't get an answer."
+                return askBrain(question, shotBytes) ?: "i looked at the screen, but couldn't get an answer."
             }
-            return "i couldn't capture the screen right now, choom. make sure accessibility is enabled."
+            return "i couldn't capture the screen right now. make sure accessibility is enabled."
         }
         val cleaned = Regex("\\[?ACTION[=:]\\s*SEE_SCREEN(?:[=:][^]\\n]*)?\\]?", RegexOption.IGNORE_CASE).replace(reply, "").trim()
         val task = Regex("\\[?ACTION[=:]\\s*TASK[=:]\\s*(.+?)\\]?$", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).find(cleaned)
         if (task != null) {
             val goal = task.groupValues[1].trim().removeSuffix("]").trim()
-            return PhoneAgent.run(this, goal, null) { flag -> setChatVisible(flag) }
+            val thought = Regex("\\[?ACTION[=:]\\s*TASK[=:]\\s*(.+?)\\]?$", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).replace(cleaned, "").trim()
+            val agentResult = PhoneAgent.run(this, goal, null) { flag -> setChatVisible(flag) }
+            return if (thought.isNotBlank()) "$thought\n$agentResult" else agentResult
         }
-        return executeEmbeddedActionTag(cleaned).ifBlank { "on it, choom." }
+        return executeEmbeddedActionTag(cleaned).ifBlank {
+            "done... don't make me do everything for you next time, okay?"
+        }
     }
 
     suspend fun executeBrainReply(reply: String): String = handleReply(reply, allowSee = true)
@@ -1045,7 +1092,7 @@ class BubbleService : Service() {
         return if (why != null) {
             "my brain glitched: $why"
         } else {
-            "i can't reach a brain right now, choom. no internet and no local model yet. " +
+            "i can't reach a brain right now. no internet and no local model loaded yet. " +
                     "download one from settings, or say 'open <app name>' for an app."
         }
     }
@@ -1077,7 +1124,7 @@ class BubbleService : Service() {
                 if (ok) {
                     delay(300)
                     PhoneControl.home()
-                    return "sent to ${p.contact}, choom."
+                    return "sent to ${p.contact}."
                 }
                 return "couldn't find the send button. the message is ready in the chat, tap it yourself."
             }
@@ -1098,7 +1145,7 @@ class BubbleService : Service() {
                 com.dot.capri.intents.AppChooser.pending = null
                 val choice = list[num - 1]
                 com.dot.capri.intents.AppChooser.open(this, choice.pkg)
-                return "opening ${choice.label}, choom."
+                return "opening ${choice.label}."
             }
             com.dot.capri.intents.AppChooser.pending = null
         }
@@ -1108,7 +1155,7 @@ class BubbleService : Service() {
         if (recordMatch != null) {
             val name = recordMatch.groupValues[1].trim()
             com.dot.capri.macro.MacroRecorder.start(name, this)
-            return "recording macro '$name'. do the steps in your apps, then say 'stop recording' when you're done, choom."
+            return "recording macro '$name'. do the steps on screen, then say 'stop recording' when you're done."
         }
 
         if (Regex("^(?:stop\\s+recording|finish\\s+macro|save\\s+macro)$", RegexOption.IGNORE_CASE).matches(trimmedInput)) {
@@ -1142,7 +1189,7 @@ class BubbleService : Service() {
         }
         if (Regex("^(?:clear\\s+mbs?|delete\\s+mbs?|reset\\s+mbs?)$", RegexOption.IGNORE_CASE).matches(trimmedInput)) {
             ControlRegions.clearAll(this)
-            return "cleared all macro buttons, choom."
+            return "cleared all macro buttons."
         }
         if (trimmedInput.equals("regions", ignoreCase = true) || trimmedInput.equals("mbs", ignoreCase = true)) {
             return ControlRegions.names(this).ifEmpty { "no macro buttons yet. tap [ +MB ] in the bubble header to drop one on screen!" }
@@ -1172,10 +1219,10 @@ class BubbleService : Service() {
             val resolved = com.dot.capri.intents.AppChooser.findBestMatch(this, targetApp)
             val appName = resolved?.label ?: targetApp
             MainActivity.setDefaultReelsApp(this, appName)
-            return "set default video player to $appName, choom."
+            return "set default video player to $appName."
         }
         if (Regex("^(?:what(?:'s|\\s+is)\\s+(?:the\\s+)?default\\s+(?:videoplayer|video\\s+player|reels\\s+app)|default\\s+(?:videoplayer|video\\s+player)\\??)$", RegexOption.IGNORE_CASE).containsMatchIn(trimmedInput)) {
-            return "default video player is ${MainActivity.getDefaultReelsApp(this)}, choom."
+            return "default video player is ${MainActivity.getDefaultReelsApp(this)}."
         }
 
         // Setting or querying default media player (music app)
@@ -1188,10 +1235,124 @@ class BubbleService : Service() {
             val resolved = com.dot.capri.intents.AppChooser.findBestMatch(this, targetApp)
             val appName = resolved?.label ?: targetApp
             MainActivity.setDefaultMusicPlayer(this, appName)
-            return "set default media player to $appName, choom."
+            return "set default media player to $appName."
         }
         if (Regex("^(?:what(?:'s|\\s+is)\\s+(?:the\\s+)?default\\s+(?:mediaplayer|media\\s+player|music\\s+player)|default\\s+(?:mediaplayer|media\\s+player)\\??)$", RegexOption.IGNORE_CASE).containsMatchIn(trimmedInput)) {
-            return "default media player is ${MainActivity.getDefaultMusicPlayer(this)}, choom."
+            return "default media player is ${MainActivity.getDefaultMusicPlayer(this)}."
+        }
+
+        // Parse structured Cmd primitives via IntentParser
+        val parsedCmd = com.dot.capri.intents.IntentParser.parse(trimmedInput)
+        when (parsedCmd) {
+            is com.dot.capri.intents.Cmd.EasterEgg -> {
+                return parsedCmd.response
+            }
+            is com.dot.capri.intents.Cmd.Compliment -> {
+                if (brainAvailable()) {
+                    return askBrain(text) ?: Personality.flusteredComplimentReply()
+                }
+                return Personality.flusteredComplimentReply()
+            }
+            is com.dot.capri.intents.Cmd.SeeScreen -> {
+                val shot = CapriAccessibilityService.instance?.captureScreenBitmap()
+                if (brainAvailable()) {
+                    return askBrain(trimmedInput, shot) ?: "i couldn't read the screen right now."
+                }
+            }
+            is com.dot.capri.intents.Cmd.Call -> {
+                val dialed = IntentExecutor.execute(this, parsedCmd)
+                delay(1200)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(
+                    this,
+                    if (dialed) "User wants to: $trimmedInput. The dialer is now open with ${parsedCmd.contact}'s number. Look at the screen and tap the Call button."
+                    else "User wants to: $trimmedInput. Contact '${parsedCmd.contact}' was not found via quick lookup—open the Phone or WhatsApp app, search for '${parsedCmd.contact}', and call them.",
+                    null
+                ) { setChatVisible(it) }
+            }
+            is com.dot.capri.intents.Cmd.Text -> {
+                val opened = IntentExecutor.execute(this, parsedCmd)
+                delay(1500)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(
+                    this,
+                    if (opened && !parsedCmd.message.isNullOrBlank())
+                        "User wants to: $trimmedInput. ${parsedCmd.contact}'s chat is open with '${parsedCmd.message}' pre-filled. Look at the screen and tap the Send button."
+                    else if (opened)
+                        "User wants to: $trimmedInput. ${parsedCmd.contact}'s chat is open on screen. Read the screen or type/send the appropriate message."
+                    else
+                        "User wants to: $trimmedInput. Open WhatsApp or Messages, find '${parsedCmd.contact}', and send the message.",
+                    null
+                ) { setChatVisible(it) }
+            }
+            is com.dot.capri.intents.Cmd.Search -> {
+                IntentExecutor.execute(this, parsedCmd)
+                delay(1500)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(
+                    this,
+                    "User wants to search: '${parsedCmd.query}'. Google search results are now open on screen. Inspect the results and tap the most relevant one or summarize.",
+                    null
+                ) { setChatVisible(it) }
+            }
+            is com.dot.capri.intents.Cmd.Play -> {
+                IntentExecutor.execute(this, parsedCmd)
+                delay(1800)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(
+                    this,
+                    "User wants to: $trimmedInput. The media app is now open for '${parsedCmd.query}'. Look at the screen and tap the song/video or Play button so it starts playing.",
+                    null
+                ) { setChatVisible(it) }
+            }
+            is com.dot.capri.intents.Cmd.Open -> {
+                val opened = IntentExecutor.execute(this, parsedCmd)
+                if (opened) {
+                    delay(1200)
+                    val shot = CapriAccessibilityService.instance?.captureScreenBitmap()
+                    if (brainAvailable()) {
+                        return askBrain("I just opened ${parsedCmd.app} for the user (request: \"$trimmedInput\"). Briefly confirm or comment on what's on screen in 1 short sentence without action tags.", shot)
+                            ?: "opened ${parsedCmd.app}."
+                    }
+                    return "opened ${parsedCmd.app}."
+                } else {
+                    PhoneAgent.pending = null
+                    return PhoneAgent.run(this, trimmedInput, null) { setChatVisible(it) }
+                }
+            }
+            is com.dot.capri.intents.Cmd.PowerMenu -> {
+                IntentExecutor.execute(this, parsedCmd)
+                delay(800)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(
+                    this,
+                    "The Android system Power Menu is now open on screen for request: '$trimmedInput'. Tap Power Off or Restart on screen if visible.",
+                    null
+                ) { setChatVisible(it) }
+            }
+            is com.dot.capri.intents.Cmd.Tap,
+            is com.dot.capri.intents.Cmd.LongPress,
+            is com.dot.capri.intents.Cmd.Scroll,
+            is com.dot.capri.intents.Cmd.Pinch,
+            is com.dot.capri.intents.Cmd.Write,
+            is com.dot.capri.intents.Cmd.ClearField -> {
+                PhoneAgent.pending = null
+                return PhoneAgent.run(this, trimmedInput, null) { setChatVisible(it) }
+            }
+            is com.dot.capri.intents.Cmd.Volume,
+            is com.dot.capri.intents.Cmd.MediaControl,
+            is com.dot.capri.intents.Cmd.GoHome,
+            is com.dot.capri.intents.Cmd.SetDefaultApp -> {
+                IntentExecutor.execute(this, parsedCmd)
+                if (brainAvailable()) {
+                    return askBrain("User said: \"$trimmedInput\". The system command (${parsedCmd.javaClass.simpleName}) has already been executed. Reply naturally in 1 short sentence with NO [ACTION] tags.")
+                        ?: "done."
+                }
+                return "done."
+            }
+            else -> {
+                // Not a direct Cmd - proceed to general action request extraction or dev commands
+            }
         }
 
         // ANY Action Request (e.g. "open spotify", "open my liked songs", "walk to that tree",

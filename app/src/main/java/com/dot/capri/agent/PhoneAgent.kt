@@ -7,6 +7,7 @@ import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.MainActivity
 import com.dot.capri.ai.OnDeviceAiClient
 import com.dot.capri.intents.AppChooser
+import com.dot.capri.intents.IntentExecutor
 import com.dot.capri.llm.LlmRequest
 import com.dot.capri.llm.LlmRouter
 import com.dot.capri.util.NetworkUtils
@@ -71,7 +72,8 @@ object PhoneAgent {
         val holdMs: Long? = null,
         val dx: Int? = null,
         val dy: Int? = null,
-        val undoReason: String? = null
+        val undoReason: String? = null,
+        val contact: String? = null
     )
 
     private data class ExecutedTurn(
@@ -112,9 +114,17 @@ Actions (reply with ONLY a single JSON object, always including your updated "pl
   -> Turns 3D camera in direction ("up", "down", "left", "right", "up_left", "up_right", "down_left", "down_right", "around") OR pass custom pixel offsets ("dx":180, "dy":-120).
 {"do":"tap_text","text":"Play","plan":"Tap visible text button"}
 {"do":"tap","id":N,"plan":"Tap UI element N"}
+{"do":"call","contact":"name or number","plan":"Open dialer for contact, then tap Call button on screen"}
+{"do":"text","contact":"name","text":"message body","plan":"Open contact's chat with prefilled message, then tap Send on screen"}
+{"do":"search","text":"search query","plan":"Launch Google search and inspect/click results on screen"}
+{"do":"play","text":"song or video","app":"spotify","plan":"Launch media search and tap the top result/Play button on screen"}
+{"do":"volume","dir":"up|down|mute|unmute","plan":"Adjust device volume"}
+{"do":"media","dir":"play|pause|next|previous","plan":"Control active media playback"}
+{"do":"power_menu","plan":"Open system power menu on screen"}
 {"do":"back","undo":"opened wrong menu","plan":"Close unintended popup and blacklist last move"}
 {"do":"wait","plan":"Wait for loading"}
-{"do":"done","say":"short summary"}
+{"do":"done","say":"short in-character tsundere remark confirming what you did (e.g. 'there, i started your liked songs. don't get used to me spoiling you.' or 'done. next time tap it yourself, dummy.')"}
+{"do":"fail","say":"short in-character explanation of why the screen blocked you"}
 
 CRITICAL ADAPTIVE, CONTEXT & TIMING RULES:
 1. EVALUATE CONTEXT FIRST (HAVE I COMPLETED IT? DID I FAIL? DO I CONTINUE?):
@@ -146,10 +156,18 @@ Actions (reply with ONLY a single JSON object, always including your updated "pl
 {"do":"type","id":N,"text":"...","plan":"Enter text"}
 {"do":"scroll","dir":"down","plan":"Scroll list"}
 {"do":"open","app":"app name","plan":"Open requested app"}
+{"do":"call","contact":"name or number","plan":"Open dialer for contact, then tap Call button on screen"}
+{"do":"text","contact":"name","text":"message body","plan":"Open contact's chat with prefilled message, then tap Send on screen"}
+{"do":"search","text":"search query","plan":"Launch Google search and inspect/click results on screen"}
+{"do":"play","text":"song or video","app":"spotify","plan":"Launch media search and tap the top result/Play button on screen"}
+{"do":"volume","dir":"up|down|mute|unmute","plan":"Adjust device volume"}
+{"do":"media","dir":"play|pause|next|previous","plan":"Control active media playback"}
+{"do":"power_menu","plan":"Open system power menu on screen"}
 {"do":"back","undo":"opened wrong screen","plan":"Undo unintended navigation and blacklist last move"}
 {"do":"home","plan":"Go home"}
 {"do":"wait","plan":"Wait for loading screen"}
-{"do":"done","say":"short summary"}
+{"do":"done","say":"short in-character tsundere remark confirming what you did (e.g. 'there, i opened your playlist. don't get used to me spoiling you.' or 'done. next time tap it yourself, dummy.')"}
+{"do":"fail","say":"short in-character explanation of why the screen blocked you"}
 
 CRITICAL RULES:
 1. EVALUATE CONTEXT FIRST: Check the screenshot and STEPS SO FAR — have you ALREADY completed the task or current sub-step? If the goal is achieved, output `{"do":"done","say":"..."}` immediately instead of repeating clicks! If you are already looking at the target, perform the action (`hold` or `press_region`) directly.
@@ -173,6 +191,13 @@ LOOK <UP|DOWN|LEFT|RIGHT|AROUND> | PLAN: <strategy> (turns 3D camera to look up/
 SWIPE <x1> <y1> <x2> <y2> | PLAN: <strategy> (swipes screen / rotates camera in any direction)
 TAP_TEXT <words> | PLAN: <strategy>          (taps visible text button)
 TAP_ID <id> | PLAN: <strategy>               (taps UI element #id)
+CALL <contact> | PLAN: <strategy>            (opens dialer for contact)
+TEXT <contact> : <message> | PLAN: <strategy> (opens chat with message)
+SEARCH <query> | PLAN: <strategy>            (opens web search)
+PLAY <query> | PLAN: <strategy>              (opens media query)
+VOLUME <up|down|mute|unmute> | PLAN: <strategy>
+MEDIA <play|pause|next|previous> | PLAN: <strategy>
+POWER_MENU | PLAN: <strategy>
 BACK | UNDO: <why last move was wrong>
 WAIT
 DONE
@@ -196,6 +221,13 @@ LOOK <UP|DOWN|LEFT|RIGHT|AROUND> | PLAN: <strategy> (turns 3D camera, or LOOK <d
 SWIPE <x1> <y1> <x2> <y2> | PLAN: <strategy> (swipes from x1,y1 to x2,y2)
 TYPE <id> <text> | PLAN: <strategy>          (types into field #id)
 SCROLL <down|up|left|right> | PLAN: <strategy>
+CALL <contact> | PLAN: <strategy>            (opens dialer for contact)
+TEXT <contact> : <message> | PLAN: <strategy> (opens chat with message)
+SEARCH <query> | PLAN: <strategy>            (opens web search)
+PLAY <query> | PLAN: <strategy>              (opens media query)
+VOLUME <up|down|mute|unmute> | PLAN: <strategy>
+MEDIA <play|pause|next|previous> | PLAN: <strategy>
+POWER_MENU | PLAN: <strategy>
 BACK | UNDO: <why last move was wrong>
 WAIT
 DONE
@@ -292,7 +324,8 @@ Rules:
                     else -> cell2?.second
                 }
 
-                val textOrConcept = o.optString("text").ifEmpty { o.optString("concept") }.ifEmpty { null }
+                val textOrConcept = o.optString("text").ifEmpty { o.optString("query") }.ifEmpty { o.optString("concept") }.ifEmpty { null }
+                val contact = o.optString("contact").ifEmpty { null }
                 val dur = if (o.has("duration_ms")) o.optLong("duration_ms") else if (o.has("duration")) o.optLong("duration") else null
                 val undo = o.optString("undo").ifEmpty { o.optString("wrong") }.ifEmpty { null }
 
@@ -359,7 +392,8 @@ Rules:
                     holdMs = if (o.has("hold_ms")) o.optLong("hold_ms") else null,
                     dx = parsedDx,
                     dy = parsedDy,
-                    undoReason = undo
+                    undoReason = undo,
+                    contact = contact
                 )
             } catch (_: Exception) {}
         }
@@ -406,6 +440,47 @@ Rules:
             val id = typeMatch.groupValues[1].toIntOrNull()
             val txt = typeMatch.groupValues[2].trim().removeSurrounding("\"")
             return Act("type", id = id, text = txt, dir = null, app = null, say = null, x = null, y = null, x2 = null, y2 = null, plan = extractedPlan)
+        }
+
+        val callMatch = Regex("^CALL\\s+(.+)$", RegexOption.IGNORE_CASE).find(firstLine)
+        if (callMatch != null) {
+            val who = callMatch.groupValues[1].trim()
+            return Act("call", contact = who, plan = extractedPlan)
+        }
+
+        val textCmdMatch = Regex("^TEXT\\s+(.+?)(?:\\s*:\\s*(.+)|\\s+(.+))?$", RegexOption.IGNORE_CASE).find(firstLine)
+        if (textCmdMatch != null) {
+            val who = textCmdMatch.groupValues[1].trim()
+            val msg = textCmdMatch.groupValues[2].ifEmpty { textCmdMatch.groupValues[3] }.trim().ifEmpty { null }
+            return Act("text", contact = who, text = msg, plan = extractedPlan)
+        }
+
+        val searchCmdMatch = Regex("^SEARCH\\s+(.+)$", RegexOption.IGNORE_CASE).find(firstLine)
+        if (searchCmdMatch != null) {
+            val q = searchCmdMatch.groupValues[1].trim()
+            return Act("search", text = q, plan = extractedPlan)
+        }
+
+        val playCmdMatch = Regex("^PLAY\\s+(.+)$", RegexOption.IGNORE_CASE).find(firstLine)
+        if (playCmdMatch != null) {
+            val q = playCmdMatch.groupValues[1].trim()
+            return Act("play", text = q, plan = extractedPlan)
+        }
+
+        val volCmdMatch = Regex("^VOLUME\\s+(UP|DOWN|MUTE|UNMUTE)$", RegexOption.IGNORE_CASE).find(firstLine)
+        if (volCmdMatch != null) {
+            val dir = volCmdMatch.groupValues[1].lowercase(Locale.US)
+            return Act("volume", dir = dir, plan = extractedPlan)
+        }
+
+        val mediaCmdMatch = Regex("^MEDIA\\s+(PLAY|PAUSE|PLAY_PAUSE|NEXT|PREVIOUS|PREV|STOP)$", RegexOption.IGNORE_CASE).find(firstLine)
+        if (mediaCmdMatch != null) {
+            val act = mediaCmdMatch.groupValues[1].lowercase(Locale.US)
+            return Act("media", dir = act, plan = extractedPlan)
+        }
+
+        if (firstLine.equals("POWER_MENU", ignoreCase = true) || firstLine.equals("SHUTDOWN", ignoreCase = true) || firstLine.equals("POWER_OFF", ignoreCase = true)) {
+            return Act("power_menu", plan = extractedPlan)
         }
 
         val tapIdMatch = Regex("^(?:TAP_ID|CLICK_ID|(?:TAP|CLICK)\\s+#?)(\\d+)$", RegexOption.IGNORE_CASE).find(firstLine)
@@ -2021,8 +2096,8 @@ Rules:
         var recordedPlacementCoord = initPlacementCoord
 
         when (a.doWhat) {
-            "done" -> return ActionResult.Terminal(a.say ?: "done.")
-            "fail" -> return ActionResult.Terminal(a.say ?: "couldn't do that, choom.")
+            "done" -> return ActionResult.Terminal(a.say ?: "there, all done. don't say i never do anything for you.")
+            "fail" -> return ActionResult.Terminal(a.say ?: "screen got in my way and blocked me, dummy.")
             "seq" -> {
                 val fx = a.x; val fy = a.y; val tx = a.x2; val ty = a.y2
                 if (fx == null || fy == null || tx == null || ty == null) {
@@ -2088,7 +2163,7 @@ Rules:
                 } else if (!sentTexts.add(text.lowercase(Locale.US))) {
                     log.add("refused to repeat text already typed")
                 } else {
-                    val submit = goal.contains(text, ignoreCase = true)
+                    val submit = true
                     val ok = PhoneControl.typeInto(context, item, text, submit)
                     log.add("typed into ${item.label}" + (if (submit) " and sent" else " (not sent)") + if (ok) "" else " (failed)")
                 }
@@ -2156,6 +2231,69 @@ Rules:
                         log.add("blocked switching away from $pkg to '${a.app}'")
                     }
                 }
+            }
+            "call" -> {
+                val who = a.contact ?: a.text ?: a.label.orEmpty()
+                CapriCursor.setStatus("dialing $who...")
+                val ok = IntentExecutor.execute(context, com.dot.capri.intents.Cmd.Call(who))
+                if (ok) {
+                    log.add("opened dialer for $who — now tap Call button on screen")
+                    delay(1200)
+                } else {
+                    log.add("call: contact '$who' not found in contacts — open Phone/WhatsApp and search manually")
+                }
+            }
+            "text" -> {
+                val who = a.contact ?: a.app.orEmpty()
+                val msg = a.text.orEmpty()
+                CapriCursor.setStatus("opening chat with $who...")
+                val ok = IntentExecutor.execute(context, com.dot.capri.intents.Cmd.Text(who, msg))
+                if (ok) {
+                    log.add("opened chat for $who with draft '$msg' — now tap Send button on screen")
+                    delay(1500)
+                } else {
+                    log.add("text: contact '$who' not found in contacts — open messaging app and search manually")
+                }
+            }
+            "search" -> {
+                val q = a.text ?: a.label.orEmpty()
+                CapriCursor.setStatus("searching '$q'...")
+                val ok = IntentExecutor.execute(context, com.dot.capri.intents.Cmd.Search(q))
+                log.add("opened web search for '$q'" + if (ok) " — now inspect/tap results on screen" else " (failed)")
+                delay(1500)
+            }
+            "play" -> {
+                val q = a.text ?: a.label.orEmpty()
+                CapriCursor.setStatus("searching media '$q'...")
+                val ok = IntentExecutor.execute(context, com.dot.capri.intents.Cmd.Play(q, a.app))
+                log.add("launched media query '$q'" + if (ok) " — now tap the song/video or Play button on screen" else " (failed)")
+                delay(1800)
+            }
+            "volume" -> {
+                val dir = when (a.dir?.lowercase(Locale.US)) {
+                    "down", "lower", "quieter" -> com.dot.capri.intents.VolumeDirection.DOWN
+                    "mute", "silence" -> com.dot.capri.intents.VolumeDirection.MUTE
+                    "unmute" -> com.dot.capri.intents.VolumeDirection.UNMUTE
+                    else -> com.dot.capri.intents.VolumeDirection.UP
+                }
+                IntentExecutor.execute(context, com.dot.capri.intents.Cmd.Volume(dir))
+                log.add("adjusted volume ${dir.name.lowercase(Locale.US)}")
+            }
+            "media" -> {
+                val act = when (a.dir?.lowercase(Locale.US)) {
+                    "pause", "stop" -> com.dot.capri.intents.MediaAction.PAUSE
+                    "next", "skip" -> com.dot.capri.intents.MediaAction.NEXT
+                    "prev", "previous", "back" -> com.dot.capri.intents.MediaAction.PREVIOUS
+                    else -> com.dot.capri.intents.MediaAction.PLAY
+                }
+                IntentExecutor.execute(context, com.dot.capri.intents.Cmd.MediaControl(act))
+                log.add("media control ${act.name.lowercase(Locale.US)}")
+            }
+            "power_menu", "shutdown" -> {
+                CapriCursor.setStatus("opening power menu...")
+                val ok = IntentExecutor.execute(context, com.dot.capri.intents.Cmd.PowerMenu)
+                log.add("opened system power menu" + if (ok) "" else " (failed)")
+                delay(800)
             }
             "double_tap" -> {
                 CapriCursor.setStatus("double tapping...")
@@ -2339,7 +2477,7 @@ Rules:
         chatVisible: suspend (Boolean) -> Unit
     ): String {
         val service = CapriAccessibilityService.instance
-            ?: return "accessibility isn't connected. switch it on from my health screen, choom."
+            ?: return "hey, my accessibility link is off. turn it on in my health screen first—i can't read your mind if i'm blind, dummy."
 
         // If the goal directly names any Macro Button (e.g. "tap peashooter and tap lane 1"), execute it immediately!
         if (resume == null) {
@@ -2349,7 +2487,7 @@ Rules:
         }
 
         if (!useApi(context) && !OnDeviceAiClient.isAvailable(context)) {
-            return "task mode needs an api key + internet, or the on-device model downloaded, choom."
+            return "i need an api key or the on-device model downloaded before i can take over your screen, idiot."
         }
 
         AgentMemory.init(context)
@@ -2404,7 +2542,7 @@ Rules:
             while (!CapriCursor.cancelled) {
                 if (isMusicGoal && audioManager?.isMusicActive == true && steps > 0) {
                     log.add("music is actively playing on device")
-                    return "playing music, choom."
+                    return "playing your music. don't get used to me being your personal dj."
                 }
 
                 var root = carriedRoot ?: PhoneControl.foregroundRoot()
@@ -2427,11 +2565,11 @@ Rules:
                 }
 
                 if (root == null && rawBytes == null) {
-                    return "i can't see an app or screen surface to work in, choom. ${summary(log)}"
+                    return "i can't see an app or screen surface to work in, dummy. ${summary(log)}"
                 }
 
                 val pkg = root?.packageName?.toString() ?: "game_surface"
-                if (pkg in BLOCKED_PACKAGES) return "i keep my hands off that app, choom."
+                if (pkg in BLOCKED_PACKAGES) return "yeah, no. i'm not touching your wallet or payment apps. handle your own money."
 
                 // If this is a pure app launch request or video playback request (e.g. "open spotify", "play a vid", "reels"),
                 // verify that the app is actively visible in the foreground on the live screen!
@@ -2447,7 +2585,7 @@ Rules:
                     CapriCursor.setStatus(statusMsg)
                     CapriCursor.pulse()
                     delay(350)
-                    return "$statusMsg, choom."
+                    return "$statusMsg. next time tap it yourself, dummy."
                 }
 
                 if (steps == 0 && resume == null) {
@@ -2885,7 +3023,7 @@ Rules:
                     return doneMsg
                 }
             }
-            return "stopped, choom. ${summary(log)}"
+            return "h-hey, fine, i stopped! you didn't have to yank the leash like that. ${summary(log)}"
         } finally {
             ControlRegions.setPassThrough(context, false)
             CapriCursor.hide()

@@ -431,11 +431,6 @@ object OnDeviceAiClient {
 
     // Same persona as the API tier, minus the long lore block, so the first word comes faster.
     private fun buildSystemPrompt(context: Context): String {
-        val full = CloudAiClient.SYSTEM_PROMPT
-        val loreStart = full.indexOf("LORE\n")
-        val loreEnd = full.indexOf("VOICE\n")
-        val slim = if (loreStart in 0 until loreEnd) full.removeRange(loreStart, loreEnd) else full
-
         val cal = Calendar.getInstance()
         val weekday = android.text.format.DateFormat.format("EEEE", cal)
         val time = android.text.format.DateFormat.format("HH:mm", cal)
@@ -447,7 +442,8 @@ object OnDeviceAiClient {
         }
         val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
 
-        return slim + "\n\n[Context]: it is $weekday, $time. battery: $battery%. macro buttons: $mbSummary.\n" +
+        return com.dot.capri.personality.Personality.COMPACT_LOCAL_PERSONA.trim() + "\n\n" +
+                "[Context]: it is $weekday, $time. battery: $battery%. macro buttons: $mbSummary.\n" +
                 "You are Capri running on-device (Jarvis mode). You CAN control the phone screen and play games directly using your autonomous agent loop. " +
                 "When asked to play a game or control the screen, NEVER reply with text tutorials or instructions — reply ONLY with: [ACTION:TASK:your goal]. " +
                 "When asked what is on screen, reply ONLY with: [ACTION:SEE_SCREEN:question]. " +
@@ -471,8 +467,14 @@ object OnDeviceAiClient {
         // Fix #3: Anytime systemOverride is provided (e.g. PhoneAgent), it is a deterministic task!
         val isTask = systemOverride != null
 
+        val effectiveSys = if (systemOverride != null) {
+            systemOverride
+        } else {
+            buildSystemPrompt(context) + "\n" + com.dot.capri.personality.Personality.toneDirectiveFor(prompt)
+        }
+
         val config = ConversationConfig(
-            systemInstruction = Contents.of(systemOverride ?: buildSystemPrompt(context)),
+            systemInstruction = Contents.of(effectiveSys),
             initialMessages = history.flatMap { (u, c) ->
                 listOf(
                     Message.user(u.take(if (historyOverride != null) 2000 else MAX_HISTORY_CHARS)),

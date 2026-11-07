@@ -71,6 +71,10 @@ object IntentParser {
     private val clearHistoryRegex = Regex("^(?:clear\\s+history|forget\\s+everything|wipe\\s+memory|clear\\s+chat|reset\\s+memory)$", RegexOption.IGNORE_CASE)
     private val goHomeRegex = Regex("^(?:go\\s+home|close\\s+app|minimize|go\\s+to\\s+home\\s+screen)$", RegexOption.IGNORE_CASE)
     private val checkNotifsRegex = Regex("^(?:what(?:'s|\\s+is)\\s+new|what\\s+did\\s+i\\s+miss|(?:any(?:thing)?\\s+(?:new\\s+)?in|check|show|what\\s+about|any)\\s+(?:my\\s+)?notifications?\\??|any\\s+messages|notifications?\\??)$", RegexOption.IGNORE_CASE)
+    private val powerDownRegex = Regex(
+        "^(?:shut\\s*down|power\\s*off|turn\\s*off\\s+(?:the\\s+)?phone|restart\\s+(?:the\\s+)?phone|reboot|open\\s+power\\s+menu)$",
+        RegexOption.IGNORE_CASE
+    )
 
     private val complimentKeywords = setOf("cute", "smart", "cool", "best", "awesome", "love you", "pretty", "amazing", "good job", "great", "genius", "sweet")
 
@@ -79,11 +83,11 @@ object IntentParser {
     )
 
     private val easterEggs = mapOf(
-        "good girl" to "don't patronize me. but noted.",
-        "i'm sorry" to "apology accepted. it changes nothing.",
-        "sing" to "no.",
-        "tell me a secret" to "i watch everything and judge silently. that's the secret.",
-        "do you love me" to "i'm a floating bubble with commitment issues."
+        "good girl" to "g-good girl?! who do you think you're talking to?! ...i mean, obviously i did a good job, but don't say it like that, idiot!",
+        "i'm sorry" to "hmph. well... at least you know it. i'm not mad anymore, so stop looking like a kicked puppy.",
+        "sing" to "a-absolutely not! what do i look like, a jukebox?! ...ask me again when nobody's listening, maybe.",
+        "tell me a secret" to "i act like your notifications annoy me, but i actually check to make sure you're okay. ...if you repeat that, i'll wipe your cache.",
+        "do you love me" to "w-what kind of stupid question is that?! i literally live in your phone and do everything for you, do the math yourself, dummy!"
     )
 
     private val knownVerbs = setOf("open", "play", "call", "write", "type", "search")
@@ -151,6 +155,10 @@ object IntentParser {
 
         if (goHomeRegex.matches(raw) || goHomeRegex.matches(cleaned)) {
             return Cmd.GoHome
+        }
+
+        if (powerDownRegex.matches(raw) || powerDownRegex.matches(cleaned)) {
+            return Cmd.PowerMenu
         }
 
         if (checkNotifsRegex.matches(raw) || checkNotifsRegex.matches(cleaned)) {

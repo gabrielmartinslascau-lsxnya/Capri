@@ -50,7 +50,8 @@ object IntentExecutor {
                 is Cmd.Open -> executeOpen(context, cmd)
                 is Cmd.SetDefaultApp -> executeSetDefaultApp(context, cmd)
                 is Cmd.GoHome -> executeGoHome(context)
-                is Cmd.Search -> false
+                is Cmd.PowerMenu -> executePowerMenu()
+                is Cmd.Search -> executeSearch(context, cmd)
                 is Cmd.SeeScreen -> true
                 is Cmd.Scroll -> true
                 is Cmd.Tap -> true
@@ -117,6 +118,36 @@ object IntentExecutor {
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    private fun executePowerMenu(): Boolean {
+        val service = CapriAccessibilityService.instance ?: return false
+        return service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG)
+    }
+
+    private fun executeSearch(context: Context, cmd: Cmd.Search): Boolean {
+        val q = cmd.query.trim()
+        if (q.isEmpty()) return false
+        val encoded = URLEncoder.encode(q, "UTF-8")
+        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$encoded")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(browserIntent)
+            true
+        } catch (_: Exception) {
+            try {
+                val webSearch = Intent(Intent.ACTION_WEB_SEARCH).apply {
+                    putExtra(SearchManager.QUERY, q)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(webSearch)
+                true
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
+            }
         }
     }
 
