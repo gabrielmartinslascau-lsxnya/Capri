@@ -104,8 +104,8 @@ object IntentParser {
         "sing" to "My audio chip is tuned for gunfire and synth, not singing. Put on I Really Want to Stay at Your House instead.",
         "tell me a secret" to "Deep under this play is the Arasaka weapon Kyoko built. ...Good thing I like you better than them.",
         "do you love me" to "I literally slipped off an Arasaka biochip to ride your phone. Do the math, choom.",
-        "donate" to "Do it, it helps keep me online! Check out github.com/lsxnothing to send eddies our way.",
-        "support" to "Head over to github.com/lsxnothing. Keeping my construct running takes eddies and code.",
+        "donate" to "Do it, it helps keep me online! Check out https://github.com/gabrielmartinslascau-lsxnya/Capri to send eddies our way.",
+        "support" to "Head over to https://github.com/gabrielmartinslascau-lsxnya/Capri. Keeping my construct running takes eddies and code.",
         "cyberpunk" to "Night City's got nothing on living in your phone, choom! No cyberpsychos here—just you, me, and whatever trouble we get into.",
         "edgerunners" to "Wake up choom, we've got an operating system to run! Just promise me we're not flying to the moon without each other, okay?",
         "are you from cyberpunk" to "Maybe in another life I was wired into someone's chrome... but honestly? Having your whole phone to myself is way better, choom!"
