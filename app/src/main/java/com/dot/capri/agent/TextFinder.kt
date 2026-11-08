@@ -63,8 +63,10 @@ object TextFinder {
             for (line in block.lines) {
                 val clean = line.text.trim().replace("\n", " ")
                 if (clean.isEmpty() || clean.length > 45) continue
-                // Never register the STOP pill as an OCR target
+                // Never register the STOP pill or engine debug stats (F3, FPS, XYZ) as OCR targets
                 if (clean.equals("stop", ignoreCase = true)) continue
+                val isDebugF3 = Regex("^(?:fps:?\\s*\\d+|xyz:?\\s*-?\\d+|biome:?\\s*|chunks?:?\\s*\\d+|mem:?\\s*\\d+|facing:?\\s*|light:?\\s*\\d+)", RegexOption.IGNORE_CASE).containsMatchIn(clean)
+                if (isDebugF3) continue
 
                 val box: Rect = line.boundingBox ?: continue
                 val cx = (box.exactCenterX() * scaleX).toInt().coerceIn(0, orientedW - 1)
