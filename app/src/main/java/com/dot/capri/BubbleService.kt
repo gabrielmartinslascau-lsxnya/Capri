@@ -697,14 +697,8 @@ class BubbleService : Service() {
                 getSharedPreferences("capri_realtalk_prefs", Context.MODE_PRIVATE).edit().clear().apply()
             } catch (_: Exception) {}
             historyContainer?.removeAllViews()
-            val wipedMsg = "Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate."
-            persistentChatHistory.add(Pair("Capri", wipedMsg))
-            addMessageView(themedContext, historyContainer, "Capri", wipedMsg)
             chatView?.findViewById<EditText>(R.id.input_text)?.text?.clear()
-            chatScroll?.post {
-                chatScroll.fullScroll(ScrollView.FOCUS_DOWN)
-            }
-            Toast.makeText(this, "Chat history & memory cleared", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Chat deleted & memory cleared", Toast.LENGTH_SHORT).show()
         }
 
         addMbBtn?.setOnClickListener {
@@ -1193,9 +1187,14 @@ class BubbleService : Service() {
                         return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                     }
                     val query = target.replace(':', ' ').trim()
+                    val qLower = query.lowercase(java.util.Locale.US)
+                    // Guard against 1-2 letter hallucinations or greetings accidentally triggering media playback
+                    if (qLower.isBlank() || qLower in setOf("hi", "hey", "hello", "sup", "yo", "good morning", "good evening") ||
+                        (qLower.length < 3 && !qLower.contains("cd") && !qLower.contains("dj"))) {
+                        return cleanResponse.ifBlank { "hey! what did you want me to play or do?" }
+                    }
                     IntentExecutor.execute(this, Cmd.Play(query, null))
                     delay(1800)
-                    val qLower = query.lowercase(java.util.Locale.US)
                     val isReelsOrVideo = qLower in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid") ||
                             Regex("^(?:a\\s+)?(?:video|vid|reels?|shorts?)$").matches(qLower)
                     val targetApp = if (isReelsOrVideo) MainActivity.getDefaultReelsApp(this) else MainActivity.getDefaultMusicPlayer(this)
@@ -1641,6 +1640,14 @@ class BubbleService : Service() {
                     return askBrain(text) ?: Personality.flusteredComplimentReply()
                 }
                 return Personality.flusteredComplimentReply()
+            }
+            is com.dot.capri.intents.Cmd.Chat,
+            is com.dot.capri.intents.Cmd.Mention -> {
+                if (brainAvailable()) {
+                    val prompt = "User said: \"$trimmedInput\". Respond warmly, playfully, and concisely in character (1 short sentence). DO NOT output any [ACTION] tags or device commands."
+                    return askBrain(prompt) ?: Personality.respond(parsedCmd, true)
+                }
+                return Personality.respond(parsedCmd, true)
             }
             is com.dot.capri.intents.Cmd.SeeScreen -> {
                 val shot = CapriAccessibilityService.instance?.captureScreenBitmap()

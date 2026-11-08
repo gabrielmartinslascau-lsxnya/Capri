@@ -95,19 +95,22 @@
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
-            <androidx.appcompat.widget.AppCompatImageButton
+            <TextView
                 android:id="@+id/btn_clear_chat"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="4dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
-                android:contentDescription="Delete chat"
-                android:padding="4dp"
-                android:scaleType="centerInside"
-                android:src="@drawable/ic_real_talk_clear"
-                app:tint="#F87171" />
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="[ Clear ]"
+                android:textColor="#F87171"
+                android:textSize="11sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/btn_expand"

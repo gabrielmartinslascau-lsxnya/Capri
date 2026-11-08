@@ -165,8 +165,11 @@ class RealTalkActivity : AppCompatActivity() {
                 .setPositiveButton("Clear") { _, _ ->
                     messages.clear()
                     saveConversationHistory()
+                    com.dot.capri.ai.CloudAiClient.clearHistory(this)
+                    com.dot.capri.agent.UserMemory.clear(this)
                     updateEmptyState()
                     adapter.notifyDataSetChanged()
+                    Toast.makeText(this, "Real Talk conversation & memory cleared", Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton("Cancel", null)
                 .show()

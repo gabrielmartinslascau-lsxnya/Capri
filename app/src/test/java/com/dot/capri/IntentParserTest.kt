@@ -252,4 +252,22 @@ class IntentParserTest {
         val cmdScrollTypo = IntentParser.parse("scrol down")
         assert(cmdScrollTypo is Cmd.Scroll && cmdScrollTypo.direction == ScrollDirection.DOWN)
     }
+
+    @Test
+    fun testGreetingsParseToChat() {
+        val cmdHi = IntentParser.parse("hi")
+        assert(cmdHi is Cmd.Chat)
+
+        val cmdHello = IntentParser.parse("hello")
+        assert(cmdHello is Cmd.Chat)
+
+        val cmdHey = IntentParser.parse("hey")
+        assert(cmdHey is Cmd.Chat)
+
+        val cmdSup = IntentParser.parse("sup")
+        assert(cmdSup is Cmd.Chat)
+
+        val cmdYo = IntentParser.parse("yo")
+        assert(cmdYo is Cmd.Chat)
+    }
 }

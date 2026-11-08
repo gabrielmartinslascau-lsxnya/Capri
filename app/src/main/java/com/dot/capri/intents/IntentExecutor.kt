@@ -171,6 +171,12 @@ object IntentExecutor {
     private fun executePlay(context: Context, cmd: Cmd.Play): Boolean {
         val rawQuery = cmd.query.trim().lowercase()
 
+        // Guard: Casual greetings or 1-2 letter non-music words must NEVER launch media searches or Spotify!
+        if (rawQuery.isBlank() || rawQuery in setOf("hi", "hey", "hello", "sup", "yo", "good morning", "good evening") ||
+            (rawQuery.length < 3 && !cmd.isGeneric && !rawQuery.contains("cd") && cmd.app.isNullOrBlank())) {
+            return false
+        }
+
         // Handle short video / reels queries ("play video", "play a vid", "reels")
         if (rawQuery in setOf("reels", "video", "vid", "shorts", "tiktok", "a video", "a vid") ||
             Regex("^play\\s+(?:a\\s+)?(?:video|vid|reels?|shorts?)$").matches(rawQuery)) {
