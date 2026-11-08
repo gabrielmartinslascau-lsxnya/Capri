@@ -34,7 +34,6 @@ object IntentParser {
         ")(?:\\s+(.+))?$",
         RegexOption.IGNORE_CASE
     )
-    private val greetingRegex = Regex("^(?:hi|hello|hey|sup|yo|good\\s+(?:morning|afternoon|evening)|how\\s+are\\s+you)(?:\\s+.*)?$", RegexOption.IGNORE_CASE)
 
     private val resumeRegex = Regex("^(?:resume|resume\\s+(?:the\\s+)?(?:music|song|track|playback)|continue|continue\\s+playing|unpause)$", RegexOption.IGNORE_CASE)
     private val pauseRegex = Regex("^(?:pause|pause\\s+(?:the\\s+)?(?:music|song|track|playback)|stop\\s+music)$", RegexOption.IGNORE_CASE)
@@ -475,10 +474,6 @@ object IntentParser {
             regex.containsMatchIn(lower)
         }) {
             return Cmd.Compliment(raw)
-        }
-
-        if (greetingRegex.matches(raw)) {
-            return Cmd.Chat(raw)
         }
 
         val firstWord = cleaned.split(Regex("\\s+")).firstOrNull()?.lowercase() ?: ""

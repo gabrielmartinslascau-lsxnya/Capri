@@ -254,20 +254,20 @@ class IntentParserTest {
     }
 
     @Test
-    fun testGreetingsParseToChat() {
+    fun testGreetingsRouteToBrain() {
         val cmdHi = IntentParser.parse("hi")
-        assert(cmdHi is Cmd.Chat)
+        assert(cmdHi is Cmd.Unknown)
 
         val cmdHello = IntentParser.parse("hello")
-        assert(cmdHello is Cmd.Chat)
+        assert(cmdHello is Cmd.Unknown)
 
         val cmdHey = IntentParser.parse("hey")
-        assert(cmdHey is Cmd.Chat)
+        assert(cmdHey is Cmd.Unknown)
 
         val cmdSup = IntentParser.parse("sup")
-        assert(cmdSup is Cmd.Chat)
+        assert(cmdSup is Cmd.Unknown)
 
         val cmdYo = IntentParser.parse("yo")
-        assert(cmdYo is Cmd.Chat)
+        assert(cmdYo is Cmd.Unknown)
     }
 }
