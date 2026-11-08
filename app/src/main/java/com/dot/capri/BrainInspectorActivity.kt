@@ -39,6 +39,7 @@ class BrainInspectorActivity : AppCompatActivity() {
     private lateinit var tabMemoryBtn: Button
     private lateinit var tabLogcatBtn: Button
     private var currentTab = 0 // 0 = Thoughts & Screenshots, 1 = Memory & Maps, 2 = Logcat
+    private var traceSubFilter = 0 // 0 = All, 1 = Tasks, 2 = Proactive Banners
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -240,7 +241,7 @@ class BrainInspectorActivity : AppCompatActivity() {
     private fun renderThoughtsTab(traces: List<BrainTraceStore.TurnTrace>) {
         if (traces.isEmpty()) {
             val emptyTv = TextView(this).apply {
-                text = "No brain turns recorded yet in this session.\n\nGive Capri a task (e.g. \"go on Spotify and pick one of my liked songs\" or \"play the game on screen\"), then open this inspector to see every screenshot she saw, her active plan, OCR hits, and exact commands!"
+                text = "No brain turns recorded yet in this session.\n\nGive Capri a task (e.g. \"go on Spotify and pick one of my liked songs\" or \"play the game on screen\"), or let her proactive vision comment on your screen, then open this inspector to see every screenshot she saw, her active plan, OCR hits, and exact commands!"
                 setTextColor(0xFF94A3B8.toInt())
                 textSize = 14f
                 gravity = Gravity.CENTER
@@ -250,9 +251,63 @@ class BrainInspectorActivity : AppCompatActivity() {
             return
         }
 
+        val allCount = traces.size
+        val proactiveCount = traces.count { it.mode == "PROACTIVITY" }
+        val taskCount = traces.count { it.mode != "PROACTIVITY" }
+
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(12))
+        }
+
+        fun createFilterBtn(label: String, filterIdx: Int): Button {
+            return Button(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = 11f
+                layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+                    if (filterIdx < 2) marginEnd = dp(6)
+                }
+                if (traceSubFilter == filterIdx) {
+                    background = roundedBg(0xFF0F766E.toInt(), 0xFF14B8A6.toInt(), 8)
+                    setTextColor(Color.WHITE)
+                } else {
+                    background = roundedBg(0xFF1E293B.toInt(), 0xFF334155.toInt(), 8)
+                    setTextColor(0xFF94A3B8.toInt())
+                }
+                setOnClickListener {
+                    traceSubFilter = filterIdx
+                    refreshCurrentTab()
+                }
+            }
+        }
+
+        filterRow.addView(createFilterBtn("All ($allCount)", 0))
+        filterRow.addView(createFilterBtn("Tasks ($taskCount)", 1))
+        filterRow.addView(createFilterBtn("Banners ($proactiveCount)", 2))
+        contentContainer.addView(filterRow)
+
+        val filteredTraces = when (traceSubFilter) {
+            1 -> traces.filter { it.mode != "PROACTIVITY" }
+            2 -> traces.filter { it.mode == "PROACTIVITY" }
+            else -> traces
+        }
+
+        if (filteredTraces.isEmpty()) {
+            val emptyFilteredTv = TextView(this).apply {
+                text = if (traceSubFilter == 2) "No proactive banner screenshots recorded yet." else "No task screenshots recorded yet."
+                setTextColor(0xFF94A3B8.toInt())
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setPadding(dp(24), dp(32), dp(24), dp(32))
+            }
+            contentContainer.addView(emptyFilteredTv)
+            return
+        }
+
         val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
 
-        for (trace in traces) {
+        for (trace in filteredTraces) {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 background = roundedBg(0xFF151C2C.toInt(), 0xFF2A364F.toInt(), 14)
@@ -269,9 +324,14 @@ class BrainInspectorActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
 
-            val modeColor = if (trace.mode == "GAME_MODE") 0xFFFF2D6B.toInt() else 0xFF00E5FF.toInt()
+            val isProactivity = trace.mode == "PROACTIVITY"
+            val modeColor = when {
+                isProactivity -> 0xFF00F0FF.toInt()
+                trace.mode == "GAME_MODE" -> 0xFFFF2D6B.toInt()
+                else -> 0xFF10B981.toInt()
+            }
             val tvStepBadge = TextView(this).apply {
-                text = "#${trace.id} · ${trace.mode} · ${trace.latencyMs}ms"
+                text = if (isProactivity) "#${trace.id} · PROACTIVE BANNER" else "#${trace.id} · ${trace.mode} · ${trace.latencyMs}ms"
                 setTextColor(modeColor)
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
@@ -326,12 +386,13 @@ class BrainInspectorActivity : AppCompatActivity() {
             }
 
             // Active Plan Box
+            val isProactivityTrace = trace.mode == "PROACTIVITY"
             val tvPlan = TextView(this).apply {
-                text = "PLAN: ${trace.activePlan}"
-                setTextColor(0xFFFBBF24.toInt())
+                text = if (isProactivityTrace) "REMARK: ${trace.goal.removePrefix("Vision Banner: ")}" else "PLAN: ${trace.activePlan}"
+                setTextColor(if (isProactivityTrace) 0xFF00F0FF.toInt() else 0xFFFBBF24.toInt())
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
-                background = roundedBg(0xFF1F2937.toInt(), 0xFF92400E.toInt(), 8)
+                background = roundedBg(0xFF1F2937.toInt(), if (isProactivityTrace) 0xFF0E7490.toInt() else 0xFF92400E.toInt(), 8)
                 setPadding(dp(8), dp(6), dp(8), dp(6))
             }
             rightCol.addView(tvPlan)
@@ -348,11 +409,12 @@ class BrainInspectorActivity : AppCompatActivity() {
 
             // Executed Action & Outcome Status
             val isSuccess = trace.outcomeStatus.contains("worked", ignoreCase = true) ||
-                trace.outcomeStatus.contains("progress", ignoreCase = true)
+                trace.outcomeStatus.contains("progress", ignoreCase = true) ||
+                trace.outcomeStatus == "POSTED"
             val outcomeColor = if (isSuccess) 0xFF10B981.toInt() else 0xFFF87171.toInt()
 
             val tvAction = TextView(this).apply {
-                text = "Did: ${trace.executedAction}\nStatus: ${trace.outcomeStatus}"
+                text = if (isProactivityTrace) "Action: Display Droplet Banner" else "Did: ${trace.executedAction}\nStatus: ${trace.outcomeStatus}"
                 setTextColor(outcomeColor)
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD

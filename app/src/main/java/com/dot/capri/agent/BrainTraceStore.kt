@@ -89,6 +89,45 @@ object BrainTraceStore {
         return turnId
     }
 
+    fun recordProactivityTrace(
+        context: Context,
+        pkg: String,
+        remark: String,
+        rawModelReply: String,
+        shotBytes: ByteArray?
+    ): Int {
+        val turnId = synchronized(this) { nextId++ }
+        val savedImgPath = saveTraceScreenshot(context, turnId, shotBytes)
+        val provider = com.dot.capri.llm.LlmRouter.getActiveProviderName(context)
+
+        val trace = TurnTrace(
+            id = turnId,
+            timestamp = System.currentTimeMillis(),
+            goal = "Vision Banner: \"$remark\"",
+            pkg = pkg,
+            mode = "PROACTIVITY",
+            provider = provider,
+            latencyMs = 0L,
+            visionResolution = if (shotBytes != null) "${shotBytes.size / 1024} KB JPEG" else "Blind (Text Only)",
+            screenshotFile = savedImgPath,
+            activePlan = "Proactive Comment: $remark",
+            memoryBlock = "",
+            ocrText = "",
+            uiElementsText = "",
+            fullPrompt = "Proactive Vision Evaluation",
+            rawModelReply = rawModelReply,
+            executedAction = "Display Droplet Banner: \"$remark\"",
+            outcomeStatus = "POSTED"
+        )
+
+        traces.add(0, trace)
+        while (traces.size > MAX_TRACES) {
+            val removed = traces.removeAt(traces.lastIndex)
+            removed.screenshotFile?.let { runCatching { File(it).delete() } }
+        }
+        return turnId
+    }
+
     fun updateTurnOutcome(turnId: Int, executedAction: String, outcomeStatus: String) {
         val item = traces.firstOrNull { it.id == turnId } ?: return
         item.executedAction = executedAction

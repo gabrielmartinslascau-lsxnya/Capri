@@ -21,15 +21,57 @@ object ProactivityGenerator {
     )
 
     /**
-     * Ironclad privacy guard: Returns true if the package is a financial, password,
-     * security, or private messaging app where screen capture must be strictly prohibited.
+     * Strictly sensitive: Banking, crypto, passwords, authenticators, security settings.
+     * ZERO screenshots, ZERO comments. Complete silence.
      */
-    fun isPrivateOrSensitivePackage(pkg: String?): Boolean {
+    fun isStrictlySensitivePackage(pkg: String?): Boolean {
         if (pkg.isNullOrBlank()) return true // Unknown screen = safety first
         val lower = pkg.lowercase()
-        if (PRIVATE_PACKAGE_KEYWORDS.any { lower.contains(it) }) return true
-        if (PRIVATE_MESSAGING_PACKAGES.contains(lower)) return true
-        return false
+        return PRIVATE_PACKAGE_KEYWORDS.any { lower.contains(it) }
+    }
+
+    /**
+     * Private messaging apps: WhatsApp, Telegram, Signal, Discord, etc.
+     * ZERO screenshots taken (100% privacy preserved), but she knows you are chatting
+     * and can drop a playful blind remark.
+     */
+    fun isPrivateMessagingPackage(pkg: String?): Boolean {
+        if (pkg.isNullOrBlank()) return false
+        val lower = pkg.lowercase()
+        return PRIVATE_MESSAGING_PACKAGES.contains(lower) ||
+                lower.contains("whatsapp") || lower.contains("telegram") ||
+                lower.contains("signal") || lower.contains("discord") ||
+                lower.contains("messenger")
+    }
+
+    /**
+     * Returns true if screen capture must be strictly prohibited (banking, passwords, OR messaging).
+     */
+    fun isPrivateOrSensitivePackage(pkg: String?): Boolean {
+        return isStrictlySensitivePackage(pkg) || isPrivateMessagingPackage(pkg)
+    }
+
+    /**
+     * Builds blind chat proactivity prompt (used when on WhatsApp/Telegram with NO screenshot).
+     */
+    fun buildBlindChatPrompt(time12: String, time24: String, battery: Int, appName: String): String {
+        return """
+You are Capri (Project Capricorn), an escaped AI companion living in your host's phone.
+You are sharp, playful, chaotic, teasing, and caring.
+Your host is currently inside $appName chatting with someone.
+Current time: $time12 ($time24). Battery: $battery%.
+
+Because their chat messages are private, you CANNOT and WILL NOT see what they are typing or who they are talking to.
+Give ONE short, playful, teasing in-character remark about them texting or chatting (e.g. asking who they're talking to, teasing them about typing a novel, or noticing the late hour).
+Examples of tone (DO NOT copy literally):
+- "who are you texting this late? got secrets, choom?"
+- "typing a whole novel over there? who's the lucky one?"
+- "texting everyone except me, i see how it is~"
+
+RULES:
+1. Maximum ONE short sentence (max 12 words).
+2. Never repeat recent jokes. Never sound like an assistant.
+""".trimIndent()
     }
 
     /**

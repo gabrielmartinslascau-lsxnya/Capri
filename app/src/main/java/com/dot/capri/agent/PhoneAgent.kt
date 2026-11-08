@@ -155,6 +155,11 @@ CRITICAL ADAPTIVE, CONTEXT & TIMING RULES:
 4. LOOKING AROUND IN 3D: For multi-block 3D tasks, after mining/breaking a block (4500ms), use `{"do":"look","dir":"up|down|left|right|around"}` to aim at the remaining blocks.
 5. RESPECT BLACKLISTED MOVES: Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 6. PLAN INTEGRITY & APP FOCUS: Always stay inside the current app and follow the ACTIVE STRATEGIC PLAN. NEVER switch to unrelated apps (e.g. NEVER open TikTok or YouTube during a music task). Keep your plan focused on completing the goal until DONE.
+7. CHAT & EMAIL DELEGATION: When instructed to reply, email, or chat with someone (e.g. "write an email to...", "reply on WhatsApp", "chat with him, he is a bully"):
+   - Read the incoming messages / email thread on screen to understand context.
+   - Formulate a smart, in-character response matching the user's intent.
+   - Type the response into the text field (`type`) and tap Send (`tap_text` "Send" or the send button).
+8. CREDENTIAL SAFETY BOUNDARY: NEVER attempt to type Bank PINs, payment master passwords, or 2FA codes. If a screen requires sensitive credentials/payment PIN, output `{"do":"fail","say":"Pop your PIN or password in first, choom, then I'll take it from there."}`.
 """.trimIndent()
 
     private val SYSTEM_NO_MBS = """
@@ -194,6 +199,11 @@ CRITICAL RULES:
 4. RESPECT BLACKLISTED MOVES: Never repeat any move listed in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 5. NEVER tap a "STOP" button unless the user explicitly requested it.
 6. PLAN INTEGRITY & APP FOCUS: Always stay inside the current app and follow the ACTIVE STRATEGIC PLAN. NEVER switch to unrelated apps (e.g. NEVER open TikTok or YouTube during a music task). Keep your plan focused on completing the goal until DONE.
+7. CHAT & EMAIL DELEGATION: When instructed to reply, email, or chat with someone (e.g. "write an email to...", "reply on WhatsApp", "chat with him, he is a bully"):
+   - Read the incoming messages / email thread on screen to understand context.
+   - Formulate a smart, in-character response matching the user's intent.
+   - Type the response into the text field (`type`) and tap Send (`tap_text` "Send" or the send button).
+8. CREDENTIAL SAFETY BOUNDARY: NEVER attempt to type Bank PINs, payment master passwords, or 2FA codes. If a screen requires sensitive credentials/payment PIN, output `{"do":"fail","say":"Pop your PIN or password in first, choom, then I'll take it from there."}`.
 """.trimIndent()
 
     private val SYSTEM_LOCAL_WITH_MBS = """

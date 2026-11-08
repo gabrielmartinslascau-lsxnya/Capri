@@ -1976,12 +1976,12 @@ Output ONLY valid JSON.
                     "walk|move|run|mine|chop|break|dig|attack|hit|kill|shoot|jump|craft|make|build|buy|collect|gather|place|put|farm|plant|harvest|" +
                     "look\\s+(?:up|down|left|right|around)|" +
                     "search(?:\\s+for)?|find|" +
-                    "text|message|send\\s+a\\s+message|call|dial|" +
+                    "text|message|send\\s+a\\s+message|call|dial|chat|talk\\s+to|reply|respond|answer|deal\\s+with|roast|" +
                     "type|write|clear\\s+field)\\b",
             RegexOption.IGNORE_CASE
         ).containsMatchIn(stripped) ||
-                Regex("\\b(and\\s+mine|and\\s+walk|and\\s+craft|and\\s+attack|and\\s+turn\\s+on|and\\s+play|and\\s+open|and\\s+search)\\b", RegexOption.IGNORE_CASE).containsMatchIn(stripped) ||
-                Regex("\\b(take\\s+over(?:\\s+the\\s+screen)?|take\\s+control)\\b", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
+                Regex("\\b(and\\s+mine|and\\s+walk|and\\s+craft|and\\s+attack|and\\s+turn\\s+on|and\\s+play|and\\s+open|and\\s+search|chat\\s+with|talk\\s+to|reply\\s+to|deal\\s+with)\\b", RegexOption.IGNORE_CASE).containsMatchIn(stripped) ||
+                Regex("\\b(take\\s+over(?:\\s+the\\s+screen)?|take\\s+control|chat\\s+with|deal\\s+with\\s+(?:this|him|her|them)|reply\\s+for\\s+me)\\b", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
 
         if (isActionDirective) {
             return stripped.ifEmpty { cleaned }

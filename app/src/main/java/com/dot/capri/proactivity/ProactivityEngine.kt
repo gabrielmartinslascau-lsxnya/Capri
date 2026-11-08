@@ -215,9 +215,9 @@ class ProactivityEngine(
 
         val currentApp = ForegroundAppDetector.currentForegroundApp(context)
 
-        // 1. IRONCLAD PRIVACY GUARD
-        if (ProactivityGenerator.isPrivateOrSensitivePackage(currentApp)) {
-            Log.d(TAG, "Privacy guard: skipped screenshot on sensitive app ($currentApp)")
+        // 1. TIER A: STRICTLY SENSITIVE (Banking, Passwords, Crypto) -> Complete silence, no screenshot
+        if (ProactivityGenerator.isStrictlySensitivePackage(currentApp)) {
+            Log.d(TAG, "Privacy guard: skipped completely on strictly sensitive app ($currentApp)")
             return
         }
 
@@ -233,34 +233,63 @@ class ProactivityEngine(
 
         scope.launch {
             try {
-                val accessibilityService = CapriAccessibilityService.instance
-                if (accessibilityService == null) {
-                    isEvaluating = false
-                    return@launch
-                }
-
-                // Capture live screenshot without overlays
-                val screenshot = accessibilityService.captureScreenBitmap()
-                if (screenshot == null || screenshot.isEmpty()) {
-                    isEvaluating = false
-                    return@launch
-                }
-
                 val time12 = android.text.format.DateFormat.format("h:mm a", cal).toString()
                 val time24 = android.text.format.DateFormat.format("HH:mm", cal).toString()
                 val battery = try {
                     (context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager)
                         .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
                 } catch (_: Throwable) { -1 }
-
                 val appName = currentApp?.substringAfterLast('.')?.replaceFirstChar { it.uppercase() } ?: "Phone"
-                val prompt = ProactivityGenerator.buildVisionPrompt(time12, time24, battery, appName)
 
+                // 2. TIER B: PRIVATE MESSAGING (WhatsApp, Telegram, Signal, Discord, Messages)
+                // -> NO SCREENSHOT IS TAKEN (100% private), but she drops a playful blind remark about chatting!
+                if (ProactivityGenerator.isPrivateMessagingPackage(currentApp)) {
+                    Log.d(TAG, "Privacy guard: Blind proactivity on messaging app $currentApp (zero screenshots)")
+                    val blindPrompt = ProactivityGenerator.buildBlindChatPrompt(time12, time24, battery, appName)
+                    val reply = BubbleService.instance?.askBrain(blindPrompt, null)
+                    val cleanRemark = ProactivityGenerator.cleanVisionRemark(reply)
+                    if (!cleanRemark.isNullOrBlank()) {
+                        lastCommentAt = System.currentTimeMillis()
+                        com.dot.capri.agent.BrainTraceStore.recordProactivityTrace(
+                            context = context,
+                            pkg = currentApp ?: "messaging",
+                            remark = cleanRemark,
+                            rawModelReply = reply.orEmpty(),
+                            shotBytes = null
+                        )
+                        handler.post {
+                            onTriggerComment(cleanRemark)
+                        }
+                    }
+                    return@launch
+                }
+
+                // 3. TIER C: AUTHORIZED APPS (TikTok, YouTube, Reddit, Games, Web, etc.)
+                // -> Full visual inspection + flight recorder trace in Brain Inspector!
+                val accessibilityService = CapriAccessibilityService.instance
+                if (accessibilityService == null) {
+                    return@launch
+                }
+
+                // Capture live screenshot without overlays
+                val screenshot = accessibilityService.captureScreenBitmap()
+                if (screenshot == null || screenshot.isEmpty()) {
+                    return@launch
+                }
+
+                val prompt = ProactivityGenerator.buildVisionPrompt(time12, time24, battery, appName)
                 val reply = BubbleService.instance?.askBrain(prompt, screenshot)
                 val cleanRemark = ProactivityGenerator.cleanVisionRemark(reply)
 
                 if (!cleanRemark.isNullOrBlank()) {
                     lastCommentAt = System.currentTimeMillis()
+                    com.dot.capri.agent.BrainTraceStore.recordProactivityTrace(
+                        context = context,
+                        pkg = currentApp ?: "unknown",
+                        remark = cleanRemark,
+                        rawModelReply = reply.orEmpty(),
+                        shotBytes = screenshot
+                    )
                     handler.post {
                         onTriggerComment(cleanRemark)
                     }
