@@ -696,8 +696,26 @@ class BubbleService : Service() {
             try {
                 getSharedPreferences("capri_realtalk_prefs", Context.MODE_PRIVATE).edit().clear().apply()
             } catch (_: Exception) {}
-            historyContainer?.removeAllViews()
+
+            val container = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
+            container?.removeAllViews()
+
+            val themedCtx = ContextThemeWrapper(this, R.style.Theme_Capri)
+            val cue = TextView(themedCtx).apply {
+                text = "— Chat cleared. Memory wiped. —"
+                setTextColor(ContextCompat.getColor(themedCtx, R.color.text_secondary))
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(0, dpToPx(16), 0, dpToPx(16))
+            }
+            container?.addView(cue)
+
             chatView?.findViewById<EditText>(R.id.input_text)?.text?.clear()
+            chatScroll?.scrollTo(0, 0)
+            container?.requestLayout()
+            chatScroll?.requestLayout()
+            chatView?.requestLayout()
+            chatView?.invalidate()
             Toast.makeText(this, "Chat deleted & memory cleared", Toast.LENGTH_SHORT).show()
         }
 

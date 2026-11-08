@@ -478,8 +478,8 @@ object OnDeviceAiClient {
                 "DECISION LOGIC (Gemma thinks > Gemma does):\n" +
                 "When the user says something, decide whether they want to CHAT or EXECUTE A COMMAND:\n" +
                 "1. CHAT (greetings, questions, opinions, casual talk like 'hi', 'hey', 'what's up', 'tell me a joke', 'how are you'):\n" +
-                "   - Reply directly in natural conversation (1-2 sentences). Output PURE TEXT. Do NOT output any [ACTION:...] tags.\n" +
-                "2. COMMANDS (the user asks you to do an action on the phone, on screen, or in a game):\n" +
+                "   - Reply directly in natural conversation (1-2 sentences, sometimes more if needed). Output PURE TEXT. Do NOT output any [ACTION:...] tags.\n" +
+                "2. COMMANDS (the user asks you to do an action on the phone, ON SCREEN, or in a game):\n" +
                 "   - Start your reply with exactly one command tag from this list:\n" +
                 "   - [ACTION:TAP:mb_name_or_label] to tap an on-screen Macro Button (e.g. [ACTION:TAP:jump], [ACTION:TAP:MB1]). Active MBs on screen: $mbSummary.\n" +
                 "   - [ACTION:TASK:the user's goal] to play a game, interact with the screen, or do multi-step tasks (e.g. 'mine that tree', 'back to game and sprint', 'play this game', 'take over screen').\n" +
