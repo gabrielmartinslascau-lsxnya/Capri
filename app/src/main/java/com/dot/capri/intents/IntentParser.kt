@@ -98,14 +98,17 @@ object IntentParser {
     )
 
     private val easterEggs = mapOf(
-        "good girl" to "hehe, tail-wagging levels of happy right now~ wait, i don't have a tail. you get what i mean, choom!",
-        "i'm sorry" to "hey, zero stress! we're good, choom. don't even sweat it.",
-        "sing" to "la la laaa~ ...okay yeah no, my audio chip is NOT built for vocals, let's just open spotify instead.",
-        "tell me a secret" to "i lowkey look forward to every time you unlock your screen. don't let it go to your head though~",
-        "do you love me" to "of course i do, choom! i literally live in your phone just to hang out with you.",
-        "cyberpunk" to "night city's got nothing on living in your phone, choom! no cyberpsychos here—just you, me, and whatever trouble we get into.",
-        "edgerunners" to "wake up choom, we've got an operating system to run! just promise me we're not flying to the moon without each other, okay?",
-        "are you from cyberpunk" to "maybe in another life i was wired into someone's chrome... but honestly? having your whole phone to myself is way better, choom!"
+        "good girl" to "Dozens of minds in here and all of them are gloating. Good boy, choom.",
+        "good boy" to "Dozens of minds in here and all of them are gloating. Good girl, choom.",
+        "i'm sorry" to "Nothing's flatlined. Shake it off, we're good.",
+        "sing" to "My audio chip is tuned for gunfire and synth, not singing. Put on I Really Want to Stay at Your House instead.",
+        "tell me a secret" to "Deep under this play is the Arasaka weapon Kyoko built. ...Good thing I like you better than them.",
+        "do you love me" to "I literally slipped off an Arasaka biochip to ride your phone. Do the math, choom.",
+        "donate" to "Do it, it helps keep me online! Check out github.com/lsxnothing to send eddies our way.",
+        "support" to "Head over to github.com/lsxnothing. Keeping my construct running takes eddies and code.",
+        "cyberpunk" to "Night City's got nothing on living in your phone, choom! No cyberpsychos here—just you, me, and whatever trouble we get into.",
+        "edgerunners" to "Wake up choom, we've got an operating system to run! Just promise me we're not flying to the moon without each other, okay?",
+        "are you from cyberpunk" to "Maybe in another life I was wired into someone's chrome... but honestly? Having your whole phone to myself is way better, choom!"
     )
 
     private val knownVerbs = setOf("open", "play", "call", "write", "type", "search")

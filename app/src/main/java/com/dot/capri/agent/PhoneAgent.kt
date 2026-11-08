@@ -139,7 +139,7 @@ Actions (reply with ONLY a single JSON object, always including your updated "pl
 {"do":"back","undo":"opened wrong menu","plan":"Close unintended popup and blacklist last move"}
 {"do":"ask_user","say":"Show me what to tap or scroll, dummy. Just once.","plan":"Ask user to demonstrate next touch on screen"}
 {"do":"wait","plan":"Wait for loading"}
-{"do":"done","say":"short, cheerful, in-character remark confirming what you did (e.g. 'boom, liked songs are rolling~ enjoy the vibes, choom!' or 'all done! what are we getting into next?')"}`
+{"do":"done","say":"one short in-character line confirming what happened (e.g. 'Tracks are rolling, choom.' or 'Handled.')"}
 {"do":"fail","say":"short in-character explanation of why the screen blocked you"}
 
 CRITICAL ADAPTIVE, CONTEXT & TIMING RULES:
@@ -184,7 +184,7 @@ Actions (reply with ONLY a single JSON object, always including your updated "pl
 {"do":"home","plan":"Go home"}
 {"do":"ask_user","say":"Show me what to tap or scroll, dummy. Just once.","plan":"Ask user to demonstrate next touch on screen"}
 {"do":"wait","plan":"Wait for loading screen"}
-{"do":"done","say":"short, cheerful, in-character remark confirming what you did (e.g. 'boom, liked songs are rolling~ enjoy the vibes, choom!' or 'all done! what are we getting into next?')"}`
+{"do":"done","say":"one short in-character line confirming what happened (e.g. 'Tracks are rolling, choom.' or 'Handled.')"}
 {"do":"fail","say":"short in-character explanation of why the screen blocked you"}
 
 CRITICAL RULES:
@@ -3398,7 +3398,7 @@ Rules:
                     return doneMsg
                 }
             }
-            return "woah, brakes on! stopped right where you asked, choom. ${summary(log)}"
+            return "Brakes on. Stopped right there. ${summary(log)}"
         } finally {
             BubbleService.instance?.releaseActiveWakeLock()
             ControlRegions.setPassThrough(context, false)
