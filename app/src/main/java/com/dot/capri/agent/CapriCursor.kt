@@ -288,6 +288,9 @@ object CapriCursor {
                 return
             }
         }
+        val pillScale = com.dot.capri.util.CustomizationPrefs.getPillScale(context)
+        row.scaleX = pillScale
+        row.scaleY = pillScale
         pill = row
         statusTv = status
     }

@@ -2,6 +2,9 @@ package com.dot.capri
 
 import com.dot.capri.agent.DevOverlay
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.app.Notification
@@ -12,6 +15,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.OvershootInterpolator
+import com.dot.capri.util.CustomizationPrefs
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
@@ -597,8 +605,23 @@ Output ONLY valid JSON.
         val bView = inflater.inflate(R.layout.banner_proactive, null)
         bannerView = bView
 
+        val accent = CustomizationPrefs.getAccentColor(this)
+        val textSize = CustomizationPrefs.getTextSizeSp(this)
+        val scale = CustomizationPrefs.getBannerScale(this)
+        val animDuration = CustomizationPrefs.getAnimDurationMs(this)
+        val displayDurationSec = CustomizationPrefs.getBannerDurationSec(this)
+
+        val bannerTitle = bView.findViewById<TextView>(R.id.banner_title)
+        val bannerAccentDot = bView.findViewById<View>(R.id.banner_accent_dot)
         val bannerText = bView.findViewById<TextView>(R.id.banner_text)
-        bannerText.text = text
+
+        bannerTitle?.setTextColor(accent)
+        bannerAccentDot?.backgroundTintList = ColorStateList.valueOf(accent)
+        bannerText?.textSize = textSize
+        bannerText?.text = text
+
+        val bg = bView.background?.mutate() as? GradientDrawable
+        bg?.setStroke((1.5f * resources.displayMetrics.density).toInt(), accent)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -608,7 +631,7 @@ Output ONLY valid JSON.
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = 120
+            y = (28 * resources.displayMetrics.density).toInt()
         }
 
         val chipShutUp = bView.findViewById<TextView>(R.id.chip_shut_up)
@@ -623,7 +646,6 @@ Output ONLY valid JSON.
             removeBannerView()
             expandToChat()
             val summary = com.dot.capri.monitor.AppUsageTotals.getTopAppsSummary(this)
-            val themedContext = ContextThemeWrapper(this, R.style.Theme_Capri)
             val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
             persistentChatHistory.add(Pair("Capri", summary))
             addMessageView(themedContext, historyContainer, "Capri", summary)
@@ -634,6 +656,12 @@ Output ONLY valid JSON.
             expandToChat()
         }
 
+        // Fluid water droplet initial state
+        bView.translationY = -140f
+        bView.scaleX = 0.2f * scale
+        bView.scaleY = 0.2f * scale
+        bView.alpha = 0f
+
         try {
             windowManager?.addView(bView, params)
         } catch (e: Exception) {
@@ -641,15 +669,40 @@ Output ONLY valid JSON.
             return
         }
 
+        // Entrance animation: smooth water droplet expansion
+        AnimatorSet().apply {
+            playTogether(
+                ObjectAnimator.ofFloat(bView, "translationY", -140f, 0f),
+                ObjectAnimator.ofFloat(bView, "scaleX", 0.2f * scale, scale),
+                ObjectAnimator.ofFloat(bView, "scaleY", 0.2f * scale, scale),
+                ObjectAnimator.ofFloat(bView, "alpha", 0f, 1f)
+            )
+            duration = animDuration
+            interpolator = OvershootInterpolator(1.25f)
+            start()
+        }
+
         serviceScope.launch {
-            delay(6000)
-            bView.animate()
-                .alpha(0f)
-                .setDuration(300)
-                .withEndAction {
-                    removeBannerView()
+            delay(displayDurationSec * 1000L)
+            if (bannerView == bView) {
+                // Exit animation: droplet smoothly retracts up into the top bezel
+                val exitAnim = AnimatorSet().apply {
+                    playTogether(
+                        ObjectAnimator.ofFloat(bView, "translationY", 0f, -140f),
+                        ObjectAnimator.ofFloat(bView, "scaleX", scale, 0.2f * scale),
+                        ObjectAnimator.ofFloat(bView, "scaleY", scale, 0.2f * scale),
+                        ObjectAnimator.ofFloat(bView, "alpha", 1f, 0f)
+                    )
+                    duration = animDuration
+                    interpolator = AccelerateInterpolator(1.4f)
                 }
-                .start()
+                exitAnim.addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        removeBannerView()
+                    }
+                })
+                exitAnim.start()
+            }
         }
     }
 
@@ -1340,7 +1393,7 @@ Output ONLY valid JSON.
     suspend fun executeBrainReply(reply: String): String = handleReply(reply, allowSee = true)
 
     // 3-way brain: API -> local model -> null (caller falls back to commands / canned lines)
-    private suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
+    suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
         var apiError: String? = null
         val wantsCloud = LlmRouter.getActiveProviderName(this) != "Local" && LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)
         val allowSee = imageBytes == null

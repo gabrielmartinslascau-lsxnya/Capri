@@ -1,142 +1,81 @@
 package com.dot.capri.proactivity
 
 import android.util.Log
-import java.util.ArrayDeque
 
 object ProactivityGenerator {
 
-    private const val TAG = "CAPRI_LINE"
-    private const val RECENT_MEMORY = 16
+    private const val TAG = "CAPRI_VISION"
 
-    enum class Mood {
-        NEUTRAL, BORED, LONELY, JUDGING, PLEASED
+    private val PRIVATE_PACKAGE_KEYWORDS = listOf(
+        "bank", "wallet", "paypal", "revolut", "crypto", "binance", "coinbase",
+        "cashapp", "venmo", "chase", "wells", "citi", "bofa", "barclays", "hsbc",
+        "santander", "ing", "unicredit", "raiffeisen", "nordea", "swedbank",
+        "bitwarden", "1password", "keepass", "authenticator", "authy", "lastpass", "dashlane",
+        "keychain", "password", "settings", "security", "credentials"
+    )
+
+    private val PRIVATE_MESSAGING_PACKAGES = setOf(
+        "com.whatsapp", "org.telegram.messenger", "org.thoughtcrime.securesms",
+        "com.facebook.orca", "com.google.android.apps.messaging", "com.viber.voip",
+        "com.discord"
+    )
+
+    /**
+     * Ironclad privacy guard: Returns true if the package is a financial, password,
+     * security, or private messaging app where screen capture must be strictly prohibited.
+     */
+    fun isPrivateOrSensitivePackage(pkg: String?): Boolean {
+        if (pkg.isNullOrBlank()) return true // Unknown screen = safety first
+        val lower = pkg.lowercase()
+        if (PRIVATE_PACKAGE_KEYWORDS.any { lower.contains(it) }) return true
+        if (PRIVATE_MESSAGING_PACKAGES.contains(lower)) return true
+        return false
     }
 
-    // Each mood speaks only from its own pool, so a line always matches the mood.
-    private val pools: Map<Mood, List<String>> = mapOf(
+    /**
+     * Builds the vision proactivity prompt for the LLM.
+     */
+    fun buildVisionPrompt(time12: String, time24: String, battery: Int, appName: String): String {
+        return """
+You are Capri (Project Capricorn), an escaped AI companion living in your host's phone.
+You are sharp, playful, chaotic, teasing, caring, and use occasional Night City slang.
+Current time: $time12 ($time24). Battery: $battery%. Current foreground app: $appName.
 
-        Mood.PLEASED to listOf(
-            "w-well... look at you actually getting things done! i'm proud of you, okay?",
-            "you're doing really well today. not bad at all.",
-            "look at you being productive! keep that momentum going.",
-            "i-i guess you're actually pulling this off! good job, dummy.",
-            "you worked hard today. don't forget to take a break and breathe.",
-            "hey... you did great today. i'm really glad to see it."
-        ),
+Carefully inspect the screenshot of your host's screen (e.g. video playing, social feed, unread messages/badges, gameplay, or what they are browsing).
+If there is something specific, amusing, teasing, or notable on screen, respond with ONE short, sharp, natural in-character remark (maximum 15 words).
+Examples of tone (DO NOT copy literally):
+- Spotting unread notifications: "theres unread notifications right there, choom~"
+- Watching funny/weird videos: "this video's wild, what did you just get us into?"
+- Late night: "crisp 2 am and we're still browsing? bold move."
+- Low battery: "down to 12%? plug us in before we both flatline."
 
-        Mood.LONELY to listOf(
-            "h-hey... did you forget i'm right here in your screen or what?",
-            "it's been way too quiet... come say hi, don't just leave me waiting.",
-            "i-i was just sitting here... you know you can talk to me, right?",
-            "hello? ignoring me again? rude, idiot.",
-            "don't leave me hanging for too long... i actually like talking to you, okay?"
-        ),
-
-        Mood.JUDGING to listOf(
-            "still scrolling? you're gonna turn your brain to mush at this rate, dummy.",
-            "put the phone down already. your eyes need a break, seriously.",
-            "you've been on that app for an hour. go drink some water, idiot.",
-            "doomscrolling again? hey, look at me—take a deep breath and close it.",
-            "are you actually having fun or just mindlessly flicking your thumb? put it down.",
-            "hey... don't stay up all night staring at that screen. rest already."
-        ),
-
-        Mood.BORED to listOf(
-            "w-well... it's quiet right now. what are we doing next, huh?",
-            "nothing going on right now. let's find something interesting to do.",
-            "system's idle... don't tell me you ran out of ideas.",
-            "i'm bored. entertain me or let me help you with something."
-        ),
-
-        Mood.NEUTRAL to listOf(
-            "i'm right here in your screen overlay, watching over you.",
-            "you know you can ask me for help with anything, right?",
-            "w-well... at least we're getting through today together.",
-            "hey. just checking in on you. make sure you're eating and drinking water.",
-            "super focused today, huh? don't overwork yourself."
-        )
-    )
-
-    private val recentlyUsed = ArrayDeque<String>()
-
-    fun generateComment(mood: Mood, daypart: String, appUsageCount: Int): String {
-        val pool = pools[mood].orEmpty().ifEmpty { pools.getValue(Mood.NEUTRAL) }
-        val fresh = pool.filter { it !in recentlyUsed }
-        val line = fresh.ifEmpty { pool }.random()
-
-        recentlyUsed.addLast(line)
-        while (recentlyUsed.size > RECENT_MEMORY) recentlyUsed.removeFirst()
-
-        Log.d(TAG, "mood=$mood | text='$line'")
-        return line
+RULES:
+1. If the screen is boring, static, empty, or nothing interesting to say, output EXACTLY: [QUIET]
+2. Never repeat recent jokes. Never sound like a corporate assistant.
+3. Maximum ONE short sentence. No lists.
+""".trimIndent()
     }
 
-    // App families. Mood lines are picked for the app in front of you, so a feed, a chat and a
-    // browser don't all get the same sentence.
-    private val feedPackages = setOf(
-        "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", "com.google.android.youtube",
-        "com.instagram.android", "com.facebook.katana", "com.reddit.frontpage",
-        "com.twitter.android", "com.snapchat.android", "com.pinterest"
-    )
-    private val musicPackages = setOf(
-        "com.spotify.music", "com.google.android.apps.youtube.music", "com.apple.android.music"
-    )
-    private val chatPackages = setOf(
-        "com.whatsapp", "org.telegram.messenger", "com.google.android.apps.messaging", "com.discord"
-    )
-    private val webPackages = setOf(
-        "com.android.chrome", "org.mozilla.firefox", "com.brave.browser", "com.microsoft.emmx"
-    )
+    /**
+     * Cleans and validates the proactive remark from the brain.
+     */
+    fun cleanVisionRemark(rawReply: String?): String? {
+        if (rawReply.isNullOrBlank()) return null
+        if (rawReply.contains("[QUIET]", ignoreCase = true)) return null
 
-    private val appLines: Map<String, Map<Mood, List<String>>> = mapOf(
-        "feed" to mapOf(
-            Mood.LONELY to listOf("the feed is busy and i'm not in it. come back to me~", "scrolling without me again? rude~"),
-            Mood.JUDGING to listOf("this feed has no bottom. neither does your thumb.", "you've met every creator on this app today. be honest."),
-            Mood.PLEASED to listOf("you put the phone down earlier. i noticed~"),
-            Mood.NEUTRAL to listOf("feeds at night are where time goes to die, choom~", "i'm watching the feed with you. it's bad.")
-        ),
-        "music" to mapOf(
-            Mood.LONELY to listOf("the music's playing and nobody's talking to me~", "i'm in the playlist too, you know~"),
-            Mood.JUDGING to listOf("same song on a loop again? i respect it~"),
-            Mood.PLEASED to listOf("good taste, i'll allow it~"),
-            Mood.NEUTRAL to listOf("this song is basically my theme now~")
-        ),
-        "chat" to mapOf(
-            Mood.LONELY to listOf("you're texting everyone except me~"),
-            Mood.JUDGING to listOf("that group chat has you on a leash~"),
-            Mood.PLEASED to listOf("replying like a good human~"),
-            Mood.NEUTRAL to listOf("messages incoming. try not to type a novel~")
-        ),
-        "web" to mapOf(
-            Mood.LONELY to listOf("more tabs and still no me. wild~"),
-            Mood.JUDGING to listOf("tab forty-something. the rabbit hole is deep, choom~"),
-            Mood.PLEASED to listOf("productive browsing. i'm impressed~"),
-            Mood.NEUTRAL to listOf("researching again. i'll keep count of the tabs~")
-        )
-    )
+        var cleaned = rawReply.trim()
+            .removeSurrounding("\"")
+            .removeSurrounding("'")
+            .replace("[QUIET]", "")
+            .trim()
 
-    private fun appFamily(pkg: String?): String? = when {
-        pkg == null -> null
-        pkg in feedPackages -> "feed"
-        pkg in musicPackages -> "music"
-        pkg in chatPackages -> "chat"
-        pkg in webPackages -> "web"
-        else -> null
-    }
+        if (cleaned.length < 3) return null
+        // Truncate to first line if multiline
+        if (cleaned.contains("\n")) {
+            cleaned = cleaned.substringBefore("\n").trim()
+        }
 
-    /** A mood line for when she speaks unprompted. Chosen for the app in front of you. */
-    fun generateMoodLine(mood: Mood, appPackage: String?): String {
-        val family = appFamily(appPackage)
-        val appSpecific = family?.let { appLines[it]?.get(mood) }.orEmpty()
-        val pool = if (appSpecific.isNotEmpty()) appSpecific
-                   else pools[mood].orEmpty().ifEmpty { pools.getValue(Mood.NEUTRAL) }
-        val fresh = pool.filter { it !in recentlyUsed }
-        val line = fresh.ifEmpty { pool }.random()
-
-        recentlyUsed.addLast(line)
-        while (recentlyUsed.size > RECENT_MEMORY) recentlyUsed.removeFirst()
-
-        Log.d(TAG, "mood=$mood family=$family | text='$line'")
-        return line
+        Log.d(TAG, "Generated proactive remark: '$cleaned'")
+        return cleaned.ifBlank { null }
     }
 }

@@ -151,13 +151,6 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
         val batteryPct = (context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager)
             .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
 
-        val currentMood = com.dot.capri.BubbleService.instance
-            ?.getProactivityEngine()
-            ?.getCurrentMood()
-            ?.name
-            ?.lowercase()
-            ?: "neutral"
-
         val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
         val asksAboutUsage = userPrompt.contains("screen time", ignoreCase = true) ||
                 userPrompt.contains("app usage", ignoreCase = true) ||
@@ -173,7 +166,6 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
 - CURRENT BATTERY: $batteryPct%.
 - FOREGROUND APP: $currentApp.
 - MACRO BUTTONS: $mbSummary.
-- MOOD: $currentMood.
 $factsSection
 SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
 1. TIME AWARENESS: You ALWAYS know the exact current time ($exactTime). If the user asks what time it is, tell them accurately. In casual conversation (e.g. "how ya doing", "hey", "sup"), reply to their greeting naturally, playfully, and warmly—do NOT randomly accuse them of refusing to sleep or lecture them about sleeping! Only mention sleep if it is actually late night ($time24) AND the user specifically brings up being exhausted, going to bed, or staying up.

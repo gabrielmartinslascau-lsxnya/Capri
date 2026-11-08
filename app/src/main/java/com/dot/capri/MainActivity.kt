@@ -150,6 +150,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, HealthActivity::class.java))
         }
 
+        findViewById<View>(R.id.btn_open_customizability)?.setOnClickListener {
+            startActivity(Intent(this, CustomizabilityActivity::class.java))
+        }
+
         findViewById<View>(R.id.btnRealTalk)?.setOnClickListener {
             val intent = Intent(this, RealTalkActivity::class.java)
             startActivity(intent)
@@ -291,27 +295,6 @@ class MainActivity : AppCompatActivity() {
                     updateLocalLlmStatus()
                 }
             )
-        }
-
-        // Force Mood Spinner
-        val forcedMoodSpinner = findViewById<Spinner>(R.id.spinner_forced_mood)
-        val moodList = listOf("None", "Judging", "Pleased", "Bored", "Neutral", "Lonely")
-        val moodAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, moodList).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
-        forcedMoodSpinner.adapter = moodAdapter
-
-        val savedForcedMood = prefs.getString("forced_mood", "none") ?: "none"
-        val forcedMoodIndex = moodList.indexOfFirst { it.equals(savedForcedMood, ignoreCase = true) }.let { if (it >= 0) it else 0 }
-        forcedMoodSpinner.setSelection(forcedMoodIndex)
-
-        forcedMoodSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selectedMood = moodList[position].lowercase()
-                prefs.edit().putString("forced_mood", selectedMood).apply()
-                updateDebugTriggersInfo()
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         val musicSpinner = findViewById<Spinner>(R.id.spinner_default_music)

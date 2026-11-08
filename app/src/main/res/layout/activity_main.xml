@@ -70,7 +70,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="8dp"
             android:orientation="horizontal">
 
             <Button
@@ -80,7 +80,7 @@
                 android:layout_weight="1"
                 android:layout_marginEnd="4dp"
                 android:backgroundTint="#2E7D32"
-                android:text="AI Usage Dashboard"
+                android:text="AI Usage"
                 android:textColor="@color/white"
                 android:textSize="12sp" />
 
@@ -91,10 +91,23 @@
                 android:layout_weight="1"
                 android:layout_marginStart="4dp"
                 android:backgroundTint="#1565C0"
-                android:text="Capri Health Status"
+                android:text="Health Status"
                 android:textColor="@color/white"
                 android:textSize="12sp" />
         </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_open_customizability"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:backgroundTint="#0F766E"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="🎨 Customizability"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
         <!-- Provider Selection -->
         <TextView
@@ -474,25 +487,6 @@
             android:textColor="@color/accent_red_pink"
             android:textSize="13sp"
             android:textStyle="bold" />
-
-        <!-- Force Mood Developer Override -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="2dp"
-            android:text="Force Mood Override"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
-
-        <Spinner
-            android:id="@+id/spinner_forced_mood"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/bg_input_field"
-            android:minHeight="48dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp" />
 
         <Button
             android:id="@+id/btn_preview_cursor"

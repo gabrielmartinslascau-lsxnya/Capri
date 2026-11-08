@@ -60,6 +60,12 @@
             android:theme="@style/Theme.Capri" />
 
         <activity
+            android:name=".CustomizabilityActivity"
+            android:exported="false"
+            android:label="Customizability"
+            android:theme="@style/Theme.Capri" />
+
+        <activity
             android:name=".TutorialActivity"
             android:exported="false"
             android:theme="@style/Theme.Capri" />
