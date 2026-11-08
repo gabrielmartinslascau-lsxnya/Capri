@@ -11,15 +11,6 @@ import com.dot.capri.BubbleService
 import com.dot.capri.CapriAccessibilityService
 import com.dot.capri.MainActivity
 import com.dot.capri.monitor.ForegroundAppDetector
-import com.dot.capri.proactivity.triggers.CalculatorRepeatTrigger
-import com.dot.capri.proactivity.triggers.CameraRetryTrigger
-import com.dot.capri.proactivity.triggers.ChromeResearchTrigger
-import com.dot.capri.proactivity.triggers.DoomScrollTrigger
-import com.dot.capri.proactivity.triggers.IdleSpeechTrigger
-import com.dot.capri.proactivity.triggers.MapsIdleTrigger
-import com.dot.capri.proactivity.triggers.MusicLoopTrigger
-import com.dot.capri.proactivity.triggers.WatchedAppDwellTrigger
-import com.dot.capri.proactivity.triggers.WhatsAppCheckTrigger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,18 +28,6 @@ class ProactivityEngine(
         // 10 minutes in normal mode, 1 minute in quick mode
         private const val NORMAL_CHECK_INTERVAL_MS = 10 * 60 * 1000L
         private const val FAST_CHECK_INTERVAL_MS = 60 * 1000L
-
-        val triggersList: List<Trigger> = listOf(
-            DoomScrollTrigger(),
-            ChromeResearchTrigger(),
-            CameraRetryTrigger(),
-            MusicLoopTrigger(),
-            MapsIdleTrigger(),
-            CalculatorRepeatTrigger(),
-            WhatsAppCheckTrigger(),
-            WatchedAppDwellTrigger(),
-            IdleSpeechTrigger()
-        )
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -143,13 +122,7 @@ class ProactivityEngine(
 
     fun resetMuteState() {
         mutedUntil = 0L
-        triggersList.forEach { it.resetCooldown() }
-        Log.d(TAG, "Reset mute state and triggers")
-    }
-
-    fun resetFireCounts() {
-        triggersList.forEach { it.resetFireCount() }
-        Log.d(TAG, "Reset fire counts for all triggers")
+        Log.d(TAG, "Reset mute state")
     }
 
     fun getEngineState(now: Long): String {
@@ -162,14 +135,6 @@ class ProactivityEngine(
         if (!disableQuietHours && (hour in 1..6)) return "QuietHours"
 
         return "State: Armed (Vision Proactivity)"
-    }
-
-    fun getTriggerStatus(trigger: Trigger, currentApp: String?, now: Long): String {
-        val state = getEngineState(now)
-        if (!state.startsWith("State: Armed")) return state
-
-        val quickMode = MainActivity.isQuickMode(context)
-        return trigger.getDetailedStatus(context, currentApp, now, quickMode)
     }
 
     /**

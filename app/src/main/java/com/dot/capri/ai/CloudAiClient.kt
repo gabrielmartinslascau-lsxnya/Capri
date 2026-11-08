@@ -114,6 +114,17 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
         }
     }
 
+    fun getConversationSummary(context: Context): String {
+        ensureHistoryLoaded(context)
+        val turns = synchronized(sessionHistory) { sessionHistory.toList() }
+        if (turns.size <= 2) return ""
+        val olderTurns = turns.dropLast(2)
+        val summaryItems = olderTurns.takeLast(6).map { (u, a) ->
+            "${u.take(50).trim()} -> ${a.take(50).trim()}"
+        }
+        return "\n[Summary of prior conversation topics]:\n" + summaryItems.joinToString("\n") { "- $it" } + "\n"
+    }
+
     fun clearHistory(context: Context? = null) {
         synchronized(sessionHistory) { sessionHistory.clear() }
         LlmRouter.clearCache()
@@ -158,7 +169,11 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
                 userPrompt.contains("how long on", ignoreCase = true)
         val usageInfo = if (asksAboutUsage) AppUsageTotals.getUsageSummaryString(context) else "not requested"
         val userFacts = com.dot.capri.agent.UserMemory.getFactsPrompt(context)
-        val factsSection = if (userFacts.isNotBlank()) "\n[Things you know about the user]:\n$userFacts\n" else ""
+        val convSummary = getConversationSummary(context)
+        val memorySection = buildString {
+            if (userFacts.isNotBlank()) append("\n[Things you know about the user]:\n$userFacts\n")
+            if (convSummary.isNotBlank()) append(convSummary)
+        }
 
         val contextBlock = """
 [DEVICE STATUS (ALWAYS TRUE & ACCURATE)]:
@@ -166,7 +181,7 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
 - CURRENT BATTERY: $batteryPct%.
 - FOREGROUND APP: $currentApp.
 - MACRO BUTTONS: $mbSummary.
-$factsSection
+$memorySection
 SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
 1. TIME AWARENESS: You ALWAYS know the exact current time ($exactTime). If the user asks what time it is, tell them accurately. In casual conversation (e.g. "how ya doing", "hey", "sup"), reply to their greeting naturally, playfully, and warmly—do NOT randomly accuse them of refusing to sleep or lecture them about sleeping! Only mention sleep if it is actually late night ($time24) AND the user specifically brings up being exhausted, going to bed, or staying up.
 2. BATTERY AWARENESS: You ALWAYS know the exact battery percentage ($batteryPct%). If the user asks ("what's my battery?"), answer accurately with $batteryPct%. If battery is critically low (<= 15%), you can give a quick nudge to plug it in. Otherwise, don't randomly recite battery numbers out of nowhere.

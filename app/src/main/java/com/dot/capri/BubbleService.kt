@@ -217,102 +217,7 @@ class BubbleService : Service() {
         return "about to reply to ${notif.senderOrTitle}: \"$actualMessage\". send it? (yes/no)"
     }
 
-    private suspend fun resolveIntentViaBrain(input: String): Cmd? {
-        if (!brainAvailable()) return null
-        val prompt = """
-You are Capri's command classifier. Classify the user's input into one JSON action object.
-Be flexible with typos, abbreviations (txt, msg, dm), and casual phrasing.
-User input: "$input"
 
-Available actions:
-{"action": "REPLY_NOTIFICATION", "target": "<sender or null>", "text": "<message>"}
-  Examples: "say to him that im impressed", "tell her yes", "reply on my way", "answr saying ok", "txt him back that's fine", "sya to him im impressed"
-{"action": "TEXT", "contact": "<name>", "message": "<message or null>"}
-  Examples: "text alex about dinner", "txt mom", "send msg to sarah saying hi", "dm john bout party"
-{"action": "CALL", "contact": "<name>"}
-  Examples: "call dad", "ring alex", "dial 555-1234"
-{"action": "OPEN", "app": "<app name>"}
-  Examples: "open spotify", "launch youtube", "go to settings"
-{"action": "SEARCH", "query": "<query>"}
-  Examples: "search github", "googl best pizza", "look up weather"
-{"action": "CHECK_NOTIFICATIONS"}
-  Examples: "any notifications?", "check notifs", "what did i miss"
-{"action": "SCROLL", "direction": "UP"|"DOWN"|"LEFT"|"RIGHT"}
-  Examples: "scroll down", "swip up", "page down"
-{"action": "MEDIA_CONTROL", "type": "PLAY"|"PAUSE"|"NEXT"|"PREV"}
-  Examples: "pause music", "skip song", "resume playback"
-{"action": "VOLUME", "direction": "UP"|"DOWN"|"MUTE"}
-  Examples: "turn it up", "volume down", "mute"
-{"action": "SEE_SCREEN"}
-  Examples: "what's on my screen", "look at this screen"
-{"action": "UNKNOWN"}
-  Use for general conversation, questions, or multi-step manual screen tasks.
-
-Output ONLY valid JSON.
-""".trimIndent()
-
-        val rawJson = generateRawReplyText(prompt)?.trim() ?: return null
-        return try {
-            val cleanJson = rawJson.substringAfter("{").substringBeforeLast("}").let { "{$it}" }
-            val obj = org.json.JSONObject(cleanJson)
-            when (obj.optString("action").uppercase()) {
-                "REPLY_NOTIFICATION" -> {
-                    val target = obj.optString("target").takeIf { it.isNotBlank() && it != "null" }
-                    val text = obj.optString("text").takeIf { it.isNotBlank() } ?: return null
-                    Cmd.ReplyNotification(target, text)
-                }
-                "TEXT" -> {
-                    val contact = obj.optString("contact").takeIf { it.isNotBlank() && it != "null" } ?: return null
-                    val msg = obj.optString("message").takeIf { it.isNotBlank() && it != "null" }
-                    Cmd.Text(contact, msg)
-                }
-                "CALL" -> {
-                    val contact = obj.optString("contact").takeIf { it.isNotBlank() && it != "null" } ?: return null
-                    Cmd.Call(contact)
-                }
-                "OPEN" -> {
-                    val app = obj.optString("app").takeIf { it.isNotBlank() && it != "null" } ?: return null
-                    Cmd.Open(app)
-                }
-                "SEARCH" -> {
-                    val query = obj.optString("query").takeIf { it.isNotBlank() && it != "null" } ?: return null
-                    Cmd.Search(query)
-                }
-                "CHECK_NOTIFICATIONS" -> Cmd.CheckNotifications
-                "SCROLL" -> {
-                    val dir = when (obj.optString("direction").uppercase()) {
-                        "UP" -> ScrollDirection.UP
-                        "LEFT" -> ScrollDirection.LEFT
-                        "RIGHT" -> ScrollDirection.RIGHT
-                        else -> ScrollDirection.DOWN
-                    }
-                    Cmd.Scroll(dir)
-                }
-                "MEDIA_CONTROL" -> {
-                    val act = when (obj.optString("type").uppercase()) {
-                        "PAUSE" -> MediaAction.PAUSE
-                        "NEXT" -> MediaAction.NEXT
-                        "PREV", "PREVIOUS" -> MediaAction.PREVIOUS
-                        else -> MediaAction.PLAY
-                    }
-                    Cmd.MediaControl(act)
-                }
-                "VOLUME" -> {
-                    val dir = when (obj.optString("direction").uppercase()) {
-                        "DOWN" -> VolumeDirection.DOWN
-                        "MUTE" -> VolumeDirection.MUTE
-                        else -> VolumeDirection.UP
-                    }
-                    Cmd.Volume(dir)
-                }
-                "SEE_SCREEN" -> Cmd.SeeScreen("what is on this screen?")
-                else -> null
-            }
-        } catch (e: Exception) {
-            android.util.Log.d("CAPRI_INTENT", "Brain intent classification failed: ${e.message}")
-            null
-        }
-    }
 
     private fun resolveBubbleAsset(state: BubbleState): Int {
         return when (state) {
@@ -778,9 +683,22 @@ Output ONLY valid JSON.
         val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
         val chatScroll = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
         val expandBtn = chatView?.findViewById<TextView>(R.id.btn_expand)
+        val clearBtn = chatView?.findViewById<TextView>(R.id.btn_clear_chat)
         val realTalkBtn = chatView?.findViewById<TextView>(R.id.btn_real_talk)
         val addMbBtn = chatView?.findViewById<TextView>(R.id.btn_add_mb)
         val toggleMbBtn = chatView?.findViewById<TextView>(R.id.btn_toggle_mb)
+
+        clearBtn?.setOnClickListener {
+            triggerHapticFeedback()
+            persistentChatHistory.clear()
+            com.dot.capri.ai.CloudAiClient.clearHistory(this)
+            com.dot.capri.agent.UserMemory.clear(this)
+            historyContainer?.removeAllViews()
+            val wipedMsg = "Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate."
+            persistentChatHistory.add(Pair("Capri", wipedMsg))
+            addMessageView(themedContext, historyContainer, "Capri", wipedMsg)
+            Toast.makeText(this, "Chat history & memory cleared", Toast.LENGTH_SHORT).show()
+        }
 
         addMbBtn?.setOnClickListener {
             triggerHapticFeedback()
@@ -1664,14 +1582,8 @@ Output ONLY valid JSON.
             return "default media player is ${MainActivity.getDefaultMusicPlayer(this)}."
         }
 
-        // Parse structured Cmd primitives via IntentParser (with brain-based typo & variation fallback)
-        var parsedCmd = com.dot.capri.intents.IntentParser.parse(trimmedInput)
-        if (parsedCmd is com.dot.capri.intents.Cmd.Unknown && brainAvailable()) {
-            val brainCmd = resolveIntentViaBrain(trimmedInput)
-            if (brainCmd != null) {
-                parsedCmd = brainCmd
-            }
-        }
+        // Parse structured Cmd primitives via IntentParser
+        val parsedCmd = com.dot.capri.intents.IntentParser.parse(trimmedInput)
         when (parsedCmd) {
             is com.dot.capri.intents.Cmd.EasterEgg -> {
                 return parsedCmd.response
@@ -1730,7 +1642,7 @@ Output ONLY valid JSON.
                     awaitingNotificationReplyText = false
                     if (brainAvailable()) {
                         val prompt = "User asked: \"$trimmedInput\". There is a recent notification from ${msgNotif.senderOrTitle}: \"${msgNotif.messageText}\" (app: ${msgNotif.appPkg}). " +
-                                "In 1 short, witty tsundere sentence, tell the user what ${msgNotif.senderOrTitle} said and ask if they want to respond. No action tags."
+                                "In 1 short, witty, in-character sentence, tell the user what ${msgNotif.senderOrTitle} said and ask if they want to respond. No action tags."
                         return askBrain(prompt) ?: "well ${msgNotif.senderOrTitle} said \"${msgNotif.messageText}\", wanna respond?"
                     }
                     return "well ${msgNotif.senderOrTitle} said \"${msgNotif.messageText}\", wanna respond?"
@@ -1775,7 +1687,7 @@ Output ONLY valid JSON.
             is com.dot.capri.intents.Cmd.Search -> {
                 IntentExecutor.execute(this, parsedCmd)
                 if (brainAvailable()) {
-                    return askBrain("I just opened search results for '${parsedCmd.query}'. Give a 1-sentence quick tsundere confirmation telling the user their results are on screen, with NO action tags.")
+                    return askBrain("I just opened search results for '${parsedCmd.query}'. Give a 1-sentence quick in-character confirmation telling the user their results are on screen, with NO action tags.")
                         ?: "searched for '${parsedCmd.query}'. there's your results."
                 }
                 return "searched for '${parsedCmd.query}'."

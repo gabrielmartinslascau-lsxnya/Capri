@@ -24,7 +24,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.dot.capri.llm.LlmRouter
 import com.dot.capri.monitor.ForegroundAppDetector
-import com.dot.capri.proactivity.ProactivityEngine
 import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity() {
@@ -380,8 +379,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         resetFireCountsBtn.setOnClickListener {
-            BubbleService.instance?.getProactivityEngine()?.resetFireCounts()
-            Toast.makeText(this, "Reset all fire counts", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Vision proactivity is active with zero limits", Toast.LENGTH_SHORT).show()
             updateDebugTriggersInfo()
         }
 
@@ -492,12 +490,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val builder = StringBuilder("State: ${engine.getEngineState(now)}\n")
-        ProactivityEngine.triggersList.forEach { trigger ->
-            val status = engine.getTriggerStatus(trigger, currentApp, now)
-            builder.append("${trigger.id}: ${trigger.getFireCountToday()} fired | $status\n")
+        val state = engine.getEngineState(now)
+        val privacyStatus = if (com.dot.capri.proactivity.ProactivityGenerator.isStrictlySensitivePackage(currentApp)) {
+            "Tier A (Sensitive - Complete Silence)"
+        } else if (com.dot.capri.proactivity.ProactivityGenerator.isPrivateMessagingPackage(currentApp)) {
+            "Tier B (Messaging - Zero Screenshots)"
+        } else {
+            "Tier C (Authorized - Full Vision)"
         }
-        debugView.text = builder.toString()
+        debugView.text = "$state\nForeground App: ${currentApp ?: "none"}\nPrivacy: $privacyStatus"
     }
 
     private fun requestOverlayPermission() {

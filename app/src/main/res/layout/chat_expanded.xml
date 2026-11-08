@@ -90,6 +90,21 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/btn_clear_chat"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="[ Clear ]"
+                android:textColor="#F87171"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
                 android:id="@+id/btn_expand"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

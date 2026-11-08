@@ -463,9 +463,16 @@ object OnDeviceAiClient {
             -1
         }
         val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
+        val userFacts = com.dot.capri.agent.UserMemory.getFactsPrompt(context)
+        val convSummary = CloudAiClient.getConversationSummary(context)
+        val memorySection = buildString {
+            if (userFacts.isNotBlank()) append("\n[Things you know about the user]:\n$userFacts\n")
+            if (convSummary.isNotBlank()) append(convSummary)
+        }
 
         return com.dot.capri.personality.Personality.CORE_PERSONA_PROMPT.trim() + "\n\n" +
                 "[Context]: it is $weekday, $time12 ($time24), battery is $battery%. macro buttons: $mbSummary.\n" +
+                memorySection +
                 "Situational rules: You know the exact time and battery accurately on every reply. If user chats casually ('how ya doing', 'hey', 'sup'), respond warmly or playfully to their greeting without nagging them about sleep. Only talk about sleep or staying up late if the user explicitly mentions sleep, bed, or being exhausted. Mention battery only when asked or if <=15%. NEVER recite screen time or app stats unprompted in casual conversation.\n" +
                 "Keep chat replies to 1-2 short punchy sentences. When analyzing images or screen content, pay close attention to the visual elements on screen (app UI, videos, captions, social feeds) and comment accurately on what is actually shown.\n\n" +
                 "DEVICE ACTIONS (for simple user requests):\n" +
@@ -489,7 +496,7 @@ object OnDeviceAiClient {
             ?: throw IllegalStateException(lastError ?: "local model not ready")
 
         // Isolate vision from casual chat history so Gemma's attention is focused on visual tokens
-        val history = historyOverride ?: if (systemOverride == null && imageBytes == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
+        val history = historyOverride ?: if (systemOverride == null && imageBytes == null) CloudAiClient.recentHistory(HISTORY_TURNS, context) else emptyList()
         // Anytime systemOverride is provided (e.g. PhoneAgent), it is a deterministic task!
         val isTask = systemOverride != null
 
@@ -589,7 +596,7 @@ object OnDeviceAiClient {
                     } else {
                         // Only record casual text chat exchanges in session history; never vision prompts or tasks
                         if (systemOverride == null && historyOverride == null && imageBytes == null) {
-                            CloudAiClient.recordExchange(prompt, reply)
+                            CloudAiClient.recordExchange(prompt, reply, context)
                         }
                         Result.success(reply)
                     }
