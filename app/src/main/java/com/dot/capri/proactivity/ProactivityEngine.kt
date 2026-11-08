@@ -230,14 +230,15 @@ class ProactivityEngine(
                 }
 
                 // 3. TIER C: AUTHORIZED APPS (TikTok, YouTube, Reddit, Games, Web, etc.)
-                // -> Full visual inspection + flight recorder trace in Brain Inspector!
+                // -> Multi-frame filmstrip burst (3 frames over ~700ms) for dynamic video & reels understanding!
                 val accessibilityService = CapriAccessibilityService.instance
                 if (accessibilityService == null) {
                     return@launch
                 }
 
-                // Capture live screenshot without overlays
-                val screenshot = accessibilityService.captureScreenBitmap()
+                // Capture live chronological 3-frame burst (Setup -> Action -> Punchline)
+                val screenshot = accessibilityService.captureBurstFilmstrip(frameCount = 3, intervalMs = 350L)
+                    ?: accessibilityService.captureScreenBitmap()
                 if (screenshot == null || screenshot.isEmpty()) {
                     return@launch
                 }
