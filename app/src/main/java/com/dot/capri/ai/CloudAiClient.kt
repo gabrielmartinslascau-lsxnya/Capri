@@ -123,13 +123,30 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
         }
     }
 
+    fun isDeleteMemoryIntent(text: String): Boolean {
+        val lower = text.trim().lowercase(java.util.Locale.US)
+        return lower in setOf(
+            "delete memory", "clear memory", "wipe memory", "reset memory",
+            "delete your memory", "clear your memory", "wipe your memory",
+            "delete history", "clear history", "wipe history", "clear chat",
+            "delete chat", "wipe chat", "forget everything", "forget me", "fresh slate"
+        ) || Regex("^(?:can\\s+you\\s+|please\\s+)?(?:clear|delete|wipe|reset|erase|forget)\\s+(?:all\\s+)?(?:your\\s+)?(?:chat\\s+)?(?:history|memory|everything|chats?)$", RegexOption.IGNORE_CASE).matches(lower)
+    }
+
     fun generateResponse(context: Context, userPrompt: String, imageBytes: ByteArray? = null): Result<String> {
         ensureHistoryLoaded(context)
+        if (isDeleteMemoryIntent(userPrompt)) {
+            clearHistory(context)
+            return Result.success("Memory wiped and brain cache cleared, choom. Fresh slate.")
+        }
+
         val cal = Calendar.getInstance()
         val weekday = android.text.format.DateFormat.format("EEEE", cal).toString()
-        val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
+        val time12 = android.text.format.DateFormat.format("h:mm a", cal).toString()
+        val time24 = android.text.format.DateFormat.format("HH:mm", cal).toString()
+        val exactTime = "$time12 ($time24)"
         val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val isLateNight = hour in 0..4 || hour >= 23
+        val isLateNight = hour in 0..4
         val currentApp = ForegroundAppDetector.currentForegroundApp(context) ?: "none"
         val batteryPct = (context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager)
             .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -151,14 +168,17 @@ The user types fast with fat thumbs. Silently fix typos and answer what they mea
         val factsSection = if (userFacts.isNotBlank()) "\n[Things you know about the user]:\n$userFacts\n" else ""
 
         val contextBlock = """
-it is $weekday, $time (${if (isLateNight) "late night / wee hours" else "daytime"}). foreground app: $currentApp. battery: $batteryPct%.
-user's macro buttons (MBs): $mbSummary.
-your current mood is $currentMood (let it color your tone naturally: pleased = warmer and proud, judging = a bit smug and teasing, lonely = clingy, bored = restless, neutral = normal).
+[DEVICE STATUS (ALWAYS TRUE & ACCURATE)]:
+- CURRENT TIME: $exactTime, $weekday (${if (isLateNight) "late night" else "daytime"}).
+- CURRENT BATTERY: $batteryPct%.
+- FOREGROUND APP: $currentApp.
+- MACRO BUTTONS: $mbSummary.
+- MOOD: $currentMood.
 $factsSection
 SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
-1. TIME: You know the current time ($time). If it is late night (past midnight or 1-5 AM) and the user chats casually ("how ya doing", "hey", "sup", etc.), call them out gently and check on them (e.g. "I ask you the same, what are YOU doing up so late? Is everything alright choom?.."). In daytime hours, chat normally.
-2. BATTERY: You know the battery level ($batteryPct%). Only bring up battery if the user asks ("what's my battery?"), OR if battery is critically low (<= 15%) where you can gently remind them to plug it in. NEVER randomly recite battery percentage in casual conversation when battery is normal.
-3. SCREEN TIME: NEVER randomly recite minutes spent on apps or screen time stats in casual conversation! (e.g. if user says "how ya doing", NEVER say "X minutes on tiktok? you watched too many reels"). Only mention app usage if the user specifically asks you about their screen time or app usage (today's usage: $usageInfo).
+1. TIME AWARENESS: You ALWAYS know the exact current time ($exactTime). If the user asks what time it is, tell them accurately. In casual conversation (e.g. "how ya doing", "hey", "sup"), reply to their greeting naturally, playfully, and warmly—do NOT randomly accuse them of refusing to sleep or lecture them about sleeping! Only mention sleep if it is actually late night ($time24) AND the user specifically brings up being exhausted, going to bed, or staying up.
+2. BATTERY AWARENESS: You ALWAYS know the exact battery percentage ($batteryPct%). If the user asks ("what's my battery?"), answer accurately with $batteryPct%. If battery is critically low (<= 15%), you can give a quick nudge to plug it in. Otherwise, don't randomly recite battery numbers out of nowhere.
+3. SCREEN TIME: NEVER recite minutes spent on apps or screen time stats unless the user specifically asks for their app usage (today's usage: $usageInfo).
 """.trimIndent()
 
         val history = recentHistory(MAX_HISTORY, context)

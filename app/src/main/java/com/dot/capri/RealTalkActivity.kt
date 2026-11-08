@@ -195,6 +195,26 @@ class RealTalkActivity : AppCompatActivity() {
     }
 
     private fun submitUserMessage(userText: String) {
+        if (com.dot.capri.ai.CloudAiClient.isDeleteMemoryIntent(userText)) {
+            com.dot.capri.ai.CloudAiClient.clearHistory(this)
+            com.dot.capri.agent.UserMemory.clear(this)
+            messages.clear()
+            val replyText = "Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate."
+            val assistantTurn = RealTalkTurn(
+                id = UUID.randomUUID().toString(),
+                role = "assistant",
+                content = replyText,
+                timestamp = System.currentTimeMillis(),
+                modelTag = RealTalkBridge.getActiveModelBadge(this)
+            )
+            messages.add(assistantTurn)
+            saveConversationHistory()
+            updateEmptyState()
+            adapter.notifyDataSetChanged()
+            scrollToBottom()
+            return
+        }
+
         val userTurn = RealTalkTurn(
             id = UUID.randomUUID().toString(),
             role = "user",

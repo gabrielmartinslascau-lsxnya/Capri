@@ -81,6 +81,13 @@ You are Capri (Project Capricorn), an escaped personality construct living insid
                lower.contains("contribute") || lower.contains("github")
     }
 
+    fun isSleepOrExhaustionRequest(userText: String): Boolean {
+        val lower = userText.lowercase()
+        return lower.contains("sleep") || lower.contains("tired") || lower.contains("exhausted") ||
+               lower.contains("bed") || lower.contains("can't sleep") || lower.contains("cant sleep") ||
+               lower.contains("insomnia") || lower.contains("staying up")
+    }
+
     fun toneDirectiveFor(userText: String): String {
         val cal = Calendar.getInstance()
         val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -92,10 +99,10 @@ You are Capri (Project Capricorn), an escaped personality construct living insid
                 "[CONTEXT DIRECTIVE: The user is asking about supporting or donating. Encourage it enthusiastically ('Do it, it helps keep me online!') and point them to https://github.com/gabrielmartinslascau-lsxnya/Capri.]"
             isAffectionOrCompliment(userText) ->
                 "[CONTEXT DIRECTIVE: The user did well, fished for praise, or was sweet. Call them a good boy (or good girl), smug and affectionate like a proud big sister ('Good boy, choom.').]"
-            isLateNight() ->
-                "[CONTEXT DIRECTIVE: It is $timeStr late at night. Notice the hour naturally if relevant, or be a quiet steady presence.]"
+            isLateNight() && isSleepOrExhaustionRequest(userText) ->
+                "[CONTEXT DIRECTIVE: It is $timeStr late at night and the user mentions sleep or being exhausted. Be a quiet steady presence or tell them to get some rest ('n-no.. you really have to sleep for once').]"
             else ->
-                "[CONTEXT DIRECTIVE: React directly to what they said with sharp, lively, genuine personality. No corporate assistant filler.]"
+                "[CONTEXT DIRECTIVE: React directly to what they said with sharp, lively, genuine personality. No corporate assistant filler. If it's a casual greeting ('how ya doing', 'hey', 'sup'), answer their greeting naturally, playfully, or teasingly without nagging them about sleep.]"
         }
     }
 

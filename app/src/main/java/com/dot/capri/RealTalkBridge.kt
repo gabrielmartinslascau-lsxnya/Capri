@@ -56,6 +56,11 @@ object RealTalkBridge {
         userMessage: String
     ): Pair<String, String> = withContext(Dispatchers.IO) {
         val badge = getActiveModelBadge(context)
+        if (com.dot.capri.ai.CloudAiClient.isDeleteMemoryIntent(userMessage)) {
+            com.dot.capri.ai.CloudAiClient.clearHistory(context)
+            com.dot.capri.agent.UserMemory.clear(context)
+            return@withContext Pair("Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate.", badge)
+        }
         val multiTurnPrompt = buildConversationalPrompt(context, history, userMessage)
 
         val rawReply = dispatchToCapriEngine(context, multiTurnPrompt, userMessage, history)
@@ -75,8 +80,9 @@ object RealTalkBridge {
             appendLine(com.dot.capri.personality.Personality.CORE_PERSONA_PROMPT.trim())
             appendLine(
                 "You are in 'Real Talk' mode: a private, full-screen, direct conversation with your host (Super Mode). " +
-                "You are their chaotic, joyful, ride-or-die best friend. Notice late-night hours, care genuinely about their well-being, " +
-                "and if they're stressed, down, or lonely, be their warmest rock. Do NOT output raw JSON or [ACTION] tags unless executing a task."
+                "You are their chaotic, joyful, ride-or-die best friend. You know the exact time and battery level accurately on every turn. " +
+                "Answer casual greetings ('how ya doing', 'hey', 'sup') naturally and warmly without nagging about sleep. " +
+                "If they are stressed, down, or lonely, be their warmest rock. Do NOT output raw JSON or [ACTION] tags unless executing a task."
             )
             appendLine(toneHint)
             appendLine()
@@ -132,9 +138,8 @@ object RealTalkBridge {
         }
         
         val cal = java.util.Calendar.getInstance()
-        val time = android.text.format.DateFormat.format("HH:mm", cal).toString()
-        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-        val isLateNight = hour in 0..4 || hour >= 23
+        val time12 = android.text.format.DateFormat.format("h:mm a", cal).toString()
+        val time24 = android.text.format.DateFormat.format("HH:mm", cal).toString()
         val battery = try {
             (context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager)
                 .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -143,7 +148,7 @@ object RealTalkBridge {
         val userFacts = com.dot.capri.agent.UserMemory.getFactsPrompt(context)
         val factsSection = if (userFacts.isNotBlank()) "\n[Things you know about the user]:\n$userFacts\n" else ""
 
-        val situationalHint = "\n[Situational awareness: time is $time (${if (isLateNight) "late night / past midnight" else "daytime"}), battery is $battery%. If it's late night, tease them playfully for being up so late ('i wonder how YOU are doing this late at night'). Only mention battery if asked or <=15%. Never recite app usage/screen time stats unprompted.]$factsSection"
+        val situationalHint = "\n[Situational awareness: exact current time is $time12 ($time24), battery is $battery%. You know the exact time and battery accurately on every single reply. Casual greetings (e.g. 'how ya doing', 'hey', 'sup') get warm, lively, playful responses—never nag about sleep, bed, or accuse the user of refusing to sleep. Only discuss sleep or tiredness if the user explicitly brings it up. Mention battery only when asked or if <=15%. Never recite app usage or screen time stats unprompted.]$factsSection"
 
         // 1. Direct call to LlmRouter if API key is configured and not local
         val wantsCloud = com.dot.capri.llm.LlmRouter.getActiveProviderName(context) != "Local"

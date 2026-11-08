@@ -165,6 +165,26 @@ class IntentParserTest {
     }
 
     @Test
+    fun testParseClearHistoryVariations() {
+        val phrases = listOf(
+            "clear history",
+            "clear chat",
+            "forget everything",
+            "wipe memory",
+            "reset memory",
+            "delete memory",
+            "delete your memory",
+            "clear memory",
+            "wipe your memory",
+            "fresh slate"
+        )
+        for (phrase in phrases) {
+            val cmd = IntentParser.parse(phrase)
+            assertEquals("Failed for: $phrase", Cmd.ClearHistory, cmd)
+        }
+    }
+
+    @Test
     fun testParseRepeatScroll() {
         val cmd1 = IntentParser.parse("scroll left twice")
         assert(cmd1 is Cmd.Scroll && cmd1.count == 2)

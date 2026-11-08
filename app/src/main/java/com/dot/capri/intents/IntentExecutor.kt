@@ -59,7 +59,11 @@ object IntentExecutor {
                 is Cmd.LongPress -> true
                 is Cmd.Pinch -> true
                 is Cmd.DualTap -> true
-                is Cmd.ClearHistory -> true
+                is Cmd.ClearHistory -> {
+                    com.dot.capri.ai.CloudAiClient.clearHistory(context)
+                    com.dot.capri.agent.UserMemory.clear(context)
+                    true
+                }
                 is Cmd.EasterEgg -> true
                 is Cmd.CheckNotifications -> true
                 is Cmd.ReplyNotification -> true

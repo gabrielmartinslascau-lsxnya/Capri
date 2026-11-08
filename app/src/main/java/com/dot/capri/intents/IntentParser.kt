@@ -77,7 +77,12 @@ object IntentParser {
 
     private val muteProactivityRegex = Regex("^(?:shut\\s+up|be\\s+quiet|capri\\s+stop|enough|stop\\s+talking)$", RegexOption.IGNORE_CASE)
     private val unmuteProactivityRegex = Regex("^(?:come\\s+back|you\\s+can\\s+talk|speak\\s+again|capri\\s+talk)$", RegexOption.IGNORE_CASE)
-    private val clearHistoryRegex = Regex("^(?:clear\\s+history|forget\\s+everything|wipe\\s+memory|clear\\s+chat|reset\\s+memory)$", RegexOption.IGNORE_CASE)
+    private val clearHistoryRegex = Regex(
+        "^(?:clear|delete|wipe|reset|erase)\\s+(?:all\\s+)?(?:the\\s+)?(?:my\\s+)?(?:your\\s+)?(?:chat|history|chat\\s+history|memory|memories|data)(?:\\s+(?:please|now))?$" +
+        "|^forget\\s+(?:everything|all(?:\\s+about\\s+me)?)$" +
+        "|^fresh\\s+slate$",
+        RegexOption.IGNORE_CASE
+    )
     private val goHomeRegex = Regex("^(?:go\\s+home|close\\s+app|minimize|go\\s+to\\s+home\\s+screen)$", RegexOption.IGNORE_CASE)
     private val checkNotifsRegex = Regex(
         "^(?:what(?:'s|\\s+is)\\s+new|what\\s+did\\s+i\\s+miss|" +

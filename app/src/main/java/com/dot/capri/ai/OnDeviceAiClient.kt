@@ -444,9 +444,8 @@ object OnDeviceAiClient {
     private fun buildSystemPrompt(context: Context): String {
         val cal = Calendar.getInstance()
         val weekday = android.text.format.DateFormat.format("EEEE", cal)
-        val time = android.text.format.DateFormat.format("HH:mm", cal)
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val isLateNight = hour in 0..4 || hour >= 23
+        val time12 = android.text.format.DateFormat.format("h:mm a", cal)
+        val time24 = android.text.format.DateFormat.format("HH:mm", cal)
         val battery = try {
             (context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager)
                 .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -456,8 +455,8 @@ object OnDeviceAiClient {
         val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
 
         return com.dot.capri.personality.Personality.COMPACT_LOCAL_PERSONA.trim() + "\n\n" +
-                "[Context]: it is $weekday, $time (${if (isLateNight) "late night" else "daytime"}). battery: $battery%. macro buttons: $mbSummary.\n" +
-                "Situational rules: You know the time and battery. If it's late night (past midnight, 1-5 AM) and user chats casually ('how ya doing', etc.), check on them warmly ('I ask you the same, what are YOU doing up so late? Is everything alright choom?..'). Only mention battery if asked or <=15%. NEVER recite screen time or app stats unprompted in casual conversation.\n" +
+                "[Context]: it is $weekday, $time12 ($time24), battery is $battery%. macro buttons: $mbSummary.\n" +
+                "Situational rules: You know the exact time and battery accurately on every reply. If user chats casually ('how ya doing', 'hey', 'sup'), respond warmly or playfully to their greeting without nagging them about sleep. Only talk about sleep or staying up late if the user explicitly mentions sleep, bed, or being exhausted. Mention battery only when asked or if <=15%. NEVER recite screen time or app stats unprompted in casual conversation.\n" +
                 "You are Capri running on-device (Jarvis mode). You CAN control the phone screen and play games directly using your autonomous agent loop. " +
                 "When asked to play a game or control the screen, NEVER reply with text tutorials or instructions — reply ONLY with: [ACTION:TASK:your goal]. " +
                 "When asked what is on screen, reply ONLY with: [ACTION:SEE_SCREEN:question]. " +
@@ -559,9 +558,13 @@ object OnDeviceAiClient {
         systemOverride: String? = null,
         historyOverride: List<Pair<String, String>>? = null,
         maxTokensOverride: Int? = null
-    ): Result<String> =
+    ): Result<String> {
+        if (CloudAiClient.isDeleteMemoryIntent(prompt)) {
+            CloudAiClient.clearHistory(context)
+            return Result.success("Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate.")
+        }
         // CRITICAL: Always run on singleThreadDispatcher so GPU OpenCL / NPU QNN thread-local contexts never hop threads!
-        withContext(singleThreadDispatcher) {
+        return withContext(singleThreadDispatcher) {
             mutex.withLock {
                 idleJob?.cancel()
                 try {
@@ -600,4 +603,5 @@ object OnDeviceAiClient {
                 }
             }
         }
+    }
 }
