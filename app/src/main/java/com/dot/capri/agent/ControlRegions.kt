@@ -553,15 +553,30 @@ object ControlRegions {
 
     /**
      * General-purpose prompt description of all user-placed Macro Buttons.
+     * When screen dimensions are provided, annotates each MB with its visual Grid Cell and
+     * explicit gameplay safety notes (e.g. marking pause/resume buttons to prevent menu loops).
      */
-    fun describeForPrompt(context: Context): String {
+    fun describeForPrompt(context: Context, screenW: Int = 0, screenH: Int = 0): String {
         val list = allMacroButtons(context)
         if (list.isEmpty()) return "none"
+        val isLandscape = screenW > screenH
+        val cols = if (isLandscape) 10 else 6
+        val rows = if (isLandscape) 6 else 10
         return list.joinToString(" | ") { mb ->
             val labelUp = mb.name.uppercase(Locale.US)
             val coords = String.format(Locale.US, "(x=%.2f, y=%.2f)", mb.normX, mb.normY)
             val label = mb.effectiveLabel()
-            "$labelUp = \"$label\" at $coords (use '$labelUp' to tap, '$labelUp <ms>' to hold for <ms> milliseconds, or '$labelUp <x> <y>' to tap $labelUp then tap target (x,y))"
+            val colLetter = 'A' + (mb.normX * cols).toInt().coerceIn(0, cols - 1)
+            val rowNum = (mb.normY * rows).toInt().coerceIn(0, rows - 1) + 1
+            val cellStr = if (screenW > 0 && screenH > 0) "[Cell $colLetter$rowNum] " else ""
+            val isPauseOrResume = label.contains("resume", ignoreCase = true) ||
+                    (label.contains("menu", ignoreCase = true) && !label.contains("select", ignoreCase = true)) ||
+                    label.contains("pause", ignoreCase = true)
+            if (isPauseOrResume) {
+                "$labelUp = \"$label\" ${cellStr}at $coords (PAUSE/RESUME - ONLY tap if game is paused!)"
+            } else {
+                "$labelUp = \"$label\" ${cellStr}at $coords (use '$labelUp' to tap, or '$labelUp <cell>' to select card and target cell e.g. '$labelUp C3')"
+            }
         }
     }
 

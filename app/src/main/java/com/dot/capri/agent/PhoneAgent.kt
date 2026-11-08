@@ -209,15 +209,18 @@ CRITICAL RULES:
 """.trimIndent()
 
     private val SYSTEM_LOCAL_WITH_MBS = """
-You control an Android phone in ADAPTIVE HYBRID MODE: use MACRO BUTTONS (MB1, MB2, ...) for fixed controls, and use VISUAL (x, y) coordinates when clicking item icons, recipes, or slots in the screenshot that do NOT have an MB!
+You control an Android phone in ADAPTIVE HYBRID MODE: use MACRO BUTTONS (MB1, MB2, ...) for fixed controls, and use VISUAL GRID CELLS (e.g. B1, C3) or (x, y) coordinates when clicking item icons, cards, recipes, or slots in the screenshot!
 Reply with ONLY ONE line (command + | PLAN: short strategy):
-MB1 | PLAN: <strategy>                       (taps Macro Button MB1, MB2, etc., e.g. inventory or jump)
+MB1 | PLAN: <strategy>                       (taps Macro Button MB1, MB2, etc., e.g. jump, open menu)
+MB1 <cell> | PLAN: <strategy>                (selects card/control MB1 first, then taps board cell, e.g. MB1 C3 to plant on lane C3)
+MB1 <x> <y> | PLAN: <strategy>               (taps MB1 first, then taps screen target x,y in 0.00..1.00)
 MB1 <ms> | PLAN: <strategy>                  (holds MB1 for <ms> milliseconds, e.g. MB1 4500 for mining, MB1 2000 for walk)
 TAP <x> <y> MB1 | PLAN: <strategy>           (taps visual icon at x,y on screen FIRST, then taps MB1 e.g. confirm/craft)
-MB1 <x> <y> | PLAN: <strategy>               (taps MB1 first, then taps screen target x,y in 0.00..1.00)
-JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
+SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select card at B1 and plant on lane C3)
+TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect fallen sun/drop or tap tile)
 TAP <x> <y> | PLAN: <strategy>               (taps visual item/icon/slot at 0.00..1.00 coordinate when no MB covers it)
 SEQ <x1> <y1> <x2> <y2> | PLAN: <strategy>   (taps visual icon at x1,y1 then taps slot/output at x2,y2)
+JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
 LOOK <UP|DOWN|LEFT|RIGHT|AROUND> | PLAN: <strategy> (turns 3D camera to look up/down/left/right/around)
 SWIPE <x1> <y1> <x2> <y2> | PLAN: <strategy> (swipes screen / rotates camera in any direction)
 TAP_TEXT <words> | PLAN: <strategy>          (taps visible text button)
@@ -240,12 +243,19 @@ Rules:
 - ALWAYS include <ms> when holding an action MB (e.g. MB1 2500 for holding, MB1 1500 for walking).
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 - PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
-- AUTONOMOUS GAMING: NEVER output ASK_USER when playing games! Always execute actions autonomously.
+- AUTONOMOUS GAMING:
+  * You are 100% autonomous. NEVER output ASK_USER when playing games! Always execute actions directly.
+  * In strategy/placement games (PvZ, tower defense):
+    - Collect falling sun/coins/drops: use `TAP <cell>` (e.g. `TAP D2`).
+    - Place plants/units: use `MB1 <cell>` (e.g. `MB1 C3` to select card MB1 and plant on lane C3). If card has no MB, use `SEQ <card_cell> <board_cell>` (e.g. `SEQ B1 C3`).
+    - NEVER tap "resume" or "menu" buttons unless an actual PAUSE dialog is visible on screen!
 """.trimIndent()
 
     private val SYSTEM_LOCAL_NO_MBS = """
-You control an Android phone using screen coordinates, UI elements, and OCR text.
+You control an Android phone using screen grid cells (e.g. B1, C3), UI elements, and OCR text.
 Reply with ONE line (single command OR multiple chained commands separated by '->' + | PLAN: short strategy):
+SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select card at B1 and plant on board C3)
+TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect sun or tap tile)
 TAP_ID <id> | PLAN: <strategy>               (taps UI element #id from SCREEN ELEMENTS)
 TAP_TEXT <words> | PLAN: <strategy>          (taps visible words from OCR TEXT)
 JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
@@ -276,7 +286,12 @@ Rules:
 - Prefer TAP_ID <id> when SCREEN ELEMENTS are listed, or TAP_TEXT <words> when OCR text matches.
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 - PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
-- AUTONOMOUS GAMING: NEVER output ASK_USER when playing games! Always execute actions autonomously.
+- AUTONOMOUS GAMING:
+  * You are 100% autonomous. NEVER output ASK_USER when playing games! Always execute actions directly.
+  * In strategy/placement games (PvZ, tower defense):
+    - Collect falling sun/coins/drops: use `TAP <cell>` (e.g. `TAP D2`).
+    - Place plants/units: use `SEQ <card_cell> <board_cell>` (e.g. `SEQ B1 C3` to select card at B1 and plant on lane C3).
+    - NEVER tap "resume" or "menu" buttons unless an actual PAUSE dialog is visible on screen!
 """.trimIndent()
 
     private fun screenSignature(root: AccessibilityNodeInfo?, items: List<PhoneControl.UiItem>, frameHash: Long = 0L): String {
@@ -559,7 +574,7 @@ Rules:
             val py2 = toScreenCoord(mbCoordMatch.groupValues[3].toDouble(), h, sh)
             return Act("press_region", null, null, null, null, null, null, null, px2, py2, region = mbName, label = mbName.uppercase(Locale.US), plan = extractedPlan)
         }
-        val mbCellMatch = Regex("^(?:PRESS_REGION\\s+|USE\\s+|TAP\\s+)?(MB\\d+)\\s+([A-J][0-9]{1,2})$", RegexOption.IGNORE_CASE).find(firstLine)
+        val mbCellMatch = Regex("^(?:PRESS_REGION\\s+|USE\\s+|TAP\\s+|SEQ\\s+)?(MB\\d+)(?:\\s*(?:->|to|then)\\s*|\\s+)([A-J][0-9]{1,2})$", RegexOption.IGNORE_CASE).find(firstLine)
         if (mbCellMatch != null) {
             val mbName = mbCellMatch.groupValues[1].lowercase(Locale.US)
             val cell = mbCellMatch.groupValues[2].uppercase(Locale.US)
@@ -626,7 +641,7 @@ Rules:
             return Act("scroll", null, null, dir, null, null, px, py, null, null, plan = extractedPlan)
         }
 
-        val tapMatch = Regex("^(?:TAP|CLICK)\\s+([A-Z][0-9]{1,2})$", RegexOption.IGNORE_CASE).find(firstLine)
+        val tapMatch = Regex("^(?:(?:TAP|CLICK)\\s+)?([A-J][0-9]{1,2})$", RegexOption.IGNORE_CASE).find(firstLine)
         if (tapMatch != null) {
             val cell = tapMatch.groupValues[1].uppercase(Locale.US)
             val pt = cellToXY(cell, sw, sh)
@@ -994,7 +1009,7 @@ Rules:
             else -> emptyList()
         }
         val ocrLines = if (rawShot != null && items.size < 10) {
-            TextFinder.formatHitsForPrompt(ocrHits)
+            TextFinder.formatHitsForPrompt(ocrHits, orientedW, orientedH)
         } else {
             "(use SCREEN ELEMENTS below)"
         }
@@ -1005,7 +1020,7 @@ Rules:
             "[${item.id}] ${item.kind} \"${item.label}\" at (x=$nx, y=$ny)"
         }
 
-        val isGameMode = items.size < 5
+        val isGameMode = isGameSession(goal, items, pkg)
         val macroButtons = ControlRegions.allMacroButtons(context)
         val hasMbs = macroButtons.isNotEmpty()
 
@@ -1032,14 +1047,24 @@ Rules:
         val prompt = buildString {
             appendLine("TASK: $taskForPrompt")
             appendLine("FOREGROUND APP: $pkg (${orientedW}x${orientedH})")
+            if (isGameMode) {
+                val isLandscape = orientedW > orientedH
+                val cols = if (isLandscape) 10 else 6
+                val rows = if (isLandscape) 6 else 10
+                val lastCol = 'A' + (cols - 1)
+                appendLine("SCREEN GRID: $cols columns (A to $lastCol, left-to-right), $rows rows (1 to $rows, top-to-bottom)")
+                if (isLandscape) {
+                    appendLine("GRID LAYOUT: Row 1 = Top card bar / controls (B1, C1, D1...). Rows 2 to 6 = Board / lanes (Cols C to I).")
+                }
+            }
             if (hasMbs) {
-                appendLine("MACRO BUTTONS (USE THESE DIRECTLY): ${ControlRegions.describeForPrompt(context)}")
+                appendLine("MACRO BUTTONS (USE THESE DIRECTLY): ${ControlRegions.describeForPrompt(context, orientedW, orientedH)}")
             } else {
-                appendLine("MACRO BUTTONS: none (use normal screen coordinates, UI element IDs, or OCR text)")
+                appendLine("MACRO BUTTONS: none (use visual grid cells e.g. SEQ B1 C3, or screen coordinates)")
             }
             appendLine(strategicMemoryBlock)
             appendLine("STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(6).joinToString(" > ")}")
-            val statusHint = buildTaskContextStatus(goal, log, macroButtons, rawOcrTexts)
+            val statusHint = buildTaskContextStatus(goal, log, macroButtons, rawOcrTexts, isGameMode)
             if (statusHint.isNotBlank()) {
                 appendLine(statusHint)
             }
@@ -1227,7 +1252,31 @@ Rules:
         return null
     }
 
-    private fun isItemCreationOrSelectionGoal(goalLower: String): Boolean {
+    private fun isGameSession(goal: String, items: List<PhoneControl.UiItem>, pkg: String): Boolean {
+        val goalLower = goal.lowercase(Locale.US)
+        val hasGameGoal = Regex("\\b(game|play|pvz|plants|zombies|level|stage|boss|win|survive|minecraft|roblox|brawl|craft|mine|chop|attack|defense|lane)\\b").containsMatchIn(goalLower)
+        val isGamePkg = pkg.contains("game", ignoreCase = true) || pkg.contains("unity", ignoreCase = true) ||
+                pkg.contains("ea.game", ignoreCase = true) || pkg.contains("popcap", ignoreCase = true) ||
+                pkg.contains("supercell", ignoreCase = true) || pkg.contains("mojang", ignoreCase = true)
+        return items.size < 8 || hasGameGoal || isGamePkg
+    }
+
+    private fun isGamePausedDialogOnScreen(ocrHits: List<TextFinder.Hit>): Boolean {
+        if (ocrHits.isEmpty()) return false
+        val texts = ocrHits.map { it.text.lowercase(Locale.US) }
+        val hasPauseWord = texts.any { it == "paused" || it.contains("game paused") || it.contains("is paused") }
+        val hasResume = texts.any { it.contains("resume") }
+        val hasMenuOptions = texts.any {
+            it.contains("restart") || it.contains("main menu") || it.contains("options") ||
+                    it.contains("give up") || it.contains("sound") || it.contains("quit")
+        }
+        return hasPauseWord || (hasResume && hasMenuOptions)
+    }
+
+    private fun isItemCreationOrSelectionGoal(goalLower: String, isGameMode: Boolean = false): Boolean {
+        if (isGameMode) {
+            return Regex("\\b(craft|combine|brew)\\b").containsMatchIn(goalLower)
+        }
         return Regex("\\b(craft|make|create|build|combine|buy|purchase|select|choose|plant|equip|cook|brew)\\b").containsMatchIn(goalLower)
     }
 
@@ -1244,7 +1293,16 @@ Rules:
         return "target item"
     }
 
-    private fun isMenuOrInventoryScreen(ocrTexts: List<String>, log: List<String>): Boolean {
+    private fun isMenuOrInventoryScreen(ocrTexts: List<String>, log: List<String>, isGameMode: Boolean = false): Boolean {
+        if (isGameMode) {
+            // In game mode: a corner "menu" or "pause" button is NOT an inventory screen.
+            // Only consider open if explicit inventory/crafting headers appear.
+            return ocrTexts.any { text ->
+                val l = text.lowercase(Locale.US)
+                l.contains("inventory") || l.contains("crafting") || l.contains("recipe book") ||
+                        l.contains("backpack") || l.contains("chest")
+            }
+        }
         val ocrMatches = ocrTexts.any { text ->
             val l = text.lowercase(Locale.US)
             l.contains("inventory") || l.contains("craft") || l.contains("recipe") ||
@@ -1331,8 +1389,9 @@ Rules:
             act.id == null && act.x != null && act.y != null
         ) {
             val goalLower = goal.lowercase(Locale.US)
-            val isMenuGoal = isItemCreationOrSelectionGoal(goalLower)
-            val isMenuOpen = isMenuOrInventoryScreen(ocrLines, log)
+            val isGame = isGameSession(goal, emptyList(), "game_surface")
+            val isMenuGoal = isItemCreationOrSelectionGoal(goalLower, isGame)
+            val isMenuOpen = isMenuOrInventoryScreen(ocrLines, log, isGame)
 
             val nx = act.x.toFloat() / sw.coerceAtLeast(1)
             val ny = act.y.toFloat() / sh.coerceAtLeast(1)
@@ -1375,7 +1434,8 @@ Rules:
                 val userAskedForPauseOrResume = Regex("\\b(resume|pause|menu|continue)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goal)
                 val pauseVisibleOnScreen = ocrLines.any { line ->
                     val l = line.lowercase(Locale.US)
-                    l.contains("resume") || l.contains("paused") || l.contains("continue") || l.contains("main menu") || l.contains("restart")
+                    l == "paused" || l.contains("game paused") || l.contains("is paused") ||
+                            (l.contains("resume") && (l.contains("restart") || l.contains("main menu") || l.contains("options") || l.contains("give up")))
                 }
                 if (isPauseOrResumeMb && !userAskedForPauseOrResume && !pauseVisibleOnScreen) {
                     val gameplayMbs = mbs.filterNot {
@@ -1664,8 +1724,8 @@ Rules:
 
     private fun isFiniteActionGoal(goal: String): Boolean {
         val g = goal.lowercase(Locale.US).trim()
-        // Open-ended gameplay requests should keep playing until stopped
-        if (Regex("\\b(play\\s+(?:and\\s+win|the\\s+game|for\\s+me)|win\\s+the\\s+game|beat\\s+the\\s+level|keep\\s+playing|survive|take\\s+over\\s+and\\s+win)\\b").containsMatchIn(g)) {
+        // Open-ended gameplay requests should keep playing continuously until stopped or game over
+        if (Regex("\\b(play|game|pvz|zombies|survive|win|beat|level|stage|defend|keep\\s+playing)\\b").containsMatchIn(g)) {
             return false
         }
         return true
@@ -1685,19 +1745,43 @@ Rules:
      * 1. What steps have ALREADY been completed in this task.
      * 2. Whether it has repeated the same MB multiple times and must stop, look around, or switch phases.
      * 3. Whether the final action of a finite goal (like mining for 4500ms, or crafting/buying an item) just succeeded so it can reply DONE.
+     * 4. For active games, provides real-time tactical placement and sun collection guidance.
      */
     private fun buildTaskContextStatus(
         goal: String,
         log: List<String>,
         mbs: List<ControlRegions.MacroButton>,
-        ocrTexts: List<String> = emptyList()
+        ocrTexts: List<String> = emptyList(),
+        isGameMode: Boolean = false
     ): String {
         val goalLower = goal.lowercase(Locale.US)
+
+        if (isGameMode) {
+            val texts = ocrTexts.map { it.lowercase(Locale.US) }
+            val isPaused = texts.any { it == "paused" || it.contains("game paused") || it.contains("is paused") }
+            if (isPaused) {
+                return "CONTEXT CHECK (GAME IS PAUSED): A pause dialog is visible on screen. Tap Resume to continue playing!"
+            }
+            val cardMbs = mbs.filterNot {
+                val l = it.effectiveLabel().lowercase(Locale.US)
+                l.contains("pause") || l.contains("resume") || l.contains("menu") || l.contains("option")
+            }
+            return if (cardMbs.isNotEmpty()) {
+                "CONTEXT CHECK (ACTIVE GAMEPLAY - WITH MBS): Active game on screen. Collect fallen sun/items (TAP <cell>). " +
+                        "To place plants/units: use `<card_MB> <board_cell>` (e.g. `${cardMbs.first().name.uppercase(Locale.US)} C3` to select card and place on board). " +
+                        "DO NOT tap pause or resume MBs during active play!"
+            } else {
+                "CONTEXT CHECK (ACTIVE GAMEPLAY - AUTONOMOUS): Active game on screen. Collect fallen sun/items (TAP <cell>). " +
+                        "To place plants/units: use `SEQ <card_cell> <board_cell>` (e.g. `SEQ B1 C3` to select card at B1 and place on board C3). " +
+                        "DO NOT tap corner pause or menu buttons!"
+            }
+        }
+
         val workedSteps = log.filter { it.contains("(worked") }
 
         // Menu / inventory / crafting / shop tasks ("make X", "craft X", "buy X", "select X")
-        val isMenuGoal = isItemCreationOrSelectionGoal(goalLower)
-        val isMenuOpen = isMenuOrInventoryScreen(ocrTexts, log)
+        val isMenuGoal = isItemCreationOrSelectionGoal(goalLower, isGameMode)
+        val isMenuOpen = isMenuOrInventoryScreen(ocrTexts, log, isGameMode)
         val targetItemName = extractMenuTargetEntity(goal)
 
         if (isMenuGoal) {
@@ -2080,13 +2164,21 @@ Rules:
                     val mbDesc = mb?.effectiveLabel() ?: regName
                     CapriCursor.setStatus("using ${regName.uppercase(Locale.US)} ($mbDesc)...")
                     if (p != null && mb != null) {
-                        val ms = (actToRun.durationMs ?: 120L).coerceIn(60L, 120_000L)
-                        val ok = if (ms <= 160L) {
-                            PhoneControl.tapAt(p.first, p.second)
+                        if (actToRun.x2 != null && actToRun.y2 != null) {
+                            val (destX, destY) = PhoneControl.clampToScreen(actToRun.x2, actToRun.y2)
+                            val ok1 = PhoneControl.tapAt(p.first, p.second)
+                            delay(220)
+                            val ok2 = PhoneControl.tapAt(destX, destY)
+                            log.add("used ${regName.uppercase(Locale.US)} ($mbDesc) -> target ($destX, $destY)" + if (ok1 && ok2) "" else " (partial)")
                         } else {
-                            PhoneControl.holdAt(p.first, p.second, ms)
+                            val ms = (actToRun.durationMs ?: 120L).coerceIn(60L, 120_000L)
+                            val ok = if (ms <= 160L) {
+                                PhoneControl.tapAt(p.first, p.second)
+                            } else {
+                                PhoneControl.holdAt(p.first, p.second, ms)
+                            }
+                            log.add("used ${regName.uppercase(Locale.US)} ($mbDesc) at (${p.first}, ${p.second}) for ${ms}ms" + if (ok) "" else " (failed)")
                         }
-                        log.add("used ${regName.uppercase(Locale.US)} ($mbDesc) at (${p.first}, ${p.second}) for ${ms}ms" + if (ok) "" else " (failed)")
                     }
                 }
                 "joystick" -> {
@@ -2772,30 +2864,78 @@ Rules:
 
         // Visual State Triage (<50ms): If screen is paused or prompting to Resume/Continue/Start, tap it first!
         val macroButtons = ControlRegions.allMacroButtons(context)
-        val resumeMb = macroButtons.firstOrNull { mb ->
-            STATE_TRANSITION_REGEX.containsMatchIn(mb.effectiveLabel())
-        }
-        if (resumeMb != null) {
-            val p = ControlRegions.resolve(context, resumeMb.name)
-            if (p != null) {
-                log.add("state triage: tapping state-transition MB '${resumeMb.effectiveLabel()}' (${p.first}, ${p.second})")
-                CapriCursor.setStatus("tapping ${resumeMb.effectiveLabel()}...")
+        if (isGameMode) {
+            val isPaused = isGamePausedDialogOnScreen(ocrHits)
+            if (isPaused) {
+                val resumeMb = macroButtons.firstOrNull { mb ->
+                    val lbl = mb.effectiveLabel().lowercase(Locale.US)
+                    lbl.contains("resume") || lbl.contains("unpause")
+                }
+                if (resumeMb != null) {
+                    val p = ControlRegions.resolve(context, resumeMb.name)
+                    if (p != null) {
+                        log.add("state triage: resuming game via MB '${resumeMb.effectiveLabel()}' (${p.first}, ${p.second})")
+                        CapriCursor.setStatus("resuming game...")
+                        CapriCursor.pulse()
+                        PhoneControl.tapAt(p.first, p.second)
+                        delay(350)
+                        return TriageResult.HandledAndContinue
+                    }
+                }
+                val resumeOcr = ocrHits.firstOrNull { hit ->
+                    val t = hit.text.lowercase(Locale.US)
+                    t.contains("resume") || t.contains("continue")
+                }
+                if (resumeOcr != null) {
+                    log.add("state triage: resuming game via OCR '${resumeOcr.text}' at (${resumeOcr.x}, ${resumeOcr.y})")
+                    CapriCursor.setStatus("resuming game...")
+                    CapriCursor.pulse()
+                    PhoneControl.tapAt(resumeOcr.x, resumeOcr.y)
+                    delay(350)
+                    return TriageResult.HandledAndContinue
+                }
+            } else {
+                // Not paused: only tap title splash triggers ("tap to start", "tap to continue", "play game")
+                val splashOcr = ocrHits.firstOrNull { hit ->
+                    val t = hit.text.lowercase(Locale.US)
+                    (t.contains("tap to start") || t.contains("tap to continue") || t.contains("start game") || t.contains("press to start")) &&
+                            !t.contains("menu") && !t.contains("resume")
+                }
+                if (splashOcr != null) {
+                    log.add("state triage: starting game via splash prompt '${splashOcr.text}' at (${splashOcr.x}, ${splashOcr.y})")
+                    CapriCursor.setStatus("starting game...")
+                    CapriCursor.pulse()
+                    PhoneControl.tapAt(splashOcr.x, splashOcr.y)
+                    delay(350)
+                    return TriageResult.HandledAndContinue
+                }
+            }
+        } else {
+            val resumeMb = macroButtons.firstOrNull { mb ->
+                STATE_TRANSITION_REGEX.containsMatchIn(mb.effectiveLabel())
+            }
+            if (resumeMb != null) {
+                val p = ControlRegions.resolve(context, resumeMb.name)
+                if (p != null) {
+                    log.add("state triage: tapping state-transition MB '${resumeMb.effectiveLabel()}' (${p.first}, ${p.second})")
+                    CapriCursor.setStatus("tapping ${resumeMb.effectiveLabel()}...")
+                    CapriCursor.pulse()
+                    PhoneControl.tapAt(p.first, p.second)
+                    delay(350)
+                    return TriageResult.HandledAndContinue
+                }
+            }
+            val resumeOcr = ocrHits.firstOrNull { hit ->
+                STATE_TRANSITION_REGEX.containsMatchIn(hit.text)
+            }
+            if (resumeOcr != null) {
+                log.add("state triage: tapping on-screen prompt '${resumeOcr.text}' at (${resumeOcr.x}, ${resumeOcr.y})")
+                CapriCursor.setStatus("tapping ${resumeOcr.text}...")
                 CapriCursor.pulse()
-                PhoneControl.tapAt(p.first, p.second)
+                PhoneControl.tapAt(resumeOcr.x, resumeOcr.y)
                 delay(350)
                 return TriageResult.HandledAndContinue
             }
-        }
-        val resumeOcr = ocrHits.firstOrNull { hit ->
-            STATE_TRANSITION_REGEX.containsMatchIn(hit.text)
-        }
-        if (resumeOcr != null) {
-            log.add("state triage: tapping on-screen prompt '${resumeOcr.text}' at (${resumeOcr.x}, ${resumeOcr.y})")
-            CapriCursor.setStatus("tapping ${resumeOcr.text}...")
-            CapriCursor.pulse()
-            PhoneControl.tapAt(resumeOcr.x, resumeOcr.y)
-            delay(350)
-            return TriageResult.HandledAndContinue
         }
 
         // App Mode Compose Triage: If user wants to compose/write an email or message, click Compose button if visible
@@ -2854,10 +2994,16 @@ Rules:
                 return TriageResult.HandledAndContinue
             }
         } else if (isGameMode && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 } || unproductiveClicks >= 2)) {
-            log.add("game mode recovery: dead-click detected; performing camera look & rotating action")
-            val (swO, shO) = PhoneControl.orientedScreenSize(lastShotWidth, lastShotHeight)
-            val (origX, origY) = ControlRegions.resolve(context, "look") ?: Pair(swO * 3 / 4, shO / 2)
-            PhoneControl.look(origX, origY, 280, 0, 300L)
+            log.add("game mode recovery: dead-click detected; resetting state and rotating action")
+            val lookResolved = ControlRegions.resolve(context, "look")
+            if (lookResolved != null) {
+                val (swO, _) = PhoneControl.orientedScreenSize(lastShotWidth, lastShotHeight)
+                val lookStep = (swO * 0.18f).toInt().coerceIn(180, 400)
+                PhoneControl.look(lookResolved.first, lookResolved.second, lookStep, 0, 300L)
+            } else {
+                CapriCursor.pulse()
+            }
+            deadClickCounts.clear()
             delay(350)
             return TriageResult.HandledAndContinue
         }
@@ -3132,7 +3278,8 @@ Rules:
                 }
 
                 val items = if (root != null) PhoneControl.snapshot(root) else emptyList()
-                val isGameMode = items.size < 5
+                val pkg = root?.packageName?.toString() ?: "game_surface"
+                val isGameMode = isGameSession(goal, items, pkg)
 
                 // Only capture screen bitmap when in game mode or when tags are absent.
                 // In app mode with UI tags, we use the much faster tag-only method!
@@ -3144,7 +3291,6 @@ Rules:
                     return "i can't see an app or screen surface to work in, dummy. ${summary(log)}"
                 }
 
-                val pkg = root?.packageName?.toString() ?: "game_surface"
                 checkForegroundGoalOrBlocked(context, pkg, goal, targetAppPkg)?.let { return it }
 
                 if (steps == 0 && resume == null) {

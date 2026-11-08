@@ -85,16 +85,23 @@ object TextFinder {
     suspend fun formatForPrompt(screenshot: ByteArray?, screenW: Int, screenH: Int): String {
         if (screenshot == null) return "none"
         val hits = scanAll(screenshot, screenW, screenH, maxItems = 28)
-        return formatHitsForPrompt(hits)
+        return formatHitsForPrompt(hits, screenW, screenH)
     }
 
     /**
      * Formats pre-scanned OCR hits into a general-purpose list of visible text and normalized coordinates.
+     * When screen dimensions are given, annotates each hit with its visual grid cell (e.g. [Cell B1]).
      */
-    fun formatHitsForPrompt(hits: List<Hit>): String {
+    fun formatHitsForPrompt(hits: List<Hit>, screenW: Int = 0, screenH: Int = 0): String {
         if (hits.isEmpty()) return "(no text detected by OCR)"
+        val isLandscape = screenW > screenH
+        val cols = if (isLandscape) 10 else 6
+        val rows = if (isLandscape) 6 else 10
         return hits.joinToString("\n") { h ->
-            String.format(Locale.US, "- \"%s\" at (x=%.2f, y=%.2f)", h.text, h.normX, h.normY)
+            val colLetter = 'A' + (h.normX * cols).toInt().coerceIn(0, cols - 1)
+            val rowNum = (h.normY * rows).toInt().coerceIn(0, rows - 1) + 1
+            val cellStr = if (screenW > 0 && screenH > 0) " [Cell $colLetter$rowNum]" else ""
+            String.format(Locale.US, "- \"%s\" at (x=%.2f, y=%.2f)%s", h.text, h.normX, h.normY, cellStr)
         }
     }
 
