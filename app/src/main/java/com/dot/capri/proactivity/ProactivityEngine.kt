@@ -205,13 +205,19 @@ class ProactivityEngine(
                         .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
                 } catch (_: Throwable) { -1 }
                 val appName = currentApp?.substringAfterLast('.')?.replaceFirstChar { it.uppercase() } ?: "Phone"
+                val isLocalModelActive = com.dot.capri.llm.LlmRouter.getActiveProviderName(context) == "Local" ||
+                        (!com.dot.capri.llm.LlmRouter.hasAnyApiKey(context) && com.dot.capri.ai.OnDeviceAiClient.isAvailable(context))
 
                 // 2. TIER B: PRIVATE MESSAGING (WhatsApp, Telegram, Signal, Discord, Messages)
                 // -> NO SCREENSHOT IS TAKEN (100% private), but she drops a playful blind remark about chatting!
                 if (ProactivityGenerator.isPrivateMessagingPackage(currentApp)) {
                     Log.d(TAG, "Privacy guard: Blind proactivity on messaging app $currentApp (zero screenshots)")
                     val blindPrompt = ProactivityGenerator.buildBlindChatPrompt(time12, time24, battery, appName)
-                    val reply = BubbleService.instance?.askBrain(blindPrompt, null)
+                    val reply = BubbleService.instance?.askBrain(
+                        prompt = blindPrompt,
+                        imageBytes = null,
+                        systemOverride = if (isLocalModelActive) blindPrompt else null
+                    )
                     val cleanRemark = ProactivityGenerator.cleanVisionRemark(reply)
                     if (!cleanRemark.isNullOrBlank()) {
                         lastCommentAt = System.currentTimeMillis()
@@ -230,21 +236,29 @@ class ProactivityEngine(
                 }
 
                 // 3. TIER C: AUTHORIZED APPS (TikTok, YouTube, Reddit, Games, Web, etc.)
-                // -> Multi-frame filmstrip burst (3 frames over ~700ms) for dynamic video & reels understanding!
                 val accessibilityService = CapriAccessibilityService.instance
                 if (accessibilityService == null) {
                     return@launch
                 }
 
-                // Capture live chronological 3-frame burst (Setup -> Action -> Punchline)
-                val screenshot = accessibilityService.captureBurstFilmstrip(frameCount = 3, intervalMs = 350L)
-                    ?: accessibilityService.captureScreenBitmap()
+                // For local Gemma E2B, capture a single crisp full-screen bitmap so it's not squashed into 170px wide slivers.
+                // For cloud models (Gemini/Claude with large multimodal input), use the 3-frame burst filmstrip.
+                val screenshot = if (isLocalModelActive) {
+                    accessibilityService.captureScreenBitmap()
+                } else {
+                    accessibilityService.captureBurstFilmstrip(frameCount = 3, intervalMs = 350L)
+                        ?: accessibilityService.captureScreenBitmap()
+                }
                 if (screenshot == null || screenshot.isEmpty()) {
                     return@launch
                 }
 
                 val prompt = ProactivityGenerator.buildVisionPrompt(time12, time24, battery, appName)
-                val reply = BubbleService.instance?.askBrain(prompt, screenshot)
+                val reply = BubbleService.instance?.askBrain(
+                    prompt = prompt,
+                    imageBytes = screenshot,
+                    systemOverride = if (isLocalModelActive) prompt else null
+                )
                 val cleanRemark = ProactivityGenerator.cleanVisionRemark(reply)
 
                 if (!cleanRemark.isNullOrBlank()) {

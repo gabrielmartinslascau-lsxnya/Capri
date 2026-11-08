@@ -99,14 +99,57 @@ object LlmRouter {
     }
 
     suspend fun complete(context: Context, req: LlmRequest): Result<String> {
+        val activeName = getActiveProviderName(context)
+        if (activeName.equals("Local", ignoreCase = true) || (!hasAnyApiKey(context) && com.dot.capri.ai.OnDeviceAiClient.isAvailable(context))) {
+            return com.dot.capri.ai.OnDeviceAiClient.generateResponse(
+                context = context,
+                prompt = req.prompt,
+                imageBytes = req.imageBytes,
+                systemOverride = req.systemPrompt.takeIf { it.isNotBlank() },
+                historyOverride = req.history.takeIf { it.isNotEmpty() },
+                maxTokensOverride = req.maxTokens
+            )
+        }
+
         if (UsageTracker.isBudgetExhausted(context)) {
+            if (com.dot.capri.ai.OnDeviceAiClient.isAvailable(context)) {
+                return com.dot.capri.ai.OnDeviceAiClient.generateResponse(
+                    context = context,
+                    prompt = req.prompt,
+                    imageBytes = req.imageBytes,
+                    systemOverride = req.systemPrompt.takeIf { it.isNotBlank() },
+                    historyOverride = req.history.takeIf { it.isNotEmpty() },
+                    maxTokensOverride = req.maxTokens
+                )
+            }
             return Result.failure(IllegalStateException("Daily token budget reached"))
         }
 
         val provider = getActiveProviderInstance(context)
-            ?: return Result.success(Personality.noBrainInstalled())
+            ?: if (com.dot.capri.ai.OnDeviceAiClient.isAvailable(context)) {
+                return com.dot.capri.ai.OnDeviceAiClient.generateResponse(
+                    context = context,
+                    prompt = req.prompt,
+                    imageBytes = req.imageBytes,
+                    systemOverride = req.systemPrompt.takeIf { it.isNotBlank() },
+                    historyOverride = req.history.takeIf { it.isNotEmpty() },
+                    maxTokensOverride = req.maxTokens
+                )
+            } else {
+                return Result.success(Personality.noBrainInstalled())
+            }
 
         if (!reserveCall()) {
+            if (com.dot.capri.ai.OnDeviceAiClient.isAvailable(context)) {
+                return com.dot.capri.ai.OnDeviceAiClient.generateResponse(
+                    context = context,
+                    prompt = req.prompt,
+                    imageBytes = req.imageBytes,
+                    systemOverride = req.systemPrompt.takeIf { it.isNotBlank() },
+                    historyOverride = req.history.takeIf { it.isNotEmpty() },
+                    maxTokensOverride = req.maxTokens
+                )
+            }
             Log.w(TAG, "Hourly cap of $MAX_CALLS_PER_HOUR reached")
             return Result.failure(IllegalStateException("Hourly limit reached"))
         }
@@ -115,6 +158,17 @@ object LlmRouter {
         val result = provider.complete(req)
         result.onSuccess { r ->
             UsageTracker.recordCall(context, r.provider, r.model, r.tokensIn, r.tokensOut, r.latencyMs)
+        }
+        if (result.isFailure && com.dot.capri.ai.OnDeviceAiClient.isAvailable(context)) {
+            Log.w(TAG, "Cloud provider failed, falling back to local on-device LLM")
+            return com.dot.capri.ai.OnDeviceAiClient.generateResponse(
+                context = context,
+                prompt = req.prompt,
+                imageBytes = req.imageBytes,
+                systemOverride = req.systemPrompt.takeIf { it.isNotBlank() },
+                historyOverride = req.history.takeIf { it.isNotEmpty() },
+                maxTokensOverride = req.maxTokens
+            )
         }
         return result.map { it.text }
     }

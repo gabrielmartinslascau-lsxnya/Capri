@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.Calendar
+import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
@@ -43,9 +44,9 @@ object OnDeviceAiClient {
     private const val STANDBY_CHECK_INTERVAL_MS = 10 * 60 * 1000L // Periodic standby watchdog check
     private const val GENERATION_TIMEOUT_MS = 60_000L
     private const val HISTORY_TURNS = 2                   // trimmed for speed
-    private const val MAX_PROMPT_CHARS = 1500             // trimmed for speed
-    private const val MAX_HISTORY_CHARS = 200
-    private const val MAX_REPLY_TOKENS = 64               // lightning-fast action JSON replies
+    private const val MAX_PROMPT_CHARS = 6000             // Never chop off SCREEN ELEMENTS at the bottom of PhoneAgent prompts!
+    private const val MAX_HISTORY_CHARS = 300
+    private const val MAX_REPLY_TOKENS = 160              // Room for complete JSON + plan + say without cutting off '}'
 
     // CRITICAL FOR ADRENO GPU / HEXAGON NPU:
     // OpenCL and QNN contexts are thread-local! A single-thread executor MUST own Engine init, streaming, cancelProcess, and close.
@@ -495,10 +496,12 @@ object OnDeviceAiClient {
         val eng = loadEngine(context, wantVision = imageBytes != null && !visionBroken)
             ?: throw IllegalStateException(lastError ?: "local model not ready")
 
-        // Isolate vision from casual chat history so Gemma's attention is focused on visual tokens
+        // Distinguish PhoneAgent agentic tasks (which require JSON {"do": ...}) from Proactive Banners or casual chat
+        val isAgentTask = systemOverride != null && systemOverride.contains("\"do\"")
+        val isProactiveBanner = systemOverride != null && !isAgentTask
+
+        // Isolate vision & agent tasks from casual chat history so attention is clean
         val history = historyOverride ?: if (systemOverride == null && imageBytes == null) CloudAiClient.recentHistory(HISTORY_TURNS, context) else emptyList()
-        // Anytime systemOverride is provided (e.g. PhoneAgent), it is a deterministic task!
-        val isTask = systemOverride != null
 
         val effectiveSys = if (systemOverride != null) {
             systemOverride
@@ -515,12 +518,12 @@ object OnDeviceAiClient {
                 )
             },
             samplerConfig = SamplerConfig(
-                topK = if (isTask) 1 else 40,
-                topP = if (isTask) 1.0 else 0.9,
-                temperature = if (isTask) 0.0 else 0.7
+                topK = if (isAgentTask) 10 else 40,
+                topP = 0.9,
+                temperature = if (isAgentTask) 0.1 else 0.7
             ),
             thinkingConfig = ThinkingConfig(enableThinking = false),
-            maxOutputToken = maxTokensOverride ?: (if (isTask) 48 else MAX_REPLY_TOKENS)
+            maxOutputToken = maxTokensOverride ?: (if (isAgentTask) 160 else MAX_REPLY_TOKENS)
         )
 
         var imageFile: File? = null
@@ -530,12 +533,11 @@ object OnDeviceAiClient {
             conversation = eng.createConversation(config)
             withTimeout(GENERATION_TIMEOUT_MS) {
                 val useImage = imageBytes != null && engineHasVision
-                val maxChars = if (historyOverride != null) 4000 else (if (isTask) 3000 else MAX_PROMPT_CHARS)
+                val maxChars = if (historyOverride != null) 4000 else MAX_PROMPT_CHARS
                 val flow = if (useImage) {
                     imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
                         writeBytes(shrinkImage(context, imageBytes!!))
                     }
-                    // Anchoring visual tokens first matches the multimodal standard and cross-attention alignment
                     conversation.sendMessageAsync(
                         Contents.of(
                             Content.ImageFile(imageFile.absolutePath),
@@ -549,14 +551,61 @@ object OnDeviceAiClient {
                 try {
                     flow.collect { chunk ->
                         sb.append(chunk.toString())
-                        if (isTask && !stoppedEarly) {
-                            val cur = sb.toString().trimStart()
-                            val hasCompleteJson = cur.startsWith("{") && cur.contains("}")
-                            val hasCompleteLine = !cur.startsWith("{") && !cur.startsWith("`") && cur.contains("\n") && cur.lineSequence().first().trim().length >= 3
-                            if (hasCompleteJson || hasCompleteLine) {
-                                stoppedEarly = true
-                                // Gracefully stop native C++/GPU generation instead of throwing inside collect
-                                runCatching { conversation.cancelProcess() }
+                        if (!stoppedEarly) {
+                            if (isAgentTask) {
+                                val cur = sb.toString()
+                                val firstBrace = cur.indexOf('{')
+                                if (firstBrace >= 0) {
+                                    var depth = 0
+                                    var inQuotes = false
+                                    var escaped = false
+                                    for (i in firstBrace until cur.length) {
+                                        val ch = cur[i]
+                                        if (escaped) {
+                                            escaped = false
+                                            continue
+                                        }
+                                        if (ch == '\\') {
+                                            escaped = true
+                                            continue
+                                        }
+                                        if (ch == '"') {
+                                            inQuotes = !inQuotes
+                                            continue
+                                        }
+                                        if (!inQuotes) {
+                                            if (ch == '{') depth++
+                                            else if (ch == '}') {
+                                                depth--
+                                                if (depth == 0) {
+                                                    stoppedEarly = true
+                                                    runCatching { conversation.cancelProcess() }
+                                                    break
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    val trimmed = cur.trimStart()
+                                    if (trimmed.contains("\n")) {
+                                        val firstLine = trimmed.substringBefore("\n").trim().uppercase(Locale.US)
+                                        if (firstLine.startsWith("DONE") || firstLine == "WAIT" ||
+                                            firstLine.startsWith("BACK") || firstLine.startsWith("FAIL") ||
+                                            firstLine == "HOME"
+                                        ) {
+                                            stoppedEarly = true
+                                            runCatching { conversation.cancelProcess() }
+                                        }
+                                    }
+                                }
+                            } else if (isProactiveBanner) {
+                                val cur = sb.toString()
+                                if (cur.contains("[QUIET]", ignoreCase = true) ||
+                                    (cur.trim().contains("\n") && cur.trim().length >= 4)
+                                ) {
+                                    stoppedEarly = true
+                                    runCatching { conversation.cancelProcess() }
+                                }
                             }
                         }
                     }

@@ -1318,7 +1318,7 @@ class BubbleService : Service() {
     suspend fun executeBrainReply(reply: String): String = handleReply(reply, allowSee = true)
 
     // 3-way brain: API -> local model -> null (caller falls back to commands / canned lines)
-    suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null): String? {
+    suspend fun askBrain(prompt: String, imageBytes: ByteArray? = null, systemOverride: String? = null): String? {
         var apiError: String? = null
         val wantsCloud = LlmRouter.getActiveProviderName(this) != "Local" && LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)
         val allowSee = imageBytes == null
@@ -1326,7 +1326,18 @@ class BubbleService : Service() {
         // Tier 1: cloud API (needs a key, internet, and NOT explicitly set to Local)
         if (wantsCloud) {
             val result = withContext(Dispatchers.IO) {
-                CloudAiClient.generateResponse(this@BubbleService, prompt, imageBytes)
+                if (systemOverride != null) {
+                    LlmRouter.complete(
+                        this@BubbleService,
+                        com.dot.capri.llm.LlmRequest(
+                            prompt = prompt,
+                            systemPrompt = systemOverride,
+                            imageBytes = imageBytes
+                        )
+                    )
+                } else {
+                    CloudAiClient.generateResponse(this@BubbleService, prompt, imageBytes)
+                }
             }
             val text = result.getOrNull()?.takeIf { it.isNotBlank() }
             if (text != null && !text.contains("No brain installed", ignoreCase = true) && !text.contains("brain chip in my slot", ignoreCase = true)) {
@@ -1338,7 +1349,7 @@ class BubbleService : Service() {
 
         // Tier 2: on-device model (only if imported, enabled, and the phone has the RAM)
         if (OnDeviceAiClient.isAvailable(this)) {
-            val local = OnDeviceAiClient.generateResponse(this, prompt, imageBytes)
+            val local = OnDeviceAiClient.generateResponse(this, prompt, imageBytes, systemOverride = systemOverride)
             val text = local.getOrNull()?.takeIf { it.isNotBlank() }
             if (text != null) return handleReply(text, allowSee)
             android.util.Log.w("CAPRI_BRAIN", "Local tier failed (${local.exceptionOrNull()?.message})")

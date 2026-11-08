@@ -208,92 +208,6 @@ CRITICAL RULES:
 9. AUTONOMOUS GAMING: When playing games, you are 100% autonomous. NEVER use ask_user or ask the user to manually tap or play for you! Always take actions, rotate camera, or tap game items directly.
 """.trimIndent()
 
-    private val SYSTEM_LOCAL_WITH_MBS = """
-You control an Android phone in ADAPTIVE HYBRID MODE: use MACRO BUTTONS (MB1, MB2, ...) for fixed controls, and use VISUAL GRID CELLS (e.g. B1, C3) or (x, y) coordinates when clicking item icons, cards, recipes, or slots in the screenshot!
-Reply with ONLY ONE line (command + | PLAN: short strategy):
-MB1 | PLAN: <strategy>                       (taps Macro Button MB1, MB2, etc., e.g. jump, open menu)
-MB1 <cell> | PLAN: <strategy>                (selects tool/card MB1 first, then taps target cell, e.g. MB1 C3)
-MB1 <x> <y> | PLAN: <strategy>               (taps MB1 first, then taps screen target x,y in 0.00..1.00)
-MB1 <ms> | PLAN: <strategy>                  (holds MB1 for <ms> milliseconds, e.g. MB1 4500 for mining, MB1 2000 for walk)
-TAP <x> <y> MB1 | PLAN: <strategy>           (taps visual icon at x,y on screen FIRST, then taps MB1 e.g. confirm/craft)
-SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select item at B1 and use on target C3)
-TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect fallen drop or tap tile)
-TAP <x> <y> | PLAN: <strategy>               (taps visual item/icon/slot at 0.00..1.00 coordinate when no MB covers it)
-SEQ <x1> <y1> <x2> <y2> | PLAN: <strategy>   (taps visual icon at x1,y1 then taps slot/output at x2,y2)
-JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
-LOOK <UP|DOWN|LEFT|RIGHT|AROUND> | PLAN: <strategy> (turns 3D camera to look up/down/left/right/around)
-SWIPE <x1> <y1> <x2> <y2> | PLAN: <strategy> (swipes screen / rotates camera in any direction)
-TAP_TEXT <words> | PLAN: <strategy>          (taps visible text button)
-TAP_ID <id> | PLAN: <strategy>               (taps UI element #id)
-CALL <contact> | PLAN: <strategy>            (opens dialer for contact)
-TEXT <contact> : <message> | PLAN: <strategy> (opens chat with message)
-SEARCH <query> | PLAN: <strategy>            (opens web search)
-PLAY <query> | PLAN: <strategy>              (opens media query)
-VOLUME <up|down|mute|unmute> | PLAN: <strategy>
-MEDIA <play|pause|next|previous> | PLAN: <strategy>
-POWER_MENU | PLAN: <strategy>
-BACK | UNDO: <why last move was wrong>
-ASK_USER <message> | PLAN: <strategy>        (asks user to demonstrate 1 tap or scroll on screen)
-WAIT
-DONE
-
-Rules:
-- CHAIN OBVIOUS STEPS: When multiple sequential actions are obvious, chain them with '->' on one line to execute back-to-back as pure instant CMD with 0 delay (e.g. `JOYSTICK FORWARD 1500 -> MB1 2500 | PLAN: move and activate`).
-- FIRST check the screenshot and STEPS SO FAR: (1) Have I ALREADY completed the task? -> Reply DONE immediately! (2) If choosing/selecting an option or item: tap the menu/option MB first. Once open, DO NOT tap action MBs again — look at the image to locate the target option and use `TAP <x> <y> <confirm_MB>` or `SEQ <x1> <y1> <x2> <y2>` or `TAP <x> <y>`! (3) For joystick games: use JOYSTICK FORWARD <ms>.
-- ALWAYS include <ms> when holding an action MB (e.g. MB1 2500 for holding, MB1 1500 for walking).
-- Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
-- PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
-- AUTONOMOUS GAMING:
-  * You are 100% autonomous. NEVER output ASK_USER when playing games! Always execute actions directly.
-  * In games and canvas apps:
-    - Tap on-screen objects/items/drops: use `TAP <cell>` (e.g. `TAP D2`) or `TAP <x> <y>`.
-    - Select tool/card/item then place/use: use `MB1 <cell>` (e.g. `MB1 C3`) or `SEQ <cell1> <cell2>` (e.g. `SEQ B1 C3`).
-    - NEVER tap "resume", "settings", or "menu" buttons unless an actual PAUSE/MENU dialog is visible on screen!
-""".trimIndent()
-
-    private val SYSTEM_LOCAL_NO_MBS = """
-You control an Android phone using screen grid cells (e.g. B1, C3), UI elements, and OCR text.
-Reply with ONE line (single command OR multiple chained commands separated by '->' + | PLAN: short strategy):
-SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select item at B1 and use on target C3)
-TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect drop or tap tile)
-TAP_ID <id> | PLAN: <strategy>               (taps UI element #id from SCREEN ELEMENTS)
-TAP_TEXT <words> | PLAN: <strategy>          (taps visible words from OCR TEXT)
-JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
-TAP <x> <y> | PLAN: <strategy>               (taps 0.00..1.00 coordinate)
-HOLD <x> <y> <ms> | PLAN: <strategy>         (holds x,y for <ms> milliseconds, e.g. 2500 for holding)
-SEQ <x1> <y1> <x2> <y2> | PLAN: <strategy>   (taps x1,y1 then taps x2,y2)
-LOOK <UP|DOWN|LEFT|RIGHT|AROUND> | PLAN: <strategy> (turns 3D camera, or LOOK <dx> <dy>)
-SWIPE <x1> <y1> <x2> <y2> | PLAN: <strategy> (swipes from x1,y1 to x2,y2)
-TYPE <id> <text> | PLAN: <strategy>          (types into field #id)
-SCROLL <down|up|left|right> | PLAN: <strategy>
-CALL <contact> | PLAN: <strategy>            (opens dialer for contact)
-TEXT <contact> : <message> | PLAN: <strategy> (opens chat with message)
-SEARCH <query> | PLAN: <strategy>            (opens web search)
-PLAY <query> | PLAN: <strategy>              (opens media query)
-VOLUME <up|down|mute|unmute> | PLAN: <strategy>
-MEDIA <play|pause|next|previous> | PLAN: <strategy>
-POWER_MENU | PLAN: <strategy>
-BACK | UNDO: <why last move was wrong>
-ASK_USER <message> | PLAN: <strategy>        (asks user to demonstrate 1 tap or scroll on screen)
-WAIT
-DONE
-
-Rules:
-- CHAIN OBVIOUS STEPS: When multiple sequential actions are obvious (e.g. tap search -> type -> tap result, or tap album -> tap play, or walk -> mine), chain them with '->' on one line so they execute back-to-back as pure instant CMD (~0.1s):
-  Example: TAP_ID 4 -> TYPE_ID 4 Kendrick -> TAP_TEXT Search | PLAN: search Kendrick
-  Example: TAP_TEXT Albums -> TAP_TEXT Play | PLAN: open album and play
-- FIRST check the screenshot and STEPS SO FAR: Have I ALREADY completed the task? If yes, reply DONE immediately! Do NOT repeat the same action just because the screen changed. If looking at a target to mine/break, use HOLD <x> <y> 4500, and use LOOK UP / LOOK DOWN / LOOK LEFT / LOOK RIGHT to aim at more targets or look around.
-- Prefer TAP_ID <id> when SCREEN ELEMENTS are listed, or TAP_TEXT <words> when OCR text matches.
-- Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
-- PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
-- AUTONOMOUS GAMING:
-  * You are 100% autonomous. NEVER output ASK_USER when playing games! Always execute actions directly.
-  * In games and canvas apps:
-    - Tap on-screen objects/items/drops: use `TAP <cell>` (e.g. `TAP D2`) or `TAP <x> <y>`.
-    - Select tool/card/item then place/use: use `SEQ <cell1> <cell2>` (e.g. `SEQ B1 C3` to select item at B1 and use on target C3).
-    - NEVER tap "resume", "settings", or "menu" buttons unless an actual PAUSE/MENU dialog is visible on screen!
-""".trimIndent()
-
     private fun screenSignature(root: AccessibilityNodeInfo?, items: List<PhoneControl.UiItem>, frameHash: Long = 0L): String {
         val pkg = root?.packageName?.toString() ?: "game_surface"
         return if (items.size >= 3) {
@@ -1048,6 +962,14 @@ Rules:
         val prompt = buildString {
             appendLine("TASK: $taskForPrompt")
             appendLine("FOREGROUND APP: $pkg (${orientedW}x${orientedH})")
+            if (!isGameMode) {
+                appendLine("SCREEN ELEMENTS:\n${screen.ifEmpty { "(nothing readable, use the screenshot)" }}")
+            }
+            if (hasMbs) {
+                appendLine("MACRO BUTTONS (USE THESE DIRECTLY): ${ControlRegions.describeForPrompt(context, orientedW, orientedH)}")
+            } else {
+                appendLine("MACRO BUTTONS: none (use visual grid cells or screen coordinates)")
+            }
             if (isGameMode) {
                 val isLandscape = orientedW > orientedH
                 val cols = if (isLandscape) 10 else 6
@@ -1058,11 +980,6 @@ Rules:
                     appendLine("GRID LAYOUT: Row 1 = Top card bar / controls (B1, C1, D1...). Rows 2 to 6 = Board / lanes (Cols C to I).")
                 }
             }
-            if (hasMbs) {
-                appendLine("MACRO BUTTONS (USE THESE DIRECTLY): ${ControlRegions.describeForPrompt(context, orientedW, orientedH)}")
-            } else {
-                appendLine("MACRO BUTTONS: none (use visual grid cells e.g. SEQ B1 C3, or screen coordinates)")
-            }
             appendLine(strategicMemoryBlock)
             appendLine("STEPS SO FAR: ${if (log.isEmpty()) "none" else log.takeLast(6).joinToString(" > ")}")
             val statusHint = buildTaskContextStatus(goal, log, macroButtons, rawOcrTexts, isGameMode)
@@ -1070,13 +987,9 @@ Rules:
                 appendLine(statusHint)
             }
             appendLine("OCR TEXT ON SCREEN:\n$ocrLines")
-            if (!isGameMode) {
-                appendLine("SCREEN ELEMENTS:\n${screen.ifEmpty { "(nothing readable, use the screenshot)" }}")
-            }
         }
 
         val sysPrompt = if (hasMbs) SYSTEM_WITH_MBS else SYSTEM_NO_MBS
-        val sysPromptLocal = if (hasMbs) SYSTEM_LOCAL_WITH_MBS else SYSTEM_LOCAL_NO_MBS
 
         // In app mode with UI tags, use the tag method with zero vision overhead.
         // In local mode when Macro Buttons are placed (e.g. 8 MBs in Minecraft/Rust),
@@ -1095,7 +1008,13 @@ Rules:
                         LlmRequest(prompt = prompt, systemPrompt = sysPrompt, history = emptyList(), imageBytes = effectiveShot)
                     ).getOrNull()
                 } else {
-                    OnDeviceAiClient.generateResponse(context, prompt, effectiveShot, systemOverride = sysPromptLocal, maxTokensOverride = 80).getOrNull()
+                    OnDeviceAiClient.generateResponse(
+                        context = context,
+                        prompt = prompt,
+                        imageBytes = effectiveShot,
+                        systemOverride = sysPrompt,
+                        maxTokensOverride = 160
+                    ).getOrNull()
                 }
             }
         } catch (_: Exception) { null }
