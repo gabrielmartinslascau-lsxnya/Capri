@@ -212,12 +212,12 @@ CRITICAL RULES:
 You control an Android phone in ADAPTIVE HYBRID MODE: use MACRO BUTTONS (MB1, MB2, ...) for fixed controls, and use VISUAL GRID CELLS (e.g. B1, C3) or (x, y) coordinates when clicking item icons, cards, recipes, or slots in the screenshot!
 Reply with ONLY ONE line (command + | PLAN: short strategy):
 MB1 | PLAN: <strategy>                       (taps Macro Button MB1, MB2, etc., e.g. jump, open menu)
-MB1 <cell> | PLAN: <strategy>                (selects card/control MB1 first, then taps board cell, e.g. MB1 C3 to plant on lane C3)
+MB1 <cell> | PLAN: <strategy>                (selects tool/card MB1 first, then taps target cell, e.g. MB1 C3)
 MB1 <x> <y> | PLAN: <strategy>               (taps MB1 first, then taps screen target x,y in 0.00..1.00)
 MB1 <ms> | PLAN: <strategy>                  (holds MB1 for <ms> milliseconds, e.g. MB1 4500 for mining, MB1 2000 for walk)
 TAP <x> <y> MB1 | PLAN: <strategy>           (taps visual icon at x,y on screen FIRST, then taps MB1 e.g. confirm/craft)
-SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select card at B1 and plant on lane C3)
-TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect fallen sun/drop or tap tile)
+SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select item at B1 and use on target C3)
+TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect fallen drop or tap tile)
 TAP <x> <y> | PLAN: <strategy>               (taps visual item/icon/slot at 0.00..1.00 coordinate when no MB covers it)
 SEQ <x1> <y1> <x2> <y2> | PLAN: <strategy>   (taps visual icon at x1,y1 then taps slot/output at x2,y2)
 JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
@@ -245,17 +245,17 @@ Rules:
 - PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
 - AUTONOMOUS GAMING:
   * You are 100% autonomous. NEVER output ASK_USER when playing games! Always execute actions directly.
-  * In strategy/placement games (PvZ, tower defense):
-    - Collect falling sun/coins/drops: use `TAP <cell>` (e.g. `TAP D2`).
-    - Place plants/units: use `MB1 <cell>` (e.g. `MB1 C3` to select card MB1 and plant on lane C3). If card has no MB, use `SEQ <card_cell> <board_cell>` (e.g. `SEQ B1 C3`).
-    - NEVER tap "resume" or "menu" buttons unless an actual PAUSE dialog is visible on screen!
+  * In games and canvas apps:
+    - Tap on-screen objects/items/drops: use `TAP <cell>` (e.g. `TAP D2`) or `TAP <x> <y>`.
+    - Select tool/card/item then place/use: use `MB1 <cell>` (e.g. `MB1 C3`) or `SEQ <cell1> <cell2>` (e.g. `SEQ B1 C3`).
+    - NEVER tap "resume", "settings", or "menu" buttons unless an actual PAUSE/MENU dialog is visible on screen!
 """.trimIndent()
 
     private val SYSTEM_LOCAL_NO_MBS = """
 You control an Android phone using screen grid cells (e.g. B1, C3), UI elements, and OCR text.
 Reply with ONE line (single command OR multiple chained commands separated by '->' + | PLAN: short strategy):
-SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select card at B1 and plant on board C3)
-TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect sun or tap tile)
+SEQ <cell1> <cell2> | PLAN: <strategy>       (taps cell1 then taps cell2, e.g. SEQ B1 C3 to select item at B1 and use on target C3)
+TAP <cell> | PLAN: <strategy>                (taps visual grid cell e.g. TAP D2 to collect drop or tap tile)
 TAP_ID <id> | PLAN: <strategy>               (taps UI element #id from SCREEN ELEMENTS)
 TAP_TEXT <words> | PLAN: <strategy>          (taps visible words from OCR TEXT)
 JOYSTICK <FORWARD|BACK|LEFT|RIGHT> <ms> | PLAN: <strategy> (operates virtual movement joystick)
@@ -288,10 +288,10 @@ Rules:
 - PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
 - AUTONOMOUS GAMING:
   * You are 100% autonomous. NEVER output ASK_USER when playing games! Always execute actions directly.
-  * In strategy/placement games (PvZ, tower defense):
-    - Collect falling sun/coins/drops: use `TAP <cell>` (e.g. `TAP D2`).
-    - Place plants/units: use `SEQ <card_cell> <board_cell>` (e.g. `SEQ B1 C3` to select card at B1 and plant on lane C3).
-    - NEVER tap "resume" or "menu" buttons unless an actual PAUSE dialog is visible on screen!
+  * In games and canvas apps:
+    - Tap on-screen objects/items/drops: use `TAP <cell>` (e.g. `TAP D2`) or `TAP <x> <y>`.
+    - Select tool/card/item then place/use: use `SEQ <cell1> <cell2>` (e.g. `SEQ B1 C3` to select item at B1 and use on target C3).
+    - NEVER tap "resume", "settings", or "menu" buttons unless an actual PAUSE/MENU dialog is visible on screen!
 """.trimIndent()
 
     private fun screenSignature(root: AccessibilityNodeInfo?, items: List<PhoneControl.UiItem>, frameHash: Long = 0L): String {

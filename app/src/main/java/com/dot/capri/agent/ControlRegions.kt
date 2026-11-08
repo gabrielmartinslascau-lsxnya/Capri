@@ -297,9 +297,9 @@ object ControlRegions {
 
         val colIdx = when {
             colMatch != null -> colMatch.groupValues[1].toInt() - 1
-            lower.contains("back") || lower.contains("left") -> 0
-            lower.contains("front") || lower.contains("right") -> defaultCols - 1
-            lower.contains("mid") || lower.contains("center") -> defaultCols / 2
+            Regex("\\b(?:first|leftmost)\\s+(?:col|column|slot)\\b").containsMatchIn(lower) -> 0
+            Regex("\\b(?:last|rightmost)\\s+(?:col|column|slot)\\b").containsMatchIn(lower) -> defaultCols - 1
+            Regex("\\b(?:middle|center|mid)\\s+(?:col|column|slot)\\b").containsMatchIn(lower) -> defaultCols / 2
             else -> null
         }
 
@@ -441,12 +441,32 @@ object ControlRegions {
         var matchedAtLeastOneMb = false
 
         for (clause in rawClauses) {
-            // Check if the clause has both an MB and a target separated by "on/to/at/in" or a trailing lane/row/col
-            // e.g. "tap peashooter on lane 1" or "peashooter lane 1 collum 3"
+            // First check if the entire clause directly matches an MB (e.g. "back to game", "sprint", "hold mine for 3s")
+            val mbPhraseDirect = stripDurations(clause)
+            val directMbMatch = findMatchingMb(context, mbPhraseDirect)?.takeIf { coversAllTokens(it, mbPhraseDirect) }
+            if (directMbMatch != null) {
+                matchedAtLeastOneMb = true
+                val explicitHoldMs = parseHoldDurationMs(clause)
+                val explicitlyAskedTap = Regex("\\b(tap|click)\\b", RegexOption.IGNORE_CASE).containsMatchIn(clause)
+                val lblLower = directMbMatch.effectiveLabel().lowercase(Locale.US)
+                val inferredHoldMs = when {
+                    explicitHoldMs != null -> explicitHoldMs
+                    explicitlyAskedTap -> null
+                    lblLower.contains("hold") || lblLower.contains("charge") -> 2500L
+                    lblLower.contains("walk") || lblLower.contains("move") || lblLower.contains("forward") || lblLower.contains("run") -> 1500L
+                    else -> null
+                }
+                steps.add(DirectStep.UseMb(directMbMatch, inferredHoldMs))
+                continue
+            }
+
+            // Only check for an inline target if this clause is NOT exclusively an MB
+            // e.g. "tap card on lane 1" or "use tool at C4"
             val inlineTarget = parseScreenTargetInClause(clause, screenW, screenH)
             val clauseWithoutTarget = if (inlineTarget != null) {
                 clause.replace(Regex("\\b(?:on|to|at|in)?\\s*(?:(?:top|middle|center|bottom|first|last)\\s+)?(?:lane|row|col|collum|colum|column|cloumn|slot|spot|tile|square|box)\\s*[1-9]?\\b.*", RegexOption.IGNORE_CASE), "")
                     .replace(Regex("\\b(0\\.\\d+|1\\.0)\\s*[,\\s]+\\s*(0\\.\\d+|1\\.0)\\b"), "")
+                    .replace(Regex("\\b[a-j][1-9][0]?\\b", RegexOption.IGNORE_CASE), "")
                     .trim()
             } else {
                 clause
