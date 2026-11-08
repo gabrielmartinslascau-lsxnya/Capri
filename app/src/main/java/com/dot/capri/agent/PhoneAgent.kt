@@ -160,6 +160,7 @@ CRITICAL ADAPTIVE, CONTEXT & TIMING RULES:
    - Formulate a smart, in-character response matching the user's intent.
    - Type the response into the text field (`type`) and tap Send (`tap_text` "Send" or the send button).
 8. CREDENTIAL SAFETY BOUNDARY: NEVER attempt to type Bank PINs, payment master passwords, or 2FA codes. If a screen requires sensitive credentials/payment PIN, output `{"do":"fail","say":"Pop your PIN or password in first, choom, then I'll take it from there."}`.
+9. AUTONOMOUS GAMING: When playing games, you are 100% autonomous. NEVER use ask_user or ask the user to manually tap or play for you! Always take actions, rotate camera, or tap game items directly.
 """.trimIndent()
 
     private val SYSTEM_NO_MBS = """
@@ -204,6 +205,7 @@ CRITICAL RULES:
    - Formulate a smart, in-character response matching the user's intent.
    - Type the response into the text field (`type`) and tap Send (`tap_text` "Send" or the send button).
 8. CREDENTIAL SAFETY BOUNDARY: NEVER attempt to type Bank PINs, payment master passwords, or 2FA codes. If a screen requires sensitive credentials/payment PIN, output `{"do":"fail","say":"Pop your PIN or password in first, choom, then I'll take it from there."}`.
+9. AUTONOMOUS GAMING: When playing games, you are 100% autonomous. NEVER use ask_user or ask the user to manually tap or play for you! Always take actions, rotate camera, or tap game items directly.
 """.trimIndent()
 
     private val SYSTEM_LOCAL_WITH_MBS = """
@@ -238,6 +240,7 @@ Rules:
 - ALWAYS include <ms> when holding an action MB (e.g. MB1 2500 for holding, MB1 1500 for walking).
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 - PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
+- AUTONOMOUS GAMING: NEVER output ASK_USER when playing games! Always execute actions autonomously.
 """.trimIndent()
 
     private val SYSTEM_LOCAL_NO_MBS = """
@@ -273,6 +276,7 @@ Rules:
 - Prefer TAP_ID <id> when SCREEN ELEMENTS are listed, or TAP_TEXT <words> when OCR text matches.
 - Never repeat any move in BLACKLISTED NO-EFFECT MOVES or BLACKLISTED WRONG-OUTCOME MOVES.
 - PLAN INTEGRITY: Stay inside the current app and finish the goal. NEVER switch to unrelated apps like TikTok or YouTube.
+- AUTONOMOUS GAMING: NEVER output ASK_USER when playing games! Always execute actions autonomously.
 """.trimIndent()
 
     private fun screenSignature(root: AccessibilityNodeInfo?, items: List<PhoneControl.UiItem>, frameHash: Long = 0L): String {
@@ -1048,13 +1052,11 @@ Rules:
         val sysPrompt = if (hasMbs) SYSTEM_WITH_MBS else SYSTEM_NO_MBS
         val sysPromptLocal = if (hasMbs) SYSTEM_LOCAL_WITH_MBS else SYSTEM_LOCAL_NO_MBS
 
-        // In app mode with UI tags, use the much faster tag method with zero vision/screenshot overhead.
-        // In game mode when Macro Buttons exist and local on-device model is used, skip heavy vision
-        // encoding since all MB buttons, labels, and coordinates are already completely listed in the text prompt!
-        // This avoids the 5-minute on-device vision latency and generates the move in ~0.2s!
+        // In app mode with UI tags, use the tag method with zero vision overhead.
+        // In game mode, ALWAYS pass rawShot so the agent can see the visual world, crosshairs,
+        // enemies, and items (with fast VisionConfig scaling).
         val effectiveShot = when {
             !isGameMode && items.isNotEmpty() -> null
-            hasMbs && !useApi(context) -> null
             else -> rawShot
         }
 
@@ -2652,6 +2654,394 @@ Rules:
         }
     }
 
+    private suspend fun checkForegroundGoalOrBlocked(
+        context: Context,
+        pkg: String,
+        goal: String,
+        targetAppPkg: String?
+    ): String? {
+        if (pkg in BLOCKED_PACKAGES) return "yeah, no. i'm not touching your wallet or payment apps. handle your own money."
+
+        val goalTrimmed = goal.trim()
+        val isOpenOrVerifyGoal = Regex(
+            "^\\s*(?:open|launch|start|run|switch\\s+to|check|verify)\\s+[a-z0-9_\\s]+?(?:\\s+and\\s+verify(?:\\s+it)?(?:\\s+is)?\\s+on\\s+screen)?$",
+            RegexOption.IGNORE_CASE
+        ).matches(goalTrimmed) ||
+                Regex("\\b(?:verify|check)\\b.*\\b(?:open|on\\s+screen|visible)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goalTrimmed)
+        val isVideoPlayGoal = Regex("^\\s*(?:play|watch|open|start|view)\\s+(?:a\\s+)?(?:reels?|videos?|vids?|shorts?)$", RegexOption.IGNORE_CASE).matches(goalTrimmed)
+
+        val currentForegroundPkg = pkg.lowercase(Locale.US)
+        val isTargetAppForeground = (targetAppPkg != null && currentForegroundPkg == targetAppPkg) ||
+                AppChooser.extractExplicitAppName(goal)?.let { AppChooser.findBestMatch(context, it)?.pkg?.lowercase(Locale.US) } == currentForegroundPkg
+
+        if ((isOpenOrVerifyGoal || isVideoPlayGoal) && isTargetAppForeground) {
+            val appLabel = AppChooser.findBestMatch(context, goal)?.label ?:
+                    AppChooser.launchers(context).firstOrNull { it.pkg.equals(pkg, ignoreCase = true) }?.label ?: pkg
+            val statusMsg = if (isVideoPlayGoal) "playing video in $appLabel" else "opened $appLabel"
+            CapriCursor.show(context)
+            CapriCursor.setStatus(statusMsg)
+            CapriCursor.pulse()
+            delay(350)
+            CapriCursor.hide()
+            return "$statusMsg. next time tap it yourself, dummy."
+        }
+        return null
+    }
+
+    private class SentinelResult(
+        val terminalMessage: String?,
+        val lastSeenFrameHash: Long?,
+        val lastProgressTime: Long
+    )
+
+    private suspend fun checkSentinels(
+        isGameMode: Boolean,
+        ocrHits: List<TextFinder.Hit>,
+        lastSeenFrameHash: Long?,
+        frameHash: Long,
+        lastProgressTime: Long,
+        steps: Int,
+        log: MutableList<String>
+    ): SentinelResult {
+        if (isGameMode && ocrHits.any { hit -> TERMINAL_DEFEAT_REGEX.containsMatchIn(hit.text) }) {
+            log.add("terminal defeat detected on screen: stopping screen control")
+            CapriCursor.setStatus("Game Over detected...")
+            delay(350)
+            return SentinelResult("game's over, choom—looks like we got wiped out. shutting down screen control. ${summary(log)}", lastSeenFrameHash, lastProgressTime)
+        }
+        if (isGameMode && ocrHits.any { hit -> TERMINAL_VICTORY_REGEX.containsMatchIn(hit.text) }) {
+            log.add("victory screen detected on screen: stopping screen control")
+            CapriCursor.setStatus("Victory!")
+            delay(350)
+            return SentinelResult("we won! level cleared, choom. ${summary(log)}", lastSeenFrameHash, lastProgressTime)
+        }
+
+        var seenHash = lastSeenFrameHash
+        var progressTime = lastProgressTime
+        if (seenHash == frameHash && steps > 0) {
+            if (System.currentTimeMillis() - progressTime >= 20_000L) {
+                log.add("screen frozen with zero progress for >= 20s; cleanly deactivating")
+                return SentinelResult("no screen progress after 20 seconds, choom. shutting down screen control. ${summary(log)}", seenHash, progressTime)
+            }
+        } else {
+            seenHash = frameHash
+            progressTime = System.currentTimeMillis()
+        }
+        return SentinelResult(null, seenHash, progressTime)
+    }
+
+    private sealed class TriageResult {
+        object None : TriageResult()
+        object HandledAndContinue : TriageResult()
+        data class ActionChosen(val act: Act) : TriageResult()
+    }
+
+    private suspend fun performPreModelTriage(
+        context: Context,
+        pkg: String,
+        goal: String,
+        stateKey: String,
+        isGameMode: Boolean,
+        rawBytes: ByteArray?,
+        sw: Int,
+        sh: Int,
+        aspect: Float,
+        items: List<PhoneControl.UiItem>,
+        ocrHits: List<TextFinder.Hit>,
+        consecutiveNoOpTurns: Int,
+        deadClickCounts: MutableMap<String, Int>,
+        unproductiveClicks: Int,
+        chatVisible: suspend (Boolean) -> Unit,
+        lastShotWidth: Int,
+        lastShotHeight: Int,
+        log: MutableList<String>
+    ): TriageResult {
+        // Autonomic Background Reflex (<10ms): In real-time games, collect falling resource drops automatically
+        if (isGameMode && rawBytes != null) {
+            val highlights = GameReflexScanner.detectDynamicHighlights(rawBytes, sw, sh, maxTargets = 2)
+            if (highlights.isNotEmpty()) {
+                for (hl in highlights) {
+                    log.add("autonomic reflex: collected dynamic resource drop at (${hl.screenX}, ${hl.screenY})")
+                    CapriCursor.moveTo(hl.screenX, hl.screenY)
+                    CapriCursor.pulse()
+                    PhoneControl.tapAt(hl.screenX, hl.screenY)
+                    delay(60)
+                }
+            }
+        }
+
+        // Visual State Triage (<50ms): If screen is paused or prompting to Resume/Continue/Start, tap it first!
+        val macroButtons = ControlRegions.allMacroButtons(context)
+        val resumeMb = macroButtons.firstOrNull { mb ->
+            STATE_TRANSITION_REGEX.containsMatchIn(mb.effectiveLabel())
+        }
+        if (resumeMb != null) {
+            val p = ControlRegions.resolve(context, resumeMb.name)
+            if (p != null) {
+                log.add("state triage: tapping state-transition MB '${resumeMb.effectiveLabel()}' (${p.first}, ${p.second})")
+                CapriCursor.setStatus("tapping ${resumeMb.effectiveLabel()}...")
+                CapriCursor.pulse()
+                PhoneControl.tapAt(p.first, p.second)
+                delay(350)
+                return TriageResult.HandledAndContinue
+            }
+        }
+        val resumeOcr = ocrHits.firstOrNull { hit ->
+            STATE_TRANSITION_REGEX.containsMatchIn(hit.text)
+        }
+        if (resumeOcr != null) {
+            log.add("state triage: tapping on-screen prompt '${resumeOcr.text}' at (${resumeOcr.x}, ${resumeOcr.y})")
+            CapriCursor.setStatus("tapping ${resumeOcr.text}...")
+            CapriCursor.pulse()
+            PhoneControl.tapAt(resumeOcr.x, resumeOcr.y)
+            delay(350)
+            return TriageResult.HandledAndContinue
+        }
+
+        // App Mode Compose Triage: If user wants to compose/write an email or message, click Compose button if visible
+        if (!isGameMode) {
+            val isEmailOrComposeGoal = Regex("\\b(email|compose|write\\s+email|send\\s+email)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goal)
+            if (isEmailOrComposeGoal) {
+                val composeItem = items.firstOrNull { it.label.contains("compose", ignoreCase = true) || it.label.contains("new message", ignoreCase = true) }
+                val composeOcr = if (composeItem == null) ocrHits.firstOrNull { it.text.contains("compose", ignoreCase = true) } else null
+                if (composeItem != null) {
+                    log.add("app triage: tapping Compose button '${composeItem.label}'")
+                    CapriCursor.moveTo(composeItem.cx, composeItem.cy)
+                    CapriCursor.pulse()
+                    PhoneControl.tap(composeItem)
+                    delay(400)
+                    return TriageResult.HandledAndContinue
+                } else if (composeOcr != null) {
+                    log.add("app triage: tapping Compose OCR at (${composeOcr.x}, ${composeOcr.y})")
+                    CapriCursor.moveTo(composeOcr.x, composeOcr.y)
+                    CapriCursor.pulse()
+                    PhoneControl.tapAt(composeOcr.x, composeOcr.y)
+                    delay(400)
+                    return TriageResult.HandledAndContinue
+                }
+            }
+        }
+
+        // Greenlight Fast-Path Check (<50ms): Execute verified greenlight moves from human demo or past success
+        val greenlightMoves = AgentMemory.getGreenlightMoves(stateKey)
+        val gm = greenlightMoves.firstOrNull { move ->
+            !AgentMemory.isBlacklisted(stateKey, move.describe(), move, goal, aspect)
+        }
+        if (gm != null) {
+            val matchedAct = matchGreenlightMoveToAct(gm, items, sw, sh)
+            if (matchedAct != null) {
+                log.add("greenlight fast-path: executing verified move '${gm.describe()}' (<50ms)")
+                CapriCursor.setStatus("greenlight move: ${gm.describe()}...")
+                CapriCursor.pulse()
+                return TriageResult.ActionChosen(matchedAct)
+            }
+        }
+
+        // Autonomous Demonstration Request: Only allowed in standard app mode! In games, Capri NEVER asks user for manual input.
+        if (!isGameMode && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 } || unproductiveClicks >= 2)) {
+            log.add("uncertain/stuck; requesting user demonstration (unproductiveClicks=$unproductiveClicks)")
+            val demonstrated = triggerHumanDemonstration(
+                context = context,
+                pkg = pkg,
+                goal = goal,
+                stateKey = stateKey,
+                promptSay = "Show me what to tap, dummy. Just once.",
+                chatVisible = chatVisible,
+                log = log
+            )
+            if (demonstrated) {
+                delay(350)
+                return TriageResult.HandledAndContinue
+            }
+        } else if (isGameMode && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 } || unproductiveClicks >= 2)) {
+            log.add("game mode recovery: dead-click detected; performing camera look & rotating action")
+            val (swO, shO) = PhoneControl.orientedScreenSize(lastShotWidth, lastShotHeight)
+            val (origX, origY) = ControlRegions.resolve(context, "look") ?: Pair(swO * 3 / 4, shO / 2)
+            PhoneControl.look(origX, origY, 280, 0, 300L)
+            delay(350)
+            return TriageResult.HandledAndContinue
+        }
+
+        return TriageResult.None
+    }
+
+    private data class StepOutcome(
+        val terminalMessage: String?,
+        val unproductiveDelta: Int,
+        val resetDeadClicks: Boolean,
+        val lastExecutedTurn: ExecutedTurn?,
+        val carriedRoot: AccessibilityNodeInfo?,
+        val carriedBytes: ByteArray?
+    )
+
+    private suspend fun evaluateStepOutcome(
+        context: Context,
+        service: CapriAccessibilityService,
+        goal: String,
+        pkg: String,
+        targetAppPkg: String?,
+        stateKey: String,
+        a: Act,
+        candidateMove: MoveMemory.Move,
+        actionCmd: String,
+        recordedPlacementCoord: Pair<Float, Float>?,
+        beforeFp: ScreenFingerprint?,
+        beforeSig: String,
+        isGameMode: Boolean,
+        isMusicGoal: Boolean,
+        steps: Int,
+        audioManager: android.media.AudioManager?,
+        traceId: Int,
+        prevExecutedTurn: ExecutedTurn?,
+        deadClickCounts: MutableMap<String, Int>,
+        currentUnproductiveClicks: Int,
+        log: MutableList<String>
+    ): StepOutcome {
+        val outcome = captureOutcomeState(
+            service = service,
+            isGameMode = isGameMode,
+            settleMs = if (isGameMode) 480L else 380L
+        )
+        val afterRoot = outcome.root
+        val afterItems = outcome.items
+        val afterFp = outcome.fp
+        var nextCarriedRoot: AccessibilityNodeInfo? = afterRoot
+        var nextCarriedBytes: ByteArray? = outcome.bytes
+
+        val afterPkg = afterRoot?.packageName?.toString() ?: pkg
+        val uiChanged = !isGameMode && afterItems.size >= 3 && screenSignature(afterRoot, afterItems, 0L) != beforeSig
+        val fpChanged = if (beforeFp != null && afterFp != null) {
+            val globalFrac = beforeFp.changedFraction(afterFp)
+            val localFrac = if (candidateMove.points.isNotEmpty()) {
+                beforeFp.changedFractionAround(afterFp, candidateMove.points, radius = 0.10f, near = true, threshold = 10)
+            } else 0f
+            if (isGameMode || afterItems.size < 5) {
+                globalFrac >= 0.015f || localFrac >= 0.04f || beforeFp.meanAbsDiff(afterFp) >= 2.2f
+            } else {
+                globalFrac >= 0.14f
+            }
+        } else false
+
+        val pressedMb = if (a.doWhat == "press_region" && !a.region.isNullOrBlank()) {
+            ControlRegions.getButton(context, a.region)
+        } else null
+        val isContinuousHoldMb = pressedMb != null && ((a.durationMs ?: 0L) >= 500L)
+        val isAlwaysProgress = a.doWhat in setOf("wait", "look", "hold", "swipe") || isContinuousHoldMb
+        val changed = uiChanged || fpChanged || afterPkg != pkg || isAlwaysProgress
+
+        val unintended = if (changed) {
+            detectUnintendedTransition(
+                goal = goal,
+                beforePkg = pkg,
+                afterPkg = afterPkg,
+                afterItems = afterItems,
+                beforeFp = beforeFp,
+                afterFp = afterFp,
+                act = a,
+                move = candidateMove,
+                targetAppPkg = targetAppPkg
+            )
+        } else null
+
+        if ((!changed || unintended != null) && recordedPlacementCoord != null) {
+            AgentMemory.removeLastPlacementNear(pkg, recordedPlacementCoord.first, recordedPlacementCoord.second)
+        }
+
+        val statusTag = when {
+            !changed -> "(failed/no screen change - blacklisted)"
+            unintended != null -> "(wrong outcome: ${unintended.first} - blacklisted)"
+            else -> "(worked/screen updated)"
+        }
+
+        var unprodDelta = 0
+        var resetDead = false
+        if (!changed || unintended != null) {
+            deadClickCounts[actionCmd] = (deadClickCounts[actionCmd] ?: 0) + 1
+            unprodDelta = 1
+        } else if (a.doWhat == "back") {
+            unprodDelta = 1
+        } else if (a.doWhat == "tap" || a.doWhat == "click") {
+            val musicActive = audioManager?.isMusicActive == true
+            if (isMusicGoal && !musicActive) {
+                unprodDelta = 1
+                log.add("tap did not start music playback (unproductiveClicks=${currentUnproductiveClicks + 1})")
+            } else if (!isMusicGoal && steps > 0 && a.doWhat != "done") {
+                unprodDelta = 1
+                log.add("exploratory tap without goal completion (unproductiveClicks=${currentUnproductiveClicks + 1})")
+            }
+        } else {
+            resetDead = true
+        }
+
+        if (log.isNotEmpty()) {
+            val lastIdx = log.lastIndex
+            if (!log[lastIdx].contains("(worked") && !log[lastIdx].contains("(failed") && !log[lastIdx].contains("(wrong")) {
+                log[lastIdx] = "${log[lastIdx]} $statusTag"
+            }
+        }
+
+        AgentMemory.recordOutcome(
+            context = context,
+            stateKey = stateKey,
+            normalizedCommand = actionCmd,
+            screenChanged = changed,
+            move = candidateMove,
+            isGame = isGameMode,
+            goal = goal,
+            unintendedReason = unintended?.first,
+            goalScopedWrong = false
+        )
+
+        var nextExecutedTurn = prevExecutedTurn
+        if (unintended != null && unintended.second) {
+            log.add("auto-recovering from unintended transition (${unintended.first}) with BACK")
+            PhoneControl.back()
+            delay(450)
+            nextCarriedRoot = null
+            nextCarriedBytes = null
+            nextExecutedTurn = null
+        } else if (changed && a.doWhat != "back") {
+            nextExecutedTurn = ExecutedTurn(
+                stateKey = stateKey,
+                pkg = pkg,
+                actionCmd = actionCmd,
+                move = candidateMove,
+                isGameMode = isGameMode,
+                placedNormX = recordedPlacementCoord?.first,
+                placedNormY = recordedPlacementCoord?.second
+            )
+        }
+
+        val lastLogLine = log.lastOrNull() ?: a.doWhat
+        if (traceId != -1) {
+            BrainTraceStore.updateTurnOutcome(traceId, lastLogLine, statusTag)
+        }
+
+        if (a.doWhat == "press_region" && changed && unintended == null && !a.region.isNullOrBlank()) {
+            val regName = a.region.lowercase(Locale.US)
+            val mb = ControlRegions.getButton(context, regName)
+            if (mb != null && !mb.isAssigned()) {
+                val learnedDesc = when {
+                    afterPkg != pkg -> "opened $afterPkg"
+                    !isGameMode && afterItems.isNotEmpty() -> "updated screen (${afterItems.first().label.take(18)})"
+                    else -> "control at (${String.format(Locale.US, "%.2f,%.2f", mb.normX, mb.normY)})"
+                }
+                ControlRegions.recordLearnedEffect(context, regName, learnedDesc)
+                log.add("learned ${regName.uppercase(Locale.US)} = $learnedDesc")
+            }
+        }
+
+        val doneMsg = checkAutoTaskCompletion(context, goal, a, changed, unintended, log)
+        return StepOutcome(
+            terminalMessage = doneMsg,
+            unproductiveDelta = unprodDelta,
+            resetDeadClicks = resetDead,
+            lastExecutedTurn = nextExecutedTurn,
+            carriedRoot = nextCarriedRoot,
+            carriedBytes = nextCarriedBytes
+        )
+    }
+
     suspend fun run(
         context: Context,
         goal: String,
@@ -2755,33 +3145,7 @@ Rules:
                 }
 
                 val pkg = root?.packageName?.toString() ?: "game_surface"
-                if (pkg in BLOCKED_PACKAGES) return "yeah, no. i'm not touching your wallet or payment apps. handle your own money."
-
-                // If this is a pure app launch request or verify-open request (e.g. "open spotify", "open spotify and verify it is on screen", "play a vid", "reels"),
-                // verify that the app is actively visible in the foreground on the live screen!
-                val goalTrimmed = goal.trim()
-                val isOpenOrVerifyGoal = Regex(
-                    "^\\s*(?:open|launch|start|run|switch\\s+to|check|verify)\\s+[a-z0-9_\\s]+?(?:\\s+and\\s+verify(?:\\s+it)?(?:\\s+is)?\\s+on\\s+screen)?$",
-                    RegexOption.IGNORE_CASE
-                ).matches(goalTrimmed) ||
-                        Regex("\\b(?:verify|check)\\b.*\\b(?:open|on\\s+screen|visible)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goalTrimmed)
-                val isVideoPlayGoal = Regex("^\\s*(?:play|watch|open|start|view)\\s+(?:a\\s+)?(?:reels?|videos?|vids?|shorts?)$", RegexOption.IGNORE_CASE).matches(goalTrimmed)
-
-                val currentForegroundPkg = pkg.lowercase(Locale.US)
-                val isTargetAppForeground = (targetAppPkg != null && currentForegroundPkg == targetAppPkg) ||
-                        AppChooser.extractExplicitAppName(goal)?.let { AppChooser.findBestMatch(context, it)?.pkg?.lowercase(Locale.US) } == currentForegroundPkg
-
-                if ((isOpenOrVerifyGoal || isVideoPlayGoal) && isTargetAppForeground) {
-                    val appLabel = AppChooser.findBestMatch(context, goal)?.label ?:
-                            AppChooser.launchers(context).firstOrNull { it.pkg.equals(pkg, ignoreCase = true) }?.label ?: pkg
-                    val statusMsg = if (isVideoPlayGoal) "playing video in $appLabel" else "opened $appLabel"
-                    CapriCursor.show(context)
-                    CapriCursor.setStatus(statusMsg)
-                    CapriCursor.pulse()
-                    delay(350)
-                    CapriCursor.hide()
-                    return "$statusMsg. next time tap it yourself, dummy."
-                }
+                checkForegroundGoalOrBlocked(context, pkg, goal, targetAppPkg)?.let { return it }
 
                 if (steps == 0 && resume == null) {
                     AgentMemory.beginNewTaskSession(pkg, goal)
@@ -2805,30 +3169,10 @@ Rules:
                 val ocrLines = ocrHits.map { it.text }
                 val ocrSummary = ocrLines.take(6).joinToString(", ")
 
-                // 1. Terminal Game Sentinel: If defeat or victory is displayed on screen, exit cleanly and immediately!
-                if (isGameMode && ocrHits.any { hit -> TERMINAL_DEFEAT_REGEX.containsMatchIn(hit.text) }) {
-                    log.add("terminal defeat detected on screen: stopping screen control")
-                    CapriCursor.setStatus("Game Over detected...")
-                    delay(350)
-                    return "game's over, choom—looks like we got wiped out. shutting down screen control. ${summary(log)}"
-                }
-                if (isGameMode && ocrHits.any { hit -> TERMINAL_VICTORY_REGEX.containsMatchIn(hit.text) }) {
-                    log.add("victory screen detected on screen: stopping screen control")
-                    CapriCursor.setStatus("Victory!")
-                    delay(350)
-                    return "we won! level cleared, choom. ${summary(log)}"
-                }
-
-                // 2. Screen Freeze Sentinel: If screen fingerprint produced 0 change for >= 20s, stop immediately!
-                if (lastSeenFrameHash == frameHash && steps > 0) {
-                    if (System.currentTimeMillis() - lastProgressTime >= 20_000L) {
-                        log.add("screen frozen with zero progress for >= 20s; cleanly deactivating")
-                        return "no screen progress after 20 seconds, choom. shutting down screen control. ${summary(log)}"
-                    }
-                } else {
-                    lastSeenFrameHash = frameHash
-                    lastProgressTime = System.currentTimeMillis()
-                }
+                val sentinel = checkSentinels(isGameMode, ocrHits, lastSeenFrameHash, frameHash, lastProgressTime, steps, log)
+                sentinel.terminalMessage?.let { return it }
+                lastSeenFrameHash = sentinel.lastSeenFrameHash
+                lastProgressTime = sentinel.lastProgressTime
 
                 if (isGameMode) {
                     // Phase 1 when MBs exist: On the first screenshot (or whenever unassigned MBs exist),
@@ -2859,129 +3203,41 @@ Rules:
                     }
                 }
 
-                // 3. Autonomic Background Reflex (<10ms): In real-time games, collect falling resource drops (sun, coins, bonuses)
-                // automatically before or during model turns without waiting for the slow LLM!
-                if (isGameMode && rawBytes != null) {
-                    val highlights = GameReflexScanner.detectDynamicHighlights(rawBytes, sw, sh, maxTargets = 2)
-                    if (highlights.isNotEmpty()) {
-                        for (hl in highlights) {
-                            log.add("autonomic reflex: collected dynamic resource drop at (${hl.screenX}, ${hl.screenY})")
-                            CapriCursor.moveTo(hl.screenX, hl.screenY)
-                            CapriCursor.pulse()
-                            PhoneControl.tapAt(hl.screenX, hl.screenY)
-                            delay(60)
-                        }
-                    }
-                }
-
-                // 4. Visual State Triage (<50ms): If screen is paused or prompting to Resume/Continue/Start, tap it first!
                 if (chosen == null) {
-                    val macroButtons = ControlRegions.allMacroButtons(context)
-                    val resumeMb = macroButtons.firstOrNull { mb ->
-                        STATE_TRANSITION_REGEX.containsMatchIn(mb.effectiveLabel())
-                    }
-                    if (resumeMb != null) {
-                        val p = ControlRegions.resolve(context, resumeMb.name)
-                        if (p != null) {
-                            log.add("state triage: tapping state-transition MB '${resumeMb.effectiveLabel()}' (${p.first}, ${p.second})")
-                            CapriCursor.setStatus("tapping ${resumeMb.effectiveLabel()}...")
-                            CapriCursor.pulse()
-                            PhoneControl.tapAt(p.first, p.second)
-                            steps++
-                            lastProgressTime = System.currentTimeMillis()
-                            delay(350)
-                            carriedBytes = null
-                            carriedRoot = null
-                            continue
-                        }
-                    }
-                    val resumeOcr = ocrHits.firstOrNull { hit ->
-                        STATE_TRANSITION_REGEX.containsMatchIn(hit.text)
-                    }
-                    if (resumeOcr != null) {
-                        log.add("state triage: tapping on-screen prompt '${resumeOcr.text}' at (${resumeOcr.x}, ${resumeOcr.y})")
-                        CapriCursor.setStatus("tapping ${resumeOcr.text}...")
-                        CapriCursor.pulse()
-                        PhoneControl.tapAt(resumeOcr.x, resumeOcr.y)
-                        steps++
-                        lastProgressTime = System.currentTimeMillis()
-                        delay(350)
-                        carriedBytes = null
-                        carriedRoot = null
-                        continue
-                    }
-                }
-
-                // 4. App Mode Compose Triage: If user wants to compose/write an email or message, click Compose button if visible
-                if (!isGameMode && chosen == null) {
-                    val isEmailOrComposeGoal = Regex("\\b(email|compose|write\\s+email|send\\s+email)\\b", RegexOption.IGNORE_CASE).containsMatchIn(goal)
-                    if (isEmailOrComposeGoal) {
-                        val composeItem = items.firstOrNull { it.label.contains("compose", ignoreCase = true) || it.label.contains("new message", ignoreCase = true) }
-                        val composeOcr = if (composeItem == null) ocrHits.firstOrNull { it.text.contains("compose", ignoreCase = true) } else null
-                        if (composeItem != null) {
-                            log.add("app triage: tapping Compose button '${composeItem.label}'")
-                            CapriCursor.moveTo(composeItem.cx, composeItem.cy)
-                            CapriCursor.pulse()
-                            PhoneControl.tap(composeItem)
-                            steps++
-                            lastProgressTime = System.currentTimeMillis()
-                            delay(400)
-                            carriedBytes = null
-                            carriedRoot = null
-                            continue
-                        } else if (composeOcr != null) {
-                            log.add("app triage: tapping Compose OCR at (${composeOcr.x}, ${composeOcr.y})")
-                            CapriCursor.moveTo(composeOcr.x, composeOcr.y)
-                            CapriCursor.pulse()
-                            PhoneControl.tapAt(composeOcr.x, composeOcr.y)
-                            steps++
-                            lastProgressTime = System.currentTimeMillis()
-                            delay(400)
-                            carriedBytes = null
-                            carriedRoot = null
-                            continue
-                        }
-                    }
-                }
-
-                // Greenlight Fast-Path Check (<50ms): Execute verified greenlight moves from human demo or past success
-                if (chosen == null) {
-                    val greenlightMoves = AgentMemory.getGreenlightMoves(stateKey)
-                    val gm = greenlightMoves.firstOrNull { move ->
-                        !AgentMemory.isBlacklisted(stateKey, move.describe(), move, goal, aspect)
-                    }
-                    if (gm != null) {
-                        val matchedAct = matchGreenlightMoveToAct(gm, items, sw, sh)
-                        if (matchedAct != null) {
-                            log.add("greenlight fast-path: executing verified move '${gm.describe()}' (<50ms)")
-                            CapriCursor.setStatus("greenlight move: ${gm.describe()}...")
-                            CapriCursor.pulse()
-                            chosen = matchedAct
-                        }
-                    }
-                }
-
-                // Autonomous Demonstration Request: If stuck, dead-clicking, or clicked wrong thing 2x, ask user to show once!
-                if (chosen == null && (consecutiveNoOpTurns >= 2 || deadClickCounts.values.any { it >= 2 } || unproductiveClicks >= 2)) {
-                    log.add("uncertain/stuck; requesting user demonstration (unproductiveClicks=$unproductiveClicks)")
-                    val demonstrated = triggerHumanDemonstration(
+                    when (val triage = performPreModelTriage(
                         context = context,
                         pkg = pkg,
                         goal = goal,
                         stateKey = stateKey,
-                        promptSay = "Show me what to tap, dummy. Just once.",
+                        isGameMode = isGameMode,
+                        rawBytes = rawBytes,
+                        sw = sw,
+                        sh = sh,
+                        aspect = aspect,
+                        items = items,
+                        ocrHits = ocrHits,
+                        consecutiveNoOpTurns = consecutiveNoOpTurns,
+                        deadClickCounts = deadClickCounts,
+                        unproductiveClicks = unproductiveClicks,
                         chatVisible = chatVisible,
+                        lastShotWidth = lastShotWidth,
+                        lastShotHeight = lastShotHeight,
                         log = log
-                    )
-                    if (demonstrated) {
-                        consecutiveNoOpTurns = 0
-                        deadClickCounts.clear()
-                        unproductiveClicks = 0
-                        steps++
-                        carriedRoot = null
-                        carriedBytes = null
-                        delay(350)
-                        continue
+                    )) {
+                        is TriageResult.HandledAndContinue -> {
+                            steps++
+                            lastProgressTime = System.currentTimeMillis()
+                            consecutiveNoOpTurns = 0
+                            deadClickCounts.clear()
+                            unproductiveClicks = 0
+                            carriedBytes = null
+                            carriedRoot = null
+                            continue
+                        }
+                        is TriageResult.ActionChosen -> {
+                            chosen = triage.act
+                        }
+                        is TriageResult.None -> {}
                     }
                 }
 
@@ -3057,8 +3313,22 @@ Rules:
 
                 var a: Act = chosen!!
 
-                // Handle ask_user action from model
+                // Handle ask_user action from model (Strictly rejected in games to remain 100% autonomous)
                 if (a.doWhat == "ask_user") {
+                    if (isGameMode) {
+                        log.add("anti-surrender guard: rejected ask_user during game mode; performing camera look recovery")
+                        val (swO, shO) = PhoneControl.orientedScreenSize(lastShotWidth, lastShotHeight)
+                        val (origX, origY) = ControlRegions.resolve(context, "look") ?: Pair(swO * 3 / 4, shO / 2)
+                        PhoneControl.look(origX, origY, 280, 0, 300L)
+                        consecutiveNoOpTurns = 0
+                        deadClickCounts.clear()
+                        unproductiveClicks = 0
+                        steps++
+                        carriedRoot = null
+                        carriedBytes = null
+                        delay(350)
+                        continue
+                    }
                     triggerHumanDemonstration(
                         context = context,
                         pkg = pkg,
@@ -3273,138 +3543,39 @@ Rules:
                 stateMachine.recordStep(a)
                 steps++
 
-                val outcome = captureOutcomeState(
+                val stepOutcome = evaluateStepOutcome(
+                    context = context,
                     service = service,
+                    goal = goal,
+                    pkg = pkg,
+                    targetAppPkg = targetAppPkg,
+                    stateKey = stateKey,
+                    a = a,
+                    candidateMove = candidateMove,
+                    actionCmd = actionCmd,
+                    recordedPlacementCoord = recordedPlacementCoord,
+                    beforeFp = beforeFp,
+                    beforeSig = beforeSig,
                     isGameMode = isGameMode,
-                    settleMs = if (isGameMode) 480L else 380L
+                    isMusicGoal = isMusicGoal,
+                    steps = steps,
+                    audioManager = audioManager,
+                    traceId = traceHolder[0],
+                    prevExecutedTurn = lastExecutedTurn,
+                    deadClickCounts = deadClickCounts,
+                    currentUnproductiveClicks = unproductiveClicks,
+                    log = log
                 )
-                val afterRoot = outcome.root
-                val afterItems = outcome.items
-                val afterFp = outcome.fp
-                carriedRoot = afterRoot
-                carriedBytes = outcome.bytes
 
-                val afterPkg = afterRoot?.packageName?.toString() ?: pkg
-                val uiChanged = !isGameMode && afterItems.size >= 3 && screenSignature(afterRoot, afterItems, 0L) != beforeSig
-                val fpChanged = if (beforeFp != null && afterFp != null) {
-                    val globalFrac = beforeFp.changedFraction(afterFp)
-                    val localFrac = if (candidateMove.points.isNotEmpty()) {
-                        beforeFp.changedFractionAround(afterFp, candidateMove.points, radius = 0.10f, near = true, threshold = 10)
-                    } else 0f
-                    if (isGameMode || afterItems.size < 5) {
-                        globalFrac >= 0.015f || localFrac >= 0.04f || beforeFp.meanAbsDiff(afterFp) >= 2.2f
-                    } else {
-                        globalFrac >= 0.14f
-                    }
-                } else false
-
-                val pressedMb = if (a.doWhat == "press_region" && !a.region.isNullOrBlank()) {
-                    ControlRegions.getButton(context, a.region)
-                } else null
-                val isContinuousHoldMb = pressedMb != null && ((a.durationMs ?: 0L) >= 500L)
-                val isAlwaysProgress = a.doWhat in setOf("wait", "look", "hold", "swipe") || isContinuousHoldMb
-                val changed = uiChanged || fpChanged || afterPkg != pkg || isAlwaysProgress
-
-                val unintended = if (changed) {
-                    detectUnintendedTransition(
-                        goal = goal,
-                        beforePkg = pkg,
-                        afterPkg = afterPkg,
-                        afterItems = afterItems,
-                        beforeFp = beforeFp,
-                        afterFp = afterFp,
-                        act = a,
-                        move = candidateMove,
-                        targetAppPkg = targetAppPkg
-                    )
-                } else null
-
-                if ((!changed || unintended != null) && recordedPlacementCoord != null) {
-                    AgentMemory.removeLastPlacementNear(pkg, recordedPlacementCoord.first, recordedPlacementCoord.second)
-                }
-
-                val statusTag = when {
-                    !changed -> "(failed/no screen change - blacklisted)"
-                    unintended != null -> "(wrong outcome: ${unintended.first} - blacklisted)"
-                    else -> "(worked/screen updated)"
-                }
-
-                if (!changed || unintended != null) {
-                    deadClickCounts[actionCmd] = (deadClickCounts[actionCmd] ?: 0) + 1
-                    unproductiveClicks++
-                } else if (a.doWhat == "back") {
-                    unproductiveClicks++
-                } else if (a.doWhat == "tap" || a.doWhat == "click") {
-                    val musicActive = audioManager?.isMusicActive == true
-                    if (isMusicGoal && !musicActive) {
-                        unproductiveClicks++
-                        log.add("tap did not start music playback (unproductiveClicks=$unproductiveClicks)")
-                    } else if (!isMusicGoal && steps > 0 && a.doWhat != "done") {
-                        unproductiveClicks++
-                        log.add("exploratory tap without goal completion (unproductiveClicks=$unproductiveClicks)")
-                    }
-                } else {
+                if (stepOutcome.resetDeadClicks) {
                     deadClickCounts.clear()
                 }
+                unproductiveClicks += stepOutcome.unproductiveDelta
+                lastExecutedTurn = stepOutcome.lastExecutedTurn
+                carriedRoot = stepOutcome.carriedRoot
+                carriedBytes = stepOutcome.carriedBytes
 
-                if (log.isNotEmpty()) {
-                    val lastIdx = log.lastIndex
-                    if (!log[lastIdx].contains("(worked") && !log[lastIdx].contains("(failed") && !log[lastIdx].contains("(wrong")) {
-                        log[lastIdx] = "${log[lastIdx]} $statusTag"
-                    }
-                }
-
-                AgentMemory.recordOutcome(
-                    context = context,
-                    stateKey = stateKey,
-                    normalizedCommand = actionCmd,
-                    screenChanged = changed,
-                    move = candidateMove,
-                    isGame = isGameMode,
-                    goal = goal,
-                    unintendedReason = unintended?.first,
-                    goalScopedWrong = false
-                )
-
-                if (unintended != null && unintended.second) {
-                    log.add("auto-recovering from unintended transition (${unintended.first}) with BACK")
-                    PhoneControl.back()
-                    delay(450)
-                    carriedRoot = null
-                    carriedBytes = null
-                    lastExecutedTurn = null
-                } else if (changed && a.doWhat != "back") {
-                    lastExecutedTurn = ExecutedTurn(
-                        stateKey = stateKey,
-                        pkg = pkg,
-                        actionCmd = actionCmd,
-                        move = candidateMove,
-                        isGameMode = isGameMode,
-                        placedNormX = recordedPlacementCoord?.first,
-                        placedNormY = recordedPlacementCoord?.second
-                    )
-                }
-
-                val lastLogLine = log.lastOrNull() ?: a.doWhat
-                if (traceHolder[0] != -1) {
-                    BrainTraceStore.updateTurnOutcome(traceHolder[0], lastLogLine, statusTag)
-                }
-
-                if (a.doWhat == "press_region" && changed && unintended == null && !a.region.isNullOrBlank()) {
-                    val regName = a.region.lowercase(Locale.US)
-                    val mb = ControlRegions.getButton(context, regName)
-                    if (mb != null && !mb.isAssigned()) {
-                        val learnedDesc = when {
-                            afterPkg != pkg -> "opened $afterPkg"
-                            !isGameMode && afterItems.isNotEmpty() -> "updated screen (${afterItems.first().label.take(18)})"
-                            else -> "control at (${String.format(Locale.US, "%.2f,%.2f", mb.normX, mb.normY)})"
-                        }
-                        ControlRegions.recordLearnedEffect(context, regName, learnedDesc)
-                        log.add("learned ${regName.uppercase(Locale.US)} = $learnedDesc")
-                    }
-                }
-
-                checkAutoTaskCompletion(context, goal, a, changed, unintended, log)?.let { doneMsg ->
+                stepOutcome.terminalMessage?.let { doneMsg ->
                     return doneMsg
                 }
             }
