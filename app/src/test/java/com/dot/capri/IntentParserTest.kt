@@ -54,6 +54,18 @@ class IntentParserTest {
     }
 
     @Test
+    fun testParseGameRequestsDoNotPlayMusic() {
+        val cmd1 = IntentParser.parse("play this game on screen")
+        assertEquals(Cmd.Unknown("play this game on screen"), cmd1)
+
+        val cmd2 = IntentParser.parse("play the game")
+        assertEquals(Cmd.Unknown("play the game"), cmd2)
+
+        val cmd3 = IntentParser.parse("play on screen")
+        assertEquals(Cmd.Unknown("play on screen"), cmd3)
+    }
+
+    @Test
     fun testParseCall() {
         val cmd1 = IntentParser.parse("call mom")
         assertEquals(Cmd.Call("mom"), cmd1)

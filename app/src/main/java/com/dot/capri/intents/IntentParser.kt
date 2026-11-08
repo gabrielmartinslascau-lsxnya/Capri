@@ -333,6 +333,14 @@ object IntentParser {
             return Cmd.Unknown(raw)
         }
 
+        // Gameplay or on-screen game actions must NEVER be treated as media playback commands!
+        val isGameRequest = com.dot.capri.agent.DeviceTasks.isGamePlayRequest(cleaned) ||
+                com.dot.capri.agent.DeviceTasks.isGamePlayRequest(raw) ||
+                Regex("\\b(game|games|gameplay|level|match|boss|on\\s+screen|this\\s+game)\\b", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
+        if (isGameRequest) {
+            return Cmd.Unknown(raw)
+        }
+
         playOnRegex.find(cleaned)?.let { match ->
             val (q, app) = match.destructured
             val isGen = isGenericMusicRequest(q)

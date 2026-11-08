@@ -683,7 +683,7 @@ class BubbleService : Service() {
         val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
         val chatScroll = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
         val expandBtn = chatView?.findViewById<TextView>(R.id.btn_expand)
-        val clearBtn = chatView?.findViewById<TextView>(R.id.btn_clear_chat)
+        val clearBtn = chatView?.findViewById<View>(R.id.btn_clear_chat)
         val realTalkBtn = chatView?.findViewById<TextView>(R.id.btn_real_talk)
         val addMbBtn = chatView?.findViewById<TextView>(R.id.btn_add_mb)
         val toggleMbBtn = chatView?.findViewById<TextView>(R.id.btn_toggle_mb)
@@ -693,10 +693,16 @@ class BubbleService : Service() {
             persistentChatHistory.clear()
             com.dot.capri.ai.CloudAiClient.clearHistory(this)
             com.dot.capri.agent.UserMemory.clear(this)
+            try {
+                getSharedPreferences("capri_realtalk_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+            } catch (_: Exception) {}
             historyContainer?.removeAllViews()
             val wipedMsg = "Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate."
             persistentChatHistory.add(Pair("Capri", wipedMsg))
             addMessageView(themedContext, historyContainer, "Capri", wipedMsg)
+            chatScroll?.post {
+                chatScroll.fullScroll(ScrollView.FOCUS_DOWN)
+            }
             Toast.makeText(this, "Chat history & memory cleared", Toast.LENGTH_SHORT).show()
         }
 
@@ -1548,6 +1554,36 @@ class BubbleService : Service() {
         if (taskMatch != null) {
             PhoneAgent.pending = null
             return PhoneAgent.run(this, taskMatch.groupValues[1], null) { setChatVisible(it) }
+        }
+
+        // Direct typed chat/memory wipe command
+        if (com.dot.capri.ai.CloudAiClient.isDeleteMemoryIntent(trimmedInput)) {
+            persistentChatHistory.clear()
+            com.dot.capri.ai.CloudAiClient.clearHistory(this)
+            com.dot.capri.agent.UserMemory.clear(this)
+            try {
+                getSharedPreferences("capri_realtalk_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+            } catch (_: Exception) {}
+            val historyContainer = chatView?.findViewById<LinearLayout>(R.id.chat_history_container)
+            historyContainer?.removeAllViews()
+            val wipedMsg = "Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate."
+            persistentChatHistory.add(Pair("Capri", wipedMsg))
+            val themedContext = ContextThemeWrapper(this, R.style.Theme_Capri)
+            addMessageView(themedContext, historyContainer, "Capri", wipedMsg)
+            return wipedMsg
+        }
+
+        // Direct autonomous gameplay request (never hijacked into music commands)
+        if (DeviceTasks.isGamePlayRequest(trimmedInput, this)) {
+            val installedGame = DeviceTasks.resolveInstalledGame(this, trimmedInput)
+            if (installedGame != null) {
+                com.dot.capri.intents.AppChooser.open(this, installedGame.pkg)
+                delay(1800)
+                PhoneAgent.pending = null
+                return PhoneAgent.run(this, "play ${installedGame.label} and win", null) { setChatVisible(it) }
+            }
+            PhoneAgent.pending = null
+            return PhoneAgent.run(this, trimmedInput, null) { setChatVisible(it) }
         }
 
         // Setting or querying default video player (reels app)
