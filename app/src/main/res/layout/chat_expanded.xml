@@ -97,13 +97,14 @@
 
             <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/btn_clear_chat"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginEnd="3dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginEnd="4dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
                 android:contentDescription="Delete chat"
+                android:padding="4dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_real_talk_clear"
                 app:tint="#F87171" />

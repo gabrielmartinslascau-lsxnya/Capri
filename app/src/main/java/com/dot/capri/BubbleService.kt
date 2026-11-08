@@ -700,6 +700,7 @@ class BubbleService : Service() {
             val wipedMsg = "Wiped clean, choom. Neural net reset, chat history cleared, and all user facts forgotten. Fresh slate."
             persistentChatHistory.add(Pair("Capri", wipedMsg))
             addMessageView(themedContext, historyContainer, "Capri", wipedMsg)
+            chatView?.findViewById<EditText>(R.id.input_text)?.text?.clear()
             chatScroll?.post {
                 chatScroll.fullScroll(ScrollView.FOCUS_DOWN)
             }
