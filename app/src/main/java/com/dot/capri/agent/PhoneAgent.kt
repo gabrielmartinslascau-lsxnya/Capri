@@ -832,8 +832,9 @@ Rules:
         sh: Int
     ): List<Act>? {
         val goalLower = goal.lowercase(Locale.US).trim()
-        val hasWalk = Regex("\\b(walk|move|go|run|approach|towards|toward)\\b").containsMatchIn(goalLower)
-        val hasMineOrAttack = Regex("\\b(mine|chop|break|dig|attack|hit|kill|strike)\\b").containsMatchIn(goalLower)
+        val hasWalk = Regex("\\b(walk|move|go|run|approach|towards|toward|forward)\\b").containsMatchIn(goalLower)
+        val hasMineOrAttack = Regex("\\b(mine|chop|break|dig|attack|hit|kill|strike|fight|destroy|cut)\\b").containsMatchIn(goalLower)
+        val isOpenGameGoal = Regex("\\b(play|game|survive|minecraft|rust|start|take\\s+over)\\b").containsMatchIn(goalLower)
 
         val walkMb = mbs.firstOrNull {
             val l = it.effectiveLabel().lowercase(Locale.US)
@@ -844,16 +845,16 @@ Rules:
         val actionMb = mbs.firstOrNull {
             val l = it.effectiveLabel().lowercase(Locale.US)
             l.contains("mine") || l.contains("break") || l.contains("chop") || l.contains("dig") ||
-                    l.contains("attack") || l.contains("hit") || l.contains("use") ||
+                    l.contains("attack") || l.contains("hit") || l.contains("use") || l.contains("strike") ||
                     (it != walkMb && !l.contains("walk") && !l.contains("move") && !l.contains("pause") && !l.contains("resume") && !l.contains("menu") && !l.contains("inv"))
         }
 
-        // 1. Walk towards target and mine/act:
-        if (hasWalk && hasMineOrAttack && (walkMb != null || isWalkJoystick) && actionMb != null) {
+        // 1. Walk towards target and mine/act (or general 3D open gameplay start):
+        if ((hasWalk || isOpenGameGoal) && (hasMineOrAttack || isOpenGameGoal) && (walkMb != null || isWalkJoystick) && actionMb != null) {
             val moveAct = if (isWalkJoystick) {
-                Act("joystick", dir = "forward", durationMs = 2200L, region = walkMb?.name, plan = "Fast-path: approach target via joystick")
+                Act("joystick", dir = "forward", durationMs = 2000L, region = walkMb?.name, plan = "Fast-path: approach target via joystick")
             } else {
-                Act("press_region", region = walkMb?.name, durationMs = 2200L, label = walkMb?.name?.uppercase(Locale.US), plan = "Fast-path: approach target")
+                Act("press_region", region = walkMb?.name, durationMs = 1800L, label = walkMb?.name?.uppercase(Locale.US), plan = "Fast-path: approach target")
             }
             val targetMs = inferTargetHoldMs(goalLower, actionMb.effectiveLabel().lowercase(Locale.US)) ?: 4500L
             val actionAct = Act("press_region", region = actionMb.name, durationMs = targetMs, label = actionMb.name.uppercase(Locale.US), plan = "Fast-path: hold ${actionMb.effectiveLabel()} for ${targetMs}ms")
@@ -1078,15 +1079,16 @@ Rules:
         val sysPromptLocal = if (hasMbs) SYSTEM_LOCAL_WITH_MBS else SYSTEM_LOCAL_NO_MBS
 
         // In app mode with UI tags, use the tag method with zero vision overhead.
-        // In game mode, ALWAYS pass rawShot so the agent can see the visual world, crosshairs,
-        // enemies, and items (with fast VisionConfig scaling).
+        // In local mode when Macro Buttons are placed (e.g. 8 MBs in Minecraft/Rust),
+        // run Gemma in high-speed text mode with the MB mapping so actions execute in <1s instead of 20s!
         val effectiveShot = when {
             !isGameMode && items.isNotEmpty() -> null
+            !useApi(context) && hasMbs && macroButtons.size >= 3 -> null
             else -> rawShot
         }
 
         val reply = try {
-            withTimeoutOrNull(20_000L) {
+            withTimeoutOrNull(if (useApi(context)) 25_000L else 45_000L) {
                 if (useApi(context)) {
                     LlmRouter.complete(
                         context,
@@ -2811,9 +2813,9 @@ Rules:
         var seenHash = lastSeenFrameHash
         var progressTime = lastProgressTime
         if (seenHash == frameHash && steps > 0) {
-            if (System.currentTimeMillis() - progressTime >= 20_000L) {
-                log.add("screen frozen with zero progress for >= 20s; cleanly deactivating")
-                return SentinelResult("no screen progress after 20 seconds, choom. shutting down screen control. ${summary(log)}", seenHash, progressTime)
+            if (System.currentTimeMillis() - progressTime >= 45_000L) {
+                log.add("screen frozen with zero progress for >= 45s; cleanly deactivating")
+                return SentinelResult("no screen progress after 45 seconds, choom. shutting down screen control. ${summary(log)}", seenHash, progressTime)
             }
         } else {
             seenHash = frameHash
@@ -3405,7 +3407,7 @@ Rules:
 
                     if (rawReplyWithTrace == null) {
                         consecutiveNoOpTurns++
-                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 20_000L)) {
+                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 45_000L)) {
                             return "brain timed out with zero progress, choom. shutting down screen control. ${summary(log)}"
                         }
                         log.add("brain unresponsive, retrying once")
@@ -3428,7 +3430,7 @@ Rules:
                         steps++
                         consecutiveNoOpTurns++
                         if (lastTraceId != -1) BrainTraceStore.updateTurnOutcome(lastTraceId, "Unreadable/Failed Parse", "FAILED")
-                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 20_000L)) {
+                        if (consecutiveNoOpTurns >= 2 || (System.currentTimeMillis() - lastProgressTime >= 45_000L)) {
                             return "brain could not decide next move with screen frozen, choom. shutting down. ${summary(log)}"
                         }
                         carriedBytes = rawBytes
