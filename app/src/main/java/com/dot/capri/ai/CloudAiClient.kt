@@ -173,7 +173,7 @@ SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
 3. SCREEN TIME: NEVER recite minutes spent on apps or screen time stats unless the user specifically asks for their app usage (today's usage: $usageInfo).
 """.trimIndent()
 
-        val history = recentHistory(MAX_HISTORY, context)
+        val history = if (imageBytes != null) emptyList() else recentHistory(MAX_HISTORY, context)
         val toneHint = com.dot.capri.personality.Personality.toneDirectiveFor(userPrompt)
 
         val req = LlmRequest(
@@ -185,7 +185,7 @@ SITUATIONAL RULES FOR TIME, BATTERY & SCREEN TIME:
 
         val result = runBlocking { LlmRouter.complete(context, req) }
 
-        if (result.isSuccess) {
+        if (result.isSuccess && imageBytes == null) {
             val reply = result.getOrNull().orEmpty()
             recordExchange(userPrompt, reply, context)
         }

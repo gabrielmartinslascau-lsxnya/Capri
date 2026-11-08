@@ -40,7 +40,7 @@ object OnDeviceAiClient {
     private const val EXPECTED_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
     private const val MIN_MODEL_BYTES = 5_000_000L
     private const val MIN_RAM_BYTES = 4_500_000_000L      // sanity guard, skips ~4GB phones
-    private const val IDLE_RELEASE_MS = 30 * 60 * 1000L   // keep the model warm for 30 idle minutes
+    private const val STANDBY_CHECK_INTERVAL_MS = 10 * 60 * 1000L // Periodic standby watchdog check
     private const val GENERATION_TIMEOUT_MS = 60_000L
     private const val HISTORY_TURNS = 2                   // trimmed for speed
     private const val MAX_PROMPT_CHARS = 1500             // trimmed for speed
@@ -427,20 +427,30 @@ object OnDeviceAiClient {
         }
     }
 
-    private fun scheduleRelease() {
+    private fun scheduleRelease(context: Context) {
         idleJob?.cancel()
         idleJob = scope.launch {
-            delay(IDLE_RELEASE_MS)
-            mutex.withLock {
-                closeEngine()
-                Log.d(TAG, "model released after idle")
+            // As long as the phone is in active use (e.g. watching movies, gaming, browsing),
+            // keep the engine warm indefinitely. Release ONLY when the phone enters standby / screen turns off.
+            while (true) {
+                delay(STANDBY_CHECK_INTERVAL_MS)
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                val isInteractive = pm?.isInteractive ?: true
+                if (!isInteractive) {
+                    mutex.withLock {
+                        closeEngine()
+                        Log.d(TAG, "Device in standby (screen off): released on-device LLM to preserve battery.")
+                    }
+                    break
+                }
+                Log.d(TAG, "Screen is active (interactive=true). Keeping on-device LLM warm.")
             }
         }
     }
 
     // ---- prompt ------------------------------------------------------
 
-    // Same persona as the API tier, minus the long lore block, so the first word comes faster.
+    // Master persona prompt aligned with the Cloud API tier.
     private fun buildSystemPrompt(context: Context): String {
         val cal = Calendar.getInstance()
         val weekday = android.text.format.DateFormat.format("EEEE", cal)
@@ -454,13 +464,15 @@ object OnDeviceAiClient {
         }
         val mbSummary = com.dot.capri.agent.ControlRegions.names(context).ifBlank { "none" }
 
-        return com.dot.capri.personality.Personality.COMPACT_LOCAL_PERSONA.trim() + "\n\n" +
+        return com.dot.capri.personality.Personality.CORE_PERSONA_PROMPT.trim() + "\n\n" +
                 "[Context]: it is $weekday, $time12 ($time24), battery is $battery%. macro buttons: $mbSummary.\n" +
                 "Situational rules: You know the exact time and battery accurately on every reply. If user chats casually ('how ya doing', 'hey', 'sup'), respond warmly or playfully to their greeting without nagging them about sleep. Only talk about sleep or staying up late if the user explicitly mentions sleep, bed, or being exhausted. Mention battery only when asked or if <=15%. NEVER recite screen time or app stats unprompted in casual conversation.\n" +
-                "You are Capri running on-device (Jarvis mode). You CAN control the phone screen and play games directly using your autonomous agent loop. " +
-                "When asked to play a game or control the screen, NEVER reply with text tutorials or instructions — reply ONLY with: [ACTION:TASK:your goal]. " +
-                "When asked what is on screen, reply ONLY with: [ACTION:SEE_SCREEN:question]. " +
-                "Keep chat replies to 1-2 short sentences."
+                "Keep chat replies to 1-2 short punchy sentences. When analyzing images or screen content, pay close attention to the visual elements on screen (app UI, videos, captions, social feeds) and comment accurately on what is actually shown.\n\n" +
+                "DEVICE ACTIONS (for simple user requests):\n" +
+                "Start a reply with exactly one action tag when the user clearly asks for a single simple device action:\n" +
+                "- [ACTION:OPEN:app_name]\n" +
+                "- [ACTION:PLAY:song_or_video_query]\n" +
+                "- [ACTION:VOLUME:UP] or [ACTION:VOLUME:DOWN] or [ACTION:VOLUME:MUTE]"
     }
 
     // ---- generation --------------------------------------------------
@@ -476,8 +488,9 @@ object OnDeviceAiClient {
         val eng = loadEngine(context, wantVision = imageBytes != null && !visionBroken)
             ?: throw IllegalStateException(lastError ?: "local model not ready")
 
-        val history = historyOverride ?: if (systemOverride == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
-        // Fix #3: Anytime systemOverride is provided (e.g. PhoneAgent), it is a deterministic task!
+        // Isolate vision from casual chat history so Gemma's attention is focused on visual tokens
+        val history = historyOverride ?: if (systemOverride == null && imageBytes == null) CloudAiClient.recentHistory(HISTORY_TURNS) else emptyList()
+        // Anytime systemOverride is provided (e.g. PhoneAgent), it is a deterministic task!
         val isTask = systemOverride != null
 
         val effectiveSys = if (systemOverride != null) {
@@ -515,10 +528,11 @@ object OnDeviceAiClient {
                     imageFile = File(context.cacheDir, "capri_screen.jpg").apply {
                         writeBytes(shrinkImage(context, imageBytes!!))
                     }
+                    // Anchoring visual tokens first matches the multimodal standard and cross-attention alignment
                     conversation.sendMessageAsync(
                         Contents.of(
-                            Content.Text(prompt.take(maxChars)),
-                            Content.ImageFile(imageFile.absolutePath)
+                            Content.ImageFile(imageFile.absolutePath),
+                            Content.Text(prompt.take(maxChars))
                         )
                     )
                 } else {
@@ -573,7 +587,8 @@ object OnDeviceAiClient {
                     if (reply.isBlank()) {
                         Result.failure(RuntimeException("empty local reply"))
                     } else {
-                        if (systemOverride == null && historyOverride == null) {
+                        // Only record casual text chat exchanges in session history; never vision prompts or tasks
+                        if (systemOverride == null && historyOverride == null && imageBytes == null) {
                             CloudAiClient.recordExchange(prompt, reply)
                         }
                         Result.success(reply)
@@ -599,7 +614,7 @@ object OnDeviceAiClient {
                     }
                     Result.failure(if (t is Exception) t else RuntimeException(t.message))
                 } finally {
-                    scheduleRelease()
+                    scheduleRelease(context)
                 }
             }
         }
