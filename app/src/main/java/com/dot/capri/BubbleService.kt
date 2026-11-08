@@ -1037,7 +1037,7 @@ class BubbleService : Service() {
         }
     }
 
-    private suspend fun executeEmbeddedActionTag(response: String): String {
+    private suspend fun executeEmbeddedActionTag(response: String, userCommand: String = ""): String {
         val actionRegex = Regex("\\[?ACTION[=:]\\s*([A-Z_]+)(?:[=:]\\s*([^]\\n]*))?\\]?", RegexOption.IGNORE_CASE)
         val matches = actionRegex.findAll(response).toList()
         if (matches.isEmpty()) return response
@@ -1204,6 +1204,21 @@ class BubbleService : Service() {
                         val out = PhoneAgent.run(this, "play ${gameOpt.label} and win", null) { setChatVisible(it) }
                         return if (cleanResponse.isNotBlank()) "$cleanResponse ($out)" else out
                     }
+
+                    // Intent verification: only launch Spotify if the user's prompt actually asked for media or music!
+                    // If user was casually chatting (e.g. "hi.."), never hijack their audio unprompted!
+                    if (userCommand.isNotBlank()) {
+                        val uLower = userCommand.lowercase(java.util.Locale.US)
+                        val askedForMedia = uLower.contains("play") || uLower.contains("song") ||
+                                uLower.contains("music") || uLower.contains("track") ||
+                                uLower.contains("spotify") || uLower.contains("listen") ||
+                                uLower.contains("audio") || uLower.contains("reels") ||
+                                uLower.contains("video") || uLower.contains("tunes")
+                        if (!askedForMedia) {
+                            return cleanResponse
+                        }
+                    }
+
                     val query = target.replace(':', ' ').trim()
                     val qLower = query.lowercase(java.util.Locale.US)
                     // Guard against 1-2 letter hallucinations or greetings accidentally triggering media playback
@@ -1304,7 +1319,7 @@ class BubbleService : Service() {
     private fun brainAvailable(): Boolean =
         (LlmRouter.hasAnyApiKey(this) && NetworkUtils.isOnline(this)) || OnDeviceAiClient.isAvailable(this)
 
-    private suspend fun handleReply(reply: String, allowSee: Boolean = true): String {
+    private suspend fun handleReply(reply: String, allowSee: Boolean = true, userPrompt: String = ""): String {
         val see = Regex("\\[?ACTION[=:]\\s*SEE_SCREEN(?:[=:]([^]\\n]*))?\\]?", RegexOption.IGNORE_CASE).find(reply)
         if (see != null && allowSee) {
             val question = see.groupValues.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() } ?: "Describe what is on screen and answer the user."
@@ -1327,7 +1342,7 @@ class BubbleService : Service() {
             val agentResult = PhoneAgent.run(this, goal, null) { flag -> setChatVisible(flag) }
             return if (thought.isNotBlank()) "$thought\n$agentResult" else agentResult
         }
-        return executeEmbeddedActionTag(cleaned).ifBlank {
+        return executeEmbeddedActionTag(cleaned, userPrompt).ifBlank {
             "done... don't make me do everything for you next time, okay?"
         }
     }
@@ -1358,7 +1373,7 @@ class BubbleService : Service() {
             }
             val text = result.getOrNull()?.takeIf { it.isNotBlank() }
             if (text != null && !text.contains("No brain installed", ignoreCase = true) && !text.contains("brain chip in my slot", ignoreCase = true)) {
-                return handleReply(text, allowSee)
+                return handleReply(text, allowSee, prompt)
             }
             apiError = result.exceptionOrNull()?.message ?: "empty reply"
             android.util.Log.w("CAPRI_BRAIN", "API tier failed ($apiError), trying local")
@@ -1368,7 +1383,7 @@ class BubbleService : Service() {
         if (OnDeviceAiClient.isAvailable(this)) {
             val local = OnDeviceAiClient.generateResponse(this, prompt, imageBytes, systemOverride = systemOverride)
             val text = local.getOrNull()?.takeIf { it.isNotBlank() }
-            if (text != null) return handleReply(text, allowSee)
+            if (text != null) return handleReply(text, allowSee, prompt)
             android.util.Log.w("CAPRI_BRAIN", "Local tier failed (${local.exceptionOrNull()?.message})")
         }
 
